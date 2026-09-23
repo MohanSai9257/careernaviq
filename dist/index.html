@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Tech Employer Directory — LinkedIn & Careers</title>
+  <meta name="description" content="Find company LinkedIn profiles and careers portals in a directory of U.S. technology employers. Link verification is in progress.">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230c2634'/%3E%3Cpath d='M9 9h14v4H13v3h8v4h-8v3H9z' fill='%2373e2c0'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="style.css">
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <header class="masthead"><div class="wrap brand"><span class="mark" aria-hidden="true">E</span><span>EMPLOYER DIRECTORY</span><span class="public-label">Open to everyone</span></div></header>
+  <main class="wrap">
+    <div class="intro"><div><p class="eyebrow">U.S. TECHNOLOGY EMPLOYERS</p><h1>Find your next company.</h1><p class="description">Company profiles and careers pages, in one place.</p></div><div class="total"><strong id="total">23,957</strong><span>company names</span></div></div>
+    <div class="notice"><strong>Link verification is in progress.</strong> All company names are included. Links are available for a reviewed subset; an entry does not confirm current hiring or sponsorship.</div>
+    <section aria-label="Company directory">
+      <div class="toolbar"><label class="search"><svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"></circle><path d="m16 16 5 5"></path></svg><span class="sr-only">Search companies</span><input id="search" type="search" placeholder="Search by company name" autocomplete="off"></label><span id="results" role="status" aria-live="polite">Loading companies…</span></div>
+      <div class="table-wrap"><table><thead><tr><th scope="col">Company name</th><th scope="col">LinkedIn</th><th scope="col">Careers portal</th></tr></thead><tbody id="companies"></tbody></table><p id="empty" hidden>No companies found. Try another name.</p></div>
+      <div class="pagination"><span id="range"></span><div><button id="previous" type="button" disabled>Previous</button><span id="page">Page 1</span><button id="next" type="button" disabled>Next</button></div></div>
+      <noscript><p>Enable JavaScript to view and search the company directory.</p></noscript>
+    </section>
+    <footer><p>Company names: <a href="https://www.dol.gov/agencies/eta/foreign-labor/performance" target="_blank" rel="noopener noreferrer">U.S. Department of Labor disclosure data</a>, FY2025–FY2026 Q3. Separate legal employers may share a parent company’s links.</p><p id="coverage">Links checked September 23, 2026. External links open in a new tab.</p></footer>
+  </main>
+</body>
+</html>
