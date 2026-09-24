@@ -1,9 +1,22 @@
 let companies=[],filtered=[],page=0,category='client',loaded=false;
-const pageSize=100,storageKey='employer-directory-my-list-v1';
+const pageSize=100,storageKey='employer-directory-my-list-v1',adminStorageKey='employer-directory-admin-email-v1',adminEmail='chatgpt3577@gmail.com';
 const $=id=>document.getElementById(id);
 const tabs=[...document.querySelectorAll('[role="tab"]')];
 let saved=new Set();
 try{const value=JSON.parse(localStorage.getItem(storageKey)||'[]');if(Array.isArray(value))saved=new Set(value.filter(x=>typeof x==='string'));}catch{}
+let currentEmail='';
+try{currentEmail=localStorage.getItem(adminStorageKey)||'';}catch{}
+function isAdmin(){return currentEmail.trim().toLowerCase()===adminEmail;}
+function authHeaders(){return isAdmin()?{'X-Admin-Email':currentEmail.trim().toLowerCase()}:{ };}
+function updateRole(){
+ const admin=isAdmin();
+ $('role-label').textContent=admin?'Admin: '+adminEmail:'User';
+ $('admin-open').textContent=admin?'Logout':'Admin';
+ $('admin-open').classList.toggle('is-admin',admin);
+ document.body.classList.toggle('admin-mode',admin);
+ document.body.classList.toggle('user-mode',!admin);
+ if($('add-company'))$('add-company').hidden=!admin;
+}
 const notes={client:'Companies currently categorized as direct employers. Original company order is preserved.',implementation:'Companies currently categorized as implementation and technology services firms. Original company order is preserved.',vendor:'Includes known vendors and all companies not yet classified. Placement here does not verify vendor status.',mylist:'Your saved companies, in their original order. My List is stored only in this browser, not shared with other visitors.'};
 const arrow='<svg aria-hidden="true" viewBox="0 0 16 16"><path d="M5 3h8v8M13 3 3 13"/></svg>';
 function linkCell(url,label,name){
@@ -42,7 +55,7 @@ function render(){
   wrapper.className='company-name';label.textContent=company[0];star.className='save-company';star.type='button';
   const isSaved=saved.has(company[4]);star.textContent=isSaved?'★':'☆';star.setAttribute('aria-pressed',String(isSaved));star.setAttribute('aria-label',`${isSaved?'Remove':'Save'} ${company[0]} ${isSaved?'from':'to'} My List`);star.title=isSaved?'Remove from My List':'Save to My List';
   star.addEventListener('click',()=>{setSaved(company[4],!saved.has(company[4]));const replacement=[...body.querySelectorAll('.save-company')].find(b=>b.getAttribute('aria-label').includes(company[0]));if(replacement)replacement.focus();else $('tab-mylist').focus();});
-  wrapper.append(star,label);if(company[5]){const added=document.createElement('small');added.className='added-label';added.textContent='Added by a visitor';wrapper.append(added);}name.append(wrapper);tr.append(name,linkCell(company[1],'LinkedIn',company[0]),linkCell(company[2],'Careers',company[0]),actionsCell(company));body.append(tr);
+	  wrapper.append(star,label);if(company[5]){const added=document.createElement('small');added.className='added-label';added.textContent='Added by a visitor';wrapper.append(added);}name.append(wrapper);tr.append(name,linkCell(company[1],'LinkedIn',company[0]),linkCell(company[2],'Careers',company[0]),actionsCell(company));body.append(tr);
  }
  $('empty').hidden=filtered.length>0||!loaded;
  $('empty').textContent=category==='mylist'&&!companies.some(r=>saved.has(r[4]))?'Your list is empty. Select the star beside any company to save it here.':'No companies found in this tab. Try another name or category.';
@@ -87,14 +100,16 @@ function rebuildCompanies(){
  applyOverrides();$('total').textContent=companies.length.toLocaleString();updateCoverage();
 }
 async function persistChange(id,change){
+ if(!isAdmin())throw Error('Login as Admin to edit or move companies.');
  if(!sharedReady)throw Error('Shared data is not ready. Refresh and try again.');
  if(saving)throw Error('Please wait for the current save to finish.');saving=true;
- try{const response=await fetch('/api/company',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({id,version:versions[id]||0,change})});const result=await response.json();if(!response.ok)throw Error(result.error||'Could not save. Try again.');const {id:companyId,version,...fields}=result;overrides[companyId]=fields;versions[companyId]=version;applyOverrides();updateCoverage();updateCounts();applyFilter();}finally{saving=false;}
+ try{const response=await fetch('/api/company',{method:'PUT',headers:{'Content-Type':'application/json',...authHeaders()},body:JSON.stringify({id,version:versions[id]||0,change})});const result=await response.json();if(!response.ok)throw Error(result.error||'Could not save. Try again.');const {id:companyId,version,...fields}=result;overrides[companyId]=fields;versions[companyId]=version;applyOverrides();updateCoverage();updateCounts();applyFilter();}finally{saving=false;}
 }
 function notify(message){$('save-status').textContent=message;$('save-status').hidden=false;}
 function closeMenu(restore=false){$('company-menu').hidden=true;$('move-menu').hidden=true;$('menu-move').setAttribute('aria-expanded','false');if(menuTrigger){menuTrigger.setAttribute('aria-expanded','false');if(restore&&menuTrigger.isConnected)menuTrigger.focus();}}
 function actionsCell(company){
  const td=document.createElement('td');td.className='actions-cell';const button=document.createElement('button');button.type='button';button.className='more-button';button.textContent='⋮';button.setAttribute('aria-label',`Actions for ${company[0]}`);button.setAttribute('aria-haspopup','menu');button.setAttribute('aria-expanded','false');
+ button.hidden=!isAdmin();
  button.addEventListener('click',()=>{if(menuTrigger===button&&!$('company-menu').hidden){closeMenu(true);return;}closeMenu();menuCompany=company;menuTrigger=button;button.setAttribute('aria-expanded','true');
   const submenu=$('move-menu');submenu.replaceChildren();for(const [key,label] of [['client','Client'],['implementation','Implementation'],['vendor','Vendor']]){if(key===company[3])continue;const option=document.createElement('button');option.type='button';option.role='menuitem';option.textContent=label;option.addEventListener('click',async()=>{option.disabled=true;
    try{await persistChange(company[4],{category:key});notify(`${company[0]} moved to ${label}. Visible to everyone.`);$('tab-'+category).focus();}catch(error){notify(error.message);option.disabled=false;closeMenu(true);}
@@ -122,6 +137,7 @@ window.addEventListener('resize',()=>closeMenu());window.addEventListener('scrol
 window.addEventListener('focus',()=>{if(loaded&&!saving&&!$('edit-dialog').open&&$('company-menu').hidden)loadChanges().catch(error=>notify(error.message));});
 
 $('add-company').addEventListener('click',()=>{
+ if(!isAdmin()){notify('Login as Admin to add companies.');$('admin-open').click();return;}
  $('add-form').reset();$('add-category').value=['client','implementation','vendor'].includes(category)?category:'vendor';$('add-error').hidden=true;$('add-dialog').showModal();$('add-name').focus();
 });
 $('add-cancel').addEventListener('click',()=>$('add-dialog').close());
@@ -131,7 +147,20 @@ $('add-form').addEventListener('submit',async event=>{
  let error='';if(!name)error='Enter a company name.';else if(!validLink(linkedin)||!validLink(careers))error='Links must be valid http:// or https:// addresses, without embedded credentials.';else if(companies.some(r=>r[0].trim().toLowerCase()===name.toLowerCase()))error='This company is already in the directory.';
  if(error){$('add-error').textContent=error;$('add-error').hidden=false;return;}
  const submit=$('add-form').querySelector('[type=submit]');submit.disabled=true;
- try{const response=await fetch('/api/companies',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,category:categoryValue,linkedin,careers})});const result=await response.json();if(!response.ok)throw Error(result.error||'Could not add the company. Try again.');
+ try{const response=await fetch('/api/companies',{method:'POST',headers:{'Content-Type':'application/json',...authHeaders()},body:JSON.stringify({name,category:categoryValue,linkedin,careers})});const result=await response.json();if(!response.ok)throw Error(result.error||'Could not add the company. Try again.');
   addedData.push(result);rebuildCompanies();updateCounts();$('search').value=result.name;setCategory(result.category);$('add-dialog').close();notify(`${result.name} added. Visible to everyone.`);
  }catch(error){$('add-error').textContent=error.message;$('add-error').hidden=false;}finally{submit.disabled=false;}
+});
+updateRole();
+$('admin-open').addEventListener('click',()=>{
+ if(isAdmin()){currentEmail='';try{localStorage.removeItem(adminStorageKey);}catch{}updateRole();render();notify('Logged out. You are viewing as User.');return;}
+ $('admin-email').value=currentEmail||adminEmail;$('admin-error').hidden=true;$('admin-dialog').showModal();$('admin-email').focus();
+});
+$('admin-cancel').addEventListener('click',()=>$('admin-dialog').close());
+$('admin-form').addEventListener('submit',event=>{
+ event.preventDefault();
+ const email=$('admin-email').value.trim().toLowerCase();
+ if(email!==adminEmail){$('admin-error').textContent='This Gmail is not registered as Admin.';$('admin-error').hidden=false;return;}
+ currentEmail=email;try{localStorage.setItem(adminStorageKey,currentEmail);}catch{}
+ $('admin-dialog').close();updateRole();render();notify('Admin mode is active. You can add, edit, and move companies.');
 });

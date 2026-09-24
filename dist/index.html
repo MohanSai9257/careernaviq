@@ -9,7 +9,15 @@
   <script src="app.js" defer></script>
 </head>
 <body>
-  <header class="masthead"><div class="wrap brand"><span class="mark" aria-hidden="true">E</span><span>EMPLOYER DIRECTORY</span><span class="public-label">Open to everyone</span></div></header>
+  <header class="masthead">
+    <div class="wrap brand">
+      <span class="mark" aria-hidden="true">E</span><span>EMPLOYER DIRECTORY</span>
+      <div class="role-control">
+        <span id="role-label" class="public-label">User</span>
+        <button id="admin-open" type="button">Admin</button>
+      </div>
+    </div>
+  </header>
   <main class="wrap">
     <div class="intro"><div><p class="eyebrow">U.S. TECHNOLOGY EMPLOYERS</p><h1>Find your next company.</h1><p class="description">Company profiles and careers pages, in one place.</p></div><div class="total"><strong id="total">23,957</strong><span>companies</span></div></div>
     <div class="notice"><strong>Link verification is in progress.</strong> The original 23,957 company names are included. Visitors can add companies and links; an entry does not confirm current hiring or sponsorship.</div>
@@ -37,7 +45,7 @@
   <dialog id="edit-dialog" aria-labelledby="edit-title">
     <form id="edit-form">
       <h2 id="edit-title">Edit company</h2>
-      <p class="edit-scope">Anyone can edit. Your saved changes will be visible to everyone.</p>
+      <p class="edit-scope">Admin changes are visible to everyone.</p>
       <label for="edit-name">Company name</label><input id="edit-name" name="company" required maxlength="250">
       <label for="edit-linkedin">LinkedIn link</label><input id="edit-linkedin" name="linkedin" type="url" placeholder="https://www.linkedin.com/company/…">
       <label for="edit-careers">Careers portal link</label><input id="edit-careers" name="careers" type="url" placeholder="https://company.com/careers">
@@ -49,7 +57,7 @@
   <dialog id="add-dialog" aria-labelledby="add-title">
     <form id="add-form">
       <h2 id="add-title">Add company</h2>
-      <p class="edit-scope">Anyone can add a company. It will be visible to everyone.</p>
+      <p class="edit-scope">Admin additions are visible to everyone.</p>
       <label for="add-name">Company name</label><input id="add-name" name="company" required maxlength="250" autocomplete="organization">
       <label for="add-category">Category</label><select id="add-category" name="category" required><option value="client">Client</option><option value="implementation">Implementation</option><option value="vendor">Vendor</option></select>
       <label for="add-linkedin">LinkedIn link</label><input id="add-linkedin" name="linkedin" type="url" placeholder="https://www.linkedin.com/company/…">
@@ -57,6 +65,15 @@
       <p class="form-hint">Links are optional. Check them before sharing.</p>
       <p id="add-error" role="alert" hidden></p>
       <div class="dialog-actions"><button type="button" id="add-cancel">Cancel</button><button type="submit" class="primary">Add company</button></div>
+    </form>
+  </dialog>
+  <dialog id="admin-dialog" aria-labelledby="admin-title">
+    <form id="admin-form">
+      <h2 id="admin-title">Admin login</h2>
+      <p class="edit-scope">Enter the admin Gmail to manage company records.</p>
+      <label for="admin-email">Gmail</label><input id="admin-email" name="email" type="email" placeholder="chatgpt3577@gmail.com" autocomplete="email" required>
+      <p id="admin-error" role="alert" hidden></p>
+      <div class="dialog-actions"><button type="button" id="admin-cancel">Cancel</button><button type="submit" class="primary">Login</button></div>
     </form>
   </dialog>
 </body>
