@@ -5,7 +5,6 @@ const json=(body,status=200)=>Response.json(body,{status,headers:{'Cache-Control
 function db(env){if(!env.DB)throw Error('Database unavailable');return env.DB;}
 function link(value){if(typeof value!=='string'||value.length>2048)return false;if(!value)return true;try{const u=new URL(value);return ['http:','https:'].includes(u.protocol)&&!u.username&&!u.password;}catch{return false;}}
 function normalizedName(value){return value.trim().replace(/\s+/g,' ').toLocaleLowerCase();}
-function isAdmin(request){return (request.headers.get('X-Admin-Email')||'').trim().toLocaleLowerCase()==='chatgpt3577@gmail.com';}
 export default {async fetch(request,env){
  const url=new URL(request.url);
  try{
@@ -21,7 +20,6 @@ export default {async fetch(request,env){
    return json({items:results.map(r=>({id:r.id,name:r.name,linkedin:r.linkedin,careers:r.careers,category:r.category})),next:results.length===500?results[results.length-1].sequence:null});
   }
   if(url.pathname==='/api/companies'&&request.method==='POST'){
-   if(!isAdmin(request))return json({error:'Login as Admin to add companies.'},401);
    if(request.headers.get('Origin')&&request.headers.get('Origin')!==url.origin)return json({error:'Use the directory to add companies.'},403);
    if(!request.headers.get('Content-Type')?.includes('application/json'))return json({error:'JSON required.'},415);
    const body=await request.text();if(body.length>10000)return json({error:'Request too large.'},413);
@@ -37,7 +35,6 @@ export default {async fetch(request,env){
    return json({id,name,linkedin:input.linkedin,careers:input.careers,category:input.category},201);
   }
   if(url.pathname==='/api/company'&&request.method==='PUT'){
-   if(!isAdmin(request))return json({error:'Login as Admin to edit or move companies.'},401);
    if(request.headers.get('Origin')&&request.headers.get('Origin')!==url.origin)return json({error:'Use the directory to make changes.'},403);
    if(!request.headers.get('Content-Type')?.includes('application/json'))return json({error:'JSON required.'},415);
    const body=await request.text();if(body.length>10000)return json({error:'Request too large.'},413);
