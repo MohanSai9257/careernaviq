@@ -6,7 +6,7 @@ const directorySections=[
   {name:'Interview Prep',path:'/interview-prep',icon:'<rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 8h6M9 12h6M9 16h4"/>'},
   {name:'Interview Support',path:'/interview-support',icon:'<path d="M4 13v-2a8 8 0 0 1 16 0v2M4 13H3v5h4v-5H4Zm16 0h1v5h-4v-5h3Zm0 5a4 4 0 0 1-4 4h-3"/>'}
 ];
-const currentSection=directorySections.find(section=>section.path===location.pathname.replace(/\/$/,'')||section.path==='/'&&location.pathname==='/')||(location.pathname==='/profile'?null:directorySections[0]);
+const currentSection=directorySections.find(section=>section.path===location.pathname.replace(/\/$/,'')||section.path==='/'&&location.pathname==='/')||(['/profile','/admin','/admin/'].includes(location.pathname)?null:directorySections[0]);
 const sidebar=document.createElement('aside');sidebar.className='side-nav';sidebar.setAttribute('aria-label','Main navigation');
 const toggle=document.createElement('button');toggle.type='button';toggle.className='side-toggle';toggle.setAttribute('aria-label','Toggle navigation');toggle.setAttribute('aria-expanded','true');toggle.textContent='‹';sidebar.append(toggle);
 const links=document.createElement('nav');
@@ -18,6 +18,12 @@ for(const section of directorySections){
  link.append(icon,label);links.append(link);
 }
 sidebar.append(links);
+const adminLink=document.createElement('a');adminLink.href='/admin';adminLink.title='ADMIN';adminLink.className='side-admin';adminLink.hidden=true;
+if(location.pathname==='/admin'||location.pathname==='/admin/')adminLink.setAttribute('aria-current','page');
+const adminIcon=document.createElement('span');adminIcon.className='side-icon';adminIcon.setAttribute('aria-hidden','true');adminIcon.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 20 5v6c0 5-3.3 8.5-8 11-4.7-2.5-8-6-8-11V5l8-3Z"/><path d="m9 12 2 2 4-4"/></svg>';
+const adminLabel=document.createElement('span');adminLabel.className='side-label';adminLabel.textContent='ADMIN';adminLink.append(adminIcon,adminLabel);sidebar.append(adminLink);
+window.setAdminNavigation=(role,status)=>{adminLink.hidden=!(status==='approved'&&(role==='admin'||role==='coadmin'));};
+fetch('/api/session',{cache:'no-store'}).then(response=>response.json()).then(session=>window.setAdminNavigation(session.role,session.status)).catch(()=>{});
 const profileLink=document.createElement('a');profileLink.href='/profile';profileLink.title='Profile';profileLink.className='side-profile';
 if(location.pathname==='/profile')profileLink.setAttribute('aria-current','page');
 const profileIcon=document.createElement('span');profileIcon.className='side-icon';profileIcon.setAttribute('aria-hidden','true');profileIcon.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21v-2a8 8 0 0 1 16 0v2"/></svg>';

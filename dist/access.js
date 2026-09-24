@@ -6,6 +6,7 @@ let sectionChanges=[];
 let deletingUserEmail='';
 window.directoryRole='guest';
 const managesAccess=()=>['admin','coadmin'].includes(accessSession.role)&&accessSession.status==='approved';
+const adminPage=location.pathname==='/admin'||location.pathname==='/admin/';
 async function accessJson(url,options){
  const response=await fetch(url,{cache:'no-store',...options});
  const result=await response.json();
@@ -15,13 +16,16 @@ async function accessJson(url,options){
 function accessError(id,message){const el=accessEl(id);el.textContent=message;el.hidden=!message;}
 function showAccessState(){
  const active=accessSession.status==='approved';
+ if(adminPage&&active&&!managesAccess()){location.replace('/');return;}
  if(!active){const greeting=accessEl('profile-greeting');if(greeting)greeting.hidden=true;}
  document.body.classList.toggle('has-access',active);
  window.directoryRole=active?accessSession.role:'guest';
+ window.setAdminNavigation?.(accessSession.role,accessSession.status);
  accessEl('access-gate').hidden=active;
  accessEl('directory-app').hidden=!active;
- accessEl('admin-dashboard').hidden=!managesAccess();
- if(!managesAccess())accessEl('admin-dashboard').open=false;
+ accessEl('employer-content').hidden=adminPage;
+ accessEl('admin-dashboard').hidden=!adminPage||!managesAccess();
+ accessEl('admin-dashboard').open=adminPage&&managesAccess();
  accessEl('coadmin-section').hidden=accessSession.role!=='admin';
  accessEl('role-label').textContent=accessSession.role==='admin'?'Admin':accessSession.role==='coadmin'?'Coadmin':'User';
  accessEl('admin-open').textContent=managesAccess()?'Logout':'Admin';
@@ -29,9 +33,11 @@ function showAccessState(){
  accessEl('user-logout').hidden=!(active&&accessSession.role==='user');
  if(active){
   document.dispatchEvent(new Event('directory-access-ready'));
-  if(!appLoaded){appLoaded=true;const script=document.createElement('script');script.src='app.js';script.onerror=()=>accessError('admin-access-error','Could not load the directory. Refresh the page.');document.body.append(script);}
-  else window.updateDirectoryRole?.();
-  if(managesAccess())loadAdminData();
+  if(!adminPage){
+   if(!appLoaded){appLoaded=true;const script=document.createElement('script');script.src='app.js';script.onerror=()=>accessError('admin-access-error','Could not load the directory. Refresh the page.');document.body.append(script);}
+   else window.updateDirectoryRole?.();
+  }
+  if(adminPage&&managesAccess())loadAdminData();
   return;
  }
  const pending=accessSession.status==='pending',blocked=accessSession.status==='blocked';
@@ -199,5 +205,5 @@ accessEl('admin-form').addEventListener('submit',async event=>{
  try{accessSession=await accessJson('/api/admin/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:accessEl('admin-email').value.trim()})});accessEl('admin-dialog').close();showAccessState();}
  catch(error){accessError('admin-error',error.message);}finally{submit.disabled=false;}
 });
-showAccessState();checkAccess();setInterval(()=>{checkAccess();if(managesAccess())loadAdminData();},10000);
+showAccessState();checkAccess();setInterval(()=>{checkAccess();if(adminPage&&managesAccess())loadAdminData();},10000);
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)checkAccess();});
