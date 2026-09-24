@@ -27,3 +27,9 @@ function setSidebarCollapsed(collapsed){document.body.classList.toggle('sidebar-
 setSidebarCollapsed(localStorage.getItem('directory-sidebar-collapsed')==='true');
 toggle.addEventListener('click',()=>{const collapsed=!document.body.classList.contains('sidebar-collapsed');setSidebarCollapsed(collapsed);localStorage.setItem('directory-sidebar-collapsed',String(collapsed));});
 const sectionTitle=document.getElementById('section-title');if(sectionTitle){sectionTitle.textContent=currentSection.name;document.title=currentSection.name;}
+
+const appNotice=document.createElement('div');appNotice.className='app-notice';appNotice.hidden=true;
+const appNoticeText=document.createElement('span');appNoticeText.setAttribute('role','status');appNoticeText.setAttribute('aria-live','polite');appNoticeText.setAttribute('aria-atomic','true');
+const appNoticeClose=document.createElement('button');appNoticeClose.type='button';appNoticeClose.textContent='×';appNoticeClose.setAttribute('aria-label','Dismiss notification');appNoticeClose.addEventListener('click',()=>{appNotice.hidden=true;});
+appNotice.append(appNoticeText,appNoticeClose);document.body.append(appNotice);
+window.showAppNotice=message=>{appNotice.hidden=false;appNoticeText.textContent=message;};

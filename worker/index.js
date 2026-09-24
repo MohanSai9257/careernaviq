@@ -232,7 +232,7 @@ export default {async fetch(request,env){
    if(!sameOrigin(request,url))return json({error:'Use the profile page to save changes.'},403);
    let input;try{input=await jsonInput(request);}catch{return json({error:'Invalid profile details.'},400);}
    const firstName=String(input?.firstName||'').trim(),lastName=String(input?.lastName||'').trim(),mobile=String(input?.mobile||'').trim(),visaStatus=String(input?.visaStatus||'').trim();
-   if(!firstName||firstName.length>80||!lastName||lastName.length>80||!mobile||mobile.length>40||!/^[+()\d.\s-]+$/.test(mobile)||!['OPT','STEMOPT','CPT','H1B','H4'].includes(visaStatus))return json({error:'Enter your name, mobile number, and a valid status.'},400);
+   if(firstName.length>80||lastName.length>80||mobile.length>40||(mobile&&!/^[+()\d.\s-]+$/.test(mobile))||!['','OPT','STEMOPT','CPT','H1B','H4'].includes(visaStatus))return json({error:'Check the details you entered. You can leave any profile field blank.'},400);
    const result=await db(env).prepare('INSERT INTO user_profiles (email,first_name,last_name,mobile,visa_status,updated_at) VALUES (?,?,?,?,?,?) ON CONFLICT(email) DO UPDATE SET first_name = excluded.first_name,last_name = excluded.last_name,mobile = excluded.mobile,visa_status = excluded.visa_status,updated_at = excluded.updated_at RETURNING first_name,last_name,mobile,visa_status').bind(session.email,firstName,lastName,mobile,visaStatus,new Date().toISOString()).first();
    return json({email:session.email,profile:result});
   }
@@ -283,14 +283,11 @@ export default {async fetch(request,env){
    }else if(kind==='edit'){
     const title=String(input?.title||'').trim(),organization=String(input?.organization||'').trim(),itemUrl=String(input?.url||'').trim(),details=String(input?.details||'').trim();
     const email=String(input?.email||'').trim(),phone=String(input?.phone||'').trim(),extension=String(input?.extension||'').trim();
-    if(!title||title.length>200||organization.length>200||details.length>2000||email.length>254||email&&!emailPattern.test(email)||phone.length>40||extension.length>20||!link(itemUrl))return json({error:'Check the edited fields and link.'},400);
-    if(current.section==='recruiter-directory'&&!organization)return json({error:'Enter the recruiter’s company.'},400);
-    if(current.section==='interview-support'&&(!phone||!details))return json({error:'Enter the contact number and details.'},400);
+    if(title.length>200||organization.length>200||details.length>2000||email.length>254||email&&!emailPattern.test(email)||phone.length>40||extension.length>20||!link(itemUrl))return json({error:'Check the edited fields and link.'},400);
     const isDocument=current.section==='study-materials'||current.section==='interview-prep';
     if(file&&!isDocument)return json({error:'Only materials and interview prep accept uploads.'},400);
-    if(isDocument&&!itemUrl&&!current.file_key&&!file)return json({error:'Add a link or upload a document.'},400);
     let postedAt=current.posted_at;
-    if(current.section==='latest-posted-jobs'){const date=new Date(input?.postedAt||'');if(!Number.isFinite(date.getTime()))return json({error:'Enter a valid posting date.'},400);postedAt=date.toISOString();}
+    if(current.section==='latest-posted-jobs'){postedAt='';if(input?.postedAt){const date=new Date(input.postedAt);if(!Number.isFinite(date.getTime()))return json({error:'Enter a valid posting date or leave it blank.'},400);postedAt=date.toISOString();}}
     after={title,organization,url:itemUrl,details,email,phone,extension,posted_at:postedAt,file_key:current.file_key,file_name:current.file_name,file_type:current.file_type};
     if(file){
      if(typeof file.arrayBuffer!=='function'||file.size===0||file.size>10*1024*1024)return json({error:'Choose a PDF or Word file smaller than 10 MB.'},400);
@@ -321,11 +318,9 @@ export default {async fetch(request,env){
    const section=String(input?.section||''),category=String(input?.category||'');
    const title=String(input?.title||'').trim(),organization=String(input?.organization||'').trim(),itemUrl=String(input?.url||'').trim(),details=String(input?.details||'').trim();
    const email=String(input?.email||'').trim(),phone=String(input?.phone||'').trim(),extension=String(input?.extension||'').trim();
-   if(!sectionNames.has(section)||!sectionCategories.has(category)||!title||title.length>200||organization.length>200||details.length>2000||email.length>254||email&&!emailPattern.test(email)||phone.length>40||extension.length>20||!link(itemUrl))return json({error:'Check the required fields and link.'},400);
-   if(section==='recruiter-directory'&&!organization)return json({error:'Enter the recruiter’s company.'},400);
-   if(section==='interview-support'&&(!phone||!details))return json({error:'Enter the contact number and details.'},400);
+   if(!sectionNames.has(section)||!sectionCategories.has(category)||title.length>200||organization.length>200||details.length>2000||email.length>254||email&&!emailPattern.test(email)||phone.length>40||extension.length>20||!link(itemUrl))return json({error:'Check the required fields and link.'},400);
+   if(![title,organization,itemUrl,details,email,phone,extension,input?.postedAt].some(Boolean)&&!file)return json({error:'Add at least one detail or a file to create an entry.'},400);
    const documentSection=section==='study-materials'||section==='interview-prep';
-   if(documentSection&&!itemUrl&&!file)return json({error:'Add a link or upload a document.'},400);
    if(file&&!documentSection)return json({error:'Uploads are available only for materials and interview prep.'},400);
    let fileKey='',fileName='',fileType='',fileBytes=null;
    if(file){
@@ -341,8 +336,8 @@ export default {async fetch(request,env){
     if(!pdf&&!doc&&!docx)return json({error:'The selected file does not match its PDF or Word extension.'},400);
    }
    let postedAt='';
-   if(section==='latest-posted-jobs'){
-    const date=new Date(input?.postedAt||'');if(!Number.isFinite(date.getTime()))return json({error:'Enter the posting date and time.'},400);postedAt=date.toISOString();
+   if(section==='latest-posted-jobs'&&input?.postedAt){
+    const date=new Date(input.postedAt);if(!Number.isFinite(date.getTime()))return json({error:'Enter the posting date and time.'},400);postedAt=date.toISOString();
    }
    const status=canManage(session)?'approved':'pending';
    const item={id:crypto.randomUUID(),section,category,title,organization,url:itemUrl,details,email,phone,extension,postedAt,status,createdAt:new Date().toISOString()};

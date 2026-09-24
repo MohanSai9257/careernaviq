@@ -15,31 +15,39 @@ byId('section-add').textContent=config.action;byId('section-dialog-title').textC
 byId('section-add').hidden=!config.action;
 byId('section-title-label').textContent=config.name;byId('section-organization-label').textContent=config.organization;byId('section-url-label').textContent=config.url;
 const isRecruiter=sectionKey==='recruiter-directory',isDocument=sectionKey==='study-materials'||sectionKey==='interview-prep',isContact=sectionKey==='interview-support';
-byId('section-organization-wrap').hidden=!config.organization;byId('section-organization').required=isRecruiter;
+byId('section-organization-wrap').hidden=!config.organization;byId('section-organization').required=false;
 byId('section-url-wrap').hidden=!config.url;
 byId('section-email-wrap').hidden=!isRecruiter;
-byId('section-phone-wrap').hidden=!(isRecruiter||isContact);byId('section-phone').required=isContact;
+byId('section-phone-wrap').hidden=!(isRecruiter||isContact);byId('section-phone').required=false;
 byId('section-ext-wrap').hidden=!isRecruiter;
-byId('section-details-wrap').hidden=!isContact;byId('section-details').required=isContact;
+byId('section-details-wrap').hidden=!isContact;byId('section-details').required=false;
 byId('section-file-wrap').hidden=!isDocument;
 byId('section-search').placeholder=`Search ${config.title.toLowerCase()}`;
 byId('date-filter-wrap').hidden=sectionKey!=='latest-posted-jobs';
 byId('section-posted-wrap').hidden=sectionKey!=='latest-posted-jobs';
-byId('section-posted').required=sectionKey==='latest-posted-jobs';
+byId('section-posted').required=false;
 function status(message){byId('section-status').textContent=message;}
+function sectionNotice(message){status(message);window.showAppNotice?.(message);}
 async function api(url,options){const response=await fetch(url,{cache:'no-store',...options});const result=await response.json();if(!response.ok)throw Error(result.error||'Please try again.');return result;}
-function actionButton(item){const button=document.createElement('button');button.type='button';button.className='section-more';button.textContent='⋮';button.setAttribute('aria-label',`Actions for ${item.title}`);button.addEventListener('click',()=>openActions(item));return button;}
-function openActions(item){
- actionItem=item;byId('section-actions-name').textContent=item.title;
+let sectionMenuTrigger=null;
+function actionButton(item){const button=document.createElement('button');button.type='button';button.className='more-button section-more';button.textContent='⋮';button.setAttribute('aria-label',`Actions for ${item.title||'entry'}`);button.setAttribute('aria-haspopup','menu');button.setAttribute('aria-expanded','false');button.addEventListener('click',()=>{if(sectionMenuTrigger===button&&!byId('section-actions-menu').hidden){closeActions(true);return;}openActions(item,button);});return button;}
+function closeActions(restore=false){byId('section-actions-menu').hidden=true;byId('section-move-targets').hidden=true;byId('section-action-move').setAttribute('aria-expanded','false');sectionMenuTrigger?.setAttribute('aria-expanded','false');if(restore&&sectionMenuTrigger?.isConnected)sectionMenuTrigger.focus();}
+function positionActions(){if(!sectionMenuTrigger)return;const bounds=sectionMenuTrigger.getBoundingClientRect(),menu=byId('section-actions-menu');menu.style.left=Math.max(8,Math.min(bounds.right-menu.offsetWidth,innerWidth-menu.offsetWidth-8))+'px';menu.style.top=Math.max(8,Math.min(bounds.bottom+5,innerHeight-menu.offsetHeight-8))+'px';}
+function openActions(item,trigger){
+ closeActions();actionItem=item;sectionMenuTrigger=trigger;trigger.setAttribute('aria-expanded','true');
  const targets=byId('section-move-targets');targets.replaceChildren();
  for(const target of ['java','data','devops','validation']){
   if(target===item.category)continue;
-  const button=document.createElement('button');button.type='button';button.textContent=target==='devops'?'DevOps':target.charAt(0).toUpperCase()+target.slice(1);
-  button.addEventListener('click',async()=>{button.disabled=true;try{await api('/api/section-changes',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:item.id,version:item.version,kind:'move',category:target})});byId('section-actions-dialog').close();status('Move submitted for Admin approval.');}catch(error){status(error.message);button.disabled=false;}});
+  const button=document.createElement('button');button.type='button';button.setAttribute('role','menuitem');button.textContent=target==='devops'?'DevOps':target.charAt(0).toUpperCase()+target.slice(1);
+  button.addEventListener('click',async()=>{button.disabled=true;try{await api('/api/section-changes',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:item.id,version:item.version,kind:'move',category:target})});closeActions(true);sectionNotice('Move request sent for approval. An Admin or Coadmin will review it.');}catch(error){closeActions(true);sectionNotice(error.message);button.disabled=false;}});
   targets.append(button);
  }
- byId('section-actions-dialog').showModal();
+ byId('section-actions-menu').hidden=false;positionActions();byId('section-action-edit').focus({preventScroll:true});
 }
+byId('section-action-move').addEventListener('click',()=>{const open=byId('section-move-targets').hidden;byId('section-move-targets').hidden=!open;byId('section-action-move').setAttribute('aria-expanded',String(open));positionActions();if(open)byId('section-move-targets').querySelector('button')?.focus();});
+document.addEventListener('click',event=>{if(!byId('section-actions-menu').contains(event.target)&&!event.target.closest('.section-more'))closeActions();});
+byId('section-actions-menu').addEventListener('keydown',event=>{const items=[...byId('section-actions-menu').querySelectorAll('button')].filter(button=>!button.parentElement.hidden);const index=items.indexOf(document.activeElement);if(event.key==='Escape'){event.preventDefault();closeActions(true);}else if(event.key==='Tab')closeActions();else if(event.key==='ArrowDown'||event.key==='ArrowUp'){event.preventDefault();items[(index+(event.key==='ArrowDown'?1:items.length-1))%items.length]?.focus();}else if(event.key==='ArrowRight'&&document.activeElement===byId('section-action-move')){event.preventDefault();byId('section-action-move').click();}else if(event.key==='ArrowLeft'&&!byId('section-move-targets').hidden){event.preventDefault();byId('section-move-targets').hidden=true;byId('section-action-move').setAttribute('aria-expanded','false');byId('section-action-move').focus();}});
+window.addEventListener('resize',()=>closeActions());window.addEventListener('scroll',()=>{if(!byId('section-actions-menu').hidden)positionActions();},true);
 const tableColumns={
  'recruiter-directory':[['Name','title'],['Company','organization'],['LinkedIn','url'],['Mail','email'],['Number','phone'],['Ext','extension']],
  'study-materials':[['Name','title'],['Link','url'],['Upload Material','file_name']],
@@ -101,7 +109,7 @@ byId('section-search').addEventListener('input',()=>{clearTimeout(searchTimer);s
 byId('date-filter').addEventListener('change',loadItems);
 function openForm(item=null){
  editingItem=item;byId('section-form').reset();byId('section-form-error').hidden=true;
- byId('section-dialog-title').textContent=item?`Edit ${item.title}`:config.action;
+ byId('section-dialog-title').textContent=item?`Edit ${item.title||'entry'}`:config.action;
  byId('section-form-note').hidden=!item&&accessRole!=='user';
  byId('section-form-note').textContent=item?'Edits require Admin approval before they appear for everyone.':'Your submission will appear after Admin approval.';
  byId('section-existing-file').hidden=!item?.file_name;
@@ -115,13 +123,12 @@ function openForm(item=null){
  byId('section-dialog').showModal();byId('section-title-input').focus();
 }
 byId('section-add').addEventListener('click',()=>openForm());
-byId('section-action-edit').addEventListener('click',()=>{const item=actionItem;byId('section-actions-dialog').close();openForm(item);});
-byId('section-action-delete').addEventListener('click',()=>{deletingItem=actionItem;byId('section-actions-dialog').close();byId('section-delete-description').textContent=`Delete ${deletingItem.title}?`;byId('section-delete-error').hidden=true;byId('section-delete-dialog').showModal();});
-byId('section-action-close').addEventListener('click',()=>byId('section-actions-dialog').close());
+byId('section-action-edit').addEventListener('click',()=>{const item=actionItem;closeActions();openForm(item);});
+byId('section-action-delete').addEventListener('click',()=>{deletingItem=actionItem;closeActions();byId('section-delete-description').textContent=`Delete ${deletingItem.title}?`;byId('section-delete-error').hidden=true;byId('section-delete-dialog').showModal();});
 byId('section-delete-cancel').addEventListener('click',()=>byId('section-delete-dialog').close());
 byId('section-delete-form').addEventListener('submit',async event=>{
  event.preventDefault();const button=event.currentTarget.querySelector('[type="submit"]');button.disabled=true;byId('section-delete-error').hidden=true;
- try{await api('/api/section-changes',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:deletingItem.id,version:deletingItem.version,kind:'delete'})});byId('section-delete-dialog').close();status('Deletion submitted for Admin approval.');}
+ try{await api('/api/section-changes',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:deletingItem.id,version:deletingItem.version,kind:'delete'})});byId('section-delete-dialog').close();sectionNotice('Deletion request sent for approval. An Admin or Coadmin will review it.');}
  catch(error){byId('section-delete-error').textContent=error.message;byId('section-delete-error').hidden=false;}finally{button.disabled=false;}
 });
 byId('section-cancel').addEventListener('click',()=>byId('section-dialog').close());
@@ -130,13 +137,12 @@ byId('section-form').addEventListener('submit',async event=>{
  const postedValue=byId('section-posted').value;
  const input={section:sectionKey,category,title:byId('section-title-input').value,organization:byId('section-organization').value,url:byId('section-url').value,details:byId('section-details').value,email:byId('section-email').value,phone:byId('section-phone').value,extension:byId('section-ext').value,postedAt:postedValue?new Date(postedValue).toISOString():''};
  const file=byId('section-file').files[0];
- if(isDocument&&!input.url.trim()&&!file&&!editingItem?.file_name){byId('section-form-error').textContent='Add a link or upload a PDF or Word document.';byId('section-form-error').hidden=false;button.disabled=false;return;}
- if(file&&file.size>10*1024*1024){byId('section-form-error').textContent='Choose a file smaller than 10 MB.';byId('section-form-error').hidden=false;button.disabled=false;return;}
+  if(file&&file.size>10*1024*1024){byId('section-form-error').textContent='Choose a file smaller than 10 MB.';byId('section-form-error').hidden=false;button.disabled=false;return;}
  const changing=Boolean(editingItem),url=changing?'/api/section-changes':'/api/section-items';
  if(changing)Object.assign(input,{id:editingItem.id,version:editingItem.version,kind:'edit'});
  let options={method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(input)};
  if(file){const formData=new FormData();for(const [key,value] of Object.entries(input))formData.append(key,value);formData.append('file',file);options={method:'POST',body:formData};}
- try{const result=await api(url,options);byId('section-dialog').close();status(changing||result.status==='pending'?'Submitted for Admin approval.':'Added successfully.');if(!changing&&result.status==='approved')loadItems();editingItem=null;}
+ try{const result=await api(url,options);byId('section-dialog').close();sectionNotice(changing||result.status==='pending'?'Sent for approval. An Admin or Coadmin will review your changes.':'Added successfully.');if(!changing&&result.status==='approved')loadItems();editingItem=null;}
  catch(error){byId('section-form-error').textContent=error.message;byId('section-form-error').hidden=false;}finally{button.disabled=false;}
 });
 byId('section-logout').addEventListener('click',async()=>{try{await api('/api/logout',{method:'POST'});location.replace('/');}catch(error){status(error.message);}});

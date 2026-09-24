@@ -33,8 +33,9 @@
   <dialog id="section-dialog" aria-labelledby="section-dialog-title">
     <form id="section-form">
       <h2 id="section-dialog-title">Add recruiter</h2>
+      <p class="form-hint">Share the details you have. Individual fields are optional.</p>
       <p id="section-form-note" class="edit-scope">Your submission will appear after Admin approval.</p>
-      <label for="section-title-input" id="section-title-label">Recruiter name</label><input id="section-title-input" name="title" required maxlength="200">
+      <label for="section-title-input" id="section-title-label">Recruiter name</label><input id="section-title-input" name="title" maxlength="200">
       <div id="section-organization-wrap"><label for="section-organization" id="section-organization-label">Company</label><input id="section-organization" name="organization" maxlength="200"></div>
       <div id="section-url-wrap"><label for="section-url" id="section-url-label">Link</label><input id="section-url" name="url" type="url" placeholder="https://"></div>
       <div id="section-email-wrap" hidden><label for="section-email">Email</label><input id="section-email" name="email" type="email" maxlength="254"></div>
@@ -56,15 +57,11 @@
       <div class="dialog-actions"><button id="section-delete-cancel" type="button">Cancel</button><button type="submit" class="danger">Request deletion</button></div>
     </form>
   </dialog>
-  <dialog id="section-actions-dialog" aria-labelledby="section-actions-title">
-    <h2 id="section-actions-title">Entry actions</h2>
-    <p id="section-actions-name" class="edit-scope"></p>
-    <div class="section-actions-list">
-      <button id="section-action-edit" type="button">Edit</button>
-      <div class="section-move-group"><strong>Move to</strong><div id="section-move-targets"></div></div>
-      <button id="section-action-delete" type="button" class="section-danger">Delete</button>
-    </div>
-    <div class="dialog-actions"><button id="section-action-close" type="button">Close</button></div>
-  </dialog>
+  <div id="section-actions-menu" class="company-menu" role="menu" aria-label="Entry actions" hidden>
+    <button id="section-action-edit" type="button" role="menuitem">Edit</button>
+    <button id="section-action-move" type="button" role="menuitem" aria-haspopup="menu" aria-expanded="false" aria-controls="section-move-targets">Move to <span aria-hidden="true">›</span></button>
+    <div id="section-move-targets" class="section-move-submenu" role="menu" aria-label="Move entry to" hidden></div>
+    <button id="section-action-delete" type="button" role="menuitem" class="section-danger">Delete</button>
+  </div>
 </body>
 </html>

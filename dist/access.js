@@ -126,7 +126,7 @@ function renderSectionSubmissions(){
  if(!sectionSubmissions.length){const empty=document.createElement('p');empty.textContent='No submissions awaiting review.';list.append(empty);return;}
  for(const item of sectionSubmissions){
   const row=document.createElement('div'),title=document.createElement('strong'),meta=document.createElement('p'),actions=document.createElement('div');
-  row.className='change-request';title.textContent=item.title;meta.className='change-request-meta';meta.textContent=`${item.actor_email} · ${item.section.replaceAll('-',' ')} · ${item.category}`;actions.className='change-actions';row.append(title,meta);
+  row.className='change-request';title.textContent=item.title||'Entry without a name';meta.className='change-request-meta';meta.textContent=`${item.actor_email} · ${item.section.replaceAll('-',' ')} · ${item.category}`;actions.className='change-actions';row.append(title,meta);
   for(const value of [item.organization,item.email,item.phone&&`${item.phone}${item.extension?` ext. ${item.extension}`:''}`,item.details,item.posted_at])if(value){const p=document.createElement('p');p.className='change-diff';p.textContent=value;row.append(p);}
   if(item.url){const a=document.createElement('a');a.href=item.url;a.target='_blank';a.rel='noopener noreferrer';a.textContent=item.url;row.append(a);}
   if(item.file_name){const a=document.createElement('a');a.href=`/api/section-file/${encodeURIComponent(item.id)}`;a.target='_blank';a.rel='noopener noreferrer';a.textContent=`Download ${item.file_name}`;row.append(a);}
@@ -145,7 +145,7 @@ function renderSectionChanges(){
  const labels={title:'Name',organization:'Company or source',url:'Link',details:'Details',email:'Email',phone:'Number',extension:'Ext',posted_at:'Posted date',file_name:'Uploaded file',category:'Category'};
  for(const item of sectionChanges){
   const row=document.createElement('div'),title=document.createElement('strong'),meta=document.createElement('p'),actions=document.createElement('div');
-  row.className='change-request';title.textContent=item.before.title;meta.className='change-request-meta';meta.textContent=`${item.actor_email} · ${item.before.section.replaceAll('-',' ')} · ${item.kind}`;actions.className='change-actions';row.append(title,meta);
+  row.className='change-request';title.textContent=item.before.title||'Entry without a name';meta.className='change-request-meta';meta.textContent=`${item.actor_email} · ${item.before.section.replaceAll('-',' ')} · ${item.kind}`;actions.className='change-actions';row.append(title,meta);
   if(item.kind==='delete'){const line=document.createElement('p');line.className='change-diff';line.textContent=`Delete from ${item.before.category}`;row.append(line);}
   else for(const [field,value] of Object.entries(item.after)){
    if(!Object.hasOwn(labels,field)||value===item.before[field])continue;

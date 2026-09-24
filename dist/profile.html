@@ -15,12 +15,13 @@
     <h1 class="recruiter-heading">Profile</h1>
     <section class="profile-card">
       <form id="profile-form">
+        <p class="form-hint">Share only what you’re comfortable with. All profile details are optional.</p>
         <div class="profile-fields">
-          <label>First Name<input id="profile-first" name="firstName" required maxlength="80" autocomplete="given-name"></label>
-          <label>Last Name<input id="profile-last" name="lastName" required maxlength="80" autocomplete="family-name"></label>
+          <label>First Name<input id="profile-first" name="firstName" maxlength="80" autocomplete="given-name"></label>
+          <label>Last Name<input id="profile-last" name="lastName" maxlength="80" autocomplete="family-name"></label>
           <label>Gmail<input id="profile-email" name="email" type="email" readonly></label>
-          <label>Mobile Number<input id="profile-mobile" name="mobile" type="tel" required maxlength="40" autocomplete="tel"></label>
-          <label>Status<select id="profile-status" name="visaStatus" required><option value="">Select status</option><option value="OPT">OPT</option><option value="STEMOPT">STEMOPT</option><option value="CPT">CPT</option><option value="H1B">H1B</option><option value="H4">H4</option></select></label>
+          <label>Mobile Number<input id="profile-mobile" name="mobile" type="tel" maxlength="40" autocomplete="tel"></label>
+          <label>Status<select id="profile-status" name="visaStatus"><option value="">Select status</option><option value="OPT">OPT</option><option value="STEMOPT">STEMOPT</option><option value="CPT">CPT</option><option value="H1B">H1B</option><option value="H4">H4</option></select></label>
         </div>
         <p id="profile-message" role="status" aria-live="polite"></p>
         <button type="submit" class="primary">Save profile</button>

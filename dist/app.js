@@ -101,7 +101,7 @@ async function persistChange(id,change){
  if(saving)throw Error('Please wait for the current save to finish.');saving=true;
  try{const response=await fetch('/api/company',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({id,version:versions[id]||0,change})});const result=await response.json();if(!response.ok)throw Error(result.error||'Could not save. Try again.');if(result.pending)return result;const {id:companyId,version,...fields}=result;overrides[companyId]=fields;versions[companyId]=version;applyOverrides();updateCounts();applyFilter();return result;}finally{saving=false;}
 }
-function notify(message){$('save-status').textContent=message;$('save-status').hidden=false;}
+function notify(message){$('save-status').textContent=message;$('save-status').hidden=false;window.showAppNotice?.(message);}
 function closeMenu(restore=false){$('company-menu').hidden=true;$('move-menu').hidden=true;$('menu-move').setAttribute('aria-expanded','false');if(menuTrigger){menuTrigger.setAttribute('aria-expanded','false');if(restore&&menuTrigger.isConnected)menuTrigger.focus();}}
 function actionsCell(company){
  const td=document.createElement('td');td.className='actions-cell';const button=document.createElement('button');button.type='button';button.className='more-button';button.textContent='⋮';button.setAttribute('aria-label',`Actions for ${company[0]}`);button.setAttribute('aria-haspopup','menu');button.setAttribute('aria-expanded','false');

@@ -27,7 +27,7 @@ if(onProfilePage){
  profileElement('profile-form').addEventListener('submit',async event=>{
   event.preventDefault();const button=event.currentTarget.querySelector('[type="submit"]'),message=profileElement('profile-message');button.disabled=true;message.textContent='Saving…';
   const input={firstName:profileElement('profile-first').value,lastName:profileElement('profile-last').value,mobile:profileElement('profile-mobile').value,visaStatus:profileElement('profile-status').value};
-  try{const data=await profileApi('/api/profile',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(input)});showGreeting(data.profile.first_name);message.textContent='Profile saved.';}
+  try{const data=await profileApi('/api/profile',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(input)});showGreeting(data.profile.first_name);message.textContent='Profile saved.';window.showAppNotice?.('Profile saved.');}
   catch(error){message.textContent=error.message;}finally{button.disabled=false;}
  });
  profileElement('profile-logout').addEventListener('click',async()=>{try{await profileApi('/api/logout',{method:'POST'});location.replace('/');}catch(error){profileElement('profile-message').textContent=error.message;}});
