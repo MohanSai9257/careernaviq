@@ -41,11 +41,20 @@
     <button id="menu-edit" type="button" role="menuitem">Edit</button>
     <button id="menu-move" type="button" role="menuitem" aria-haspopup="menu" aria-expanded="false" aria-controls="move-menu">Move to <span aria-hidden="true">›</span></button>
     <div id="move-menu" role="menu" aria-label="Move company to" hidden></div>
+    <button id="menu-delete" type="button" role="menuitem" hidden>Delete</button>
   </div>
+  <dialog id="delete-dialog" aria-labelledby="delete-title">
+    <form id="delete-form">
+      <h2 id="delete-title">Delete company?</h2>
+      <p id="delete-description" class="edit-scope"></p>
+      <p id="delete-error" role="alert" hidden></p>
+      <div class="dialog-actions"><button type="button" id="delete-cancel">Cancel</button><button type="submit" class="danger">Delete company</button></div>
+    </form>
+  </dialog>
   <dialog id="edit-dialog" aria-labelledby="edit-title">
     <form id="edit-form">
       <h2 id="edit-title">Edit company</h2>
-      <p class="edit-scope">Admin changes are visible to everyone.</p>
+      <p class="edit-scope">Changes are visible to everyone.</p>
       <label for="edit-name">Company name</label><input id="edit-name" name="company" required maxlength="250">
       <label for="edit-linkedin">LinkedIn link</label><input id="edit-linkedin" name="linkedin" type="url" placeholder="https://www.linkedin.com/company/…">
       <label for="edit-careers">Careers portal link</label><input id="edit-careers" name="careers" type="url" placeholder="https://company.com/careers">
@@ -57,7 +66,7 @@
   <dialog id="add-dialog" aria-labelledby="add-title">
     <form id="add-form">
       <h2 id="add-title">Add company</h2>
-      <p class="edit-scope">Admin additions are visible to everyone.</p>
+      <p class="edit-scope">New companies are visible to everyone.</p>
       <label for="add-name">Company name</label><input id="add-name" name="company" required maxlength="250" autocomplete="organization">
       <label for="add-category">Category</label><select id="add-category" name="category" required><option value="client">Client</option><option value="implementation">Implementation</option><option value="vendor">Vendor</option></select>
       <label for="add-linkedin">LinkedIn link</label><input id="add-linkedin" name="linkedin" type="url" placeholder="https://www.linkedin.com/company/…">

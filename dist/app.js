@@ -22,6 +22,7 @@ function updateRole(){
  $('admin-open').classList.toggle('is-admin',admin);
  document.body.classList.toggle('admin-mode',admin);
  document.body.classList.toggle('user-mode',!admin);
+ if($('menu-delete'))$('menu-delete').hidden=!admin;
 }
 const notes={client:'Companies currently categorized as direct employers. Original company order is preserved.',implementation:'Companies currently categorized as implementation and technology services firms. Original company order is preserved.',vendor:'Includes known vendors and all companies not yet classified. Placement here does not verify vendor status.',mylist:'Your saved companies, in their original order. My List is stored only in this browser, not shared with other visitors.'};
 const arrow='<svg aria-hidden="true" viewBox="0 0 16 16"><path d="M5 3h8v8M13 3 3 13"/></svg>';
@@ -82,7 +83,7 @@ fetch('companies.json').then(r=>{if(!r.ok)throw Error('Data unavailable');return
 
 }).catch(()=>{$('results').textContent='Could not load companies';$('empty').hidden=false;$('empty').textContent='The directory could not be loaded. Please refresh the page to try again.';});
 
-let overrides={},versions={},menuCompany=null,menuTrigger=null,editingId=null,sharedReady=false,saving=false;
+let overrides={},versions={},menuCompany=null,menuTrigger=null,editingId=null,deletingCompany=null,sharedReady=false,saving=false;
 let baseData=[],addedData=[];
 function validLink(value){if(!value)return true;try{const url=new URL(value);return ['https:','http:'].includes(url.protocol)&&!url.username&&!url.password;}catch{return false;}}
 function applyOverrides(){
@@ -103,6 +104,7 @@ async function loadChanges(){
 function updateCoverage(){const careerCount=companies.filter(r=>r[2]).length,linkedinCount=companies.filter(r=>r[1]).length;$('coverage').textContent=`${careerCount} careers links · ${linkedinCount} LinkedIn links. Initial links reviewed September 23, 2026; visitor-added links are not verified.`;}
 function rebuildCompanies(){
  companies=[...baseData.map(r=>[...r.slice(0,4),r[0],false]),...addedData.map(r=>[r.name,r.linkedin,r.careers,r.category,r.id,true])];
+ companies=companies.filter(r=>!overrides[r[4]]?.deleted);
  applyOverrides();$('total').textContent=companies.length.toLocaleString();updateCoverage();
 }
 async function persistChange(id,change){
@@ -118,12 +120,30 @@ function actionsCell(company){
   const submenu=$('move-menu');submenu.replaceChildren();for(const [key,label] of [['client','Client'],['implementation','Implementation'],['vendor','Vendor']]){if(key===company[3])continue;const option=document.createElement('button');option.type='button';option.role='menuitem';option.textContent=label;option.addEventListener('click',async()=>{option.disabled=true;
    try{await persistChange(company[4],{category:key});notify(`${company[0]} moved to ${label}. Visible to everyone.`);$('tab-'+category).focus();}catch(error){notify(error.message);option.disabled=false;closeMenu(true);}
   });submenu.append(option);}
+  $('menu-delete').hidden=!isAdmin();
   $('company-menu').hidden=false;positionMenu();$('menu-edit').focus({preventScroll:true});
  });td.append(button);return td;
 }
 function positionMenu(){if(!menuTrigger)return;const bounds=menuTrigger.getBoundingClientRect(),menu=$('company-menu');menu.style.left=Math.max(8,Math.min(bounds.right-224,window.innerWidth-232))+'px';menu.style.top=Math.max(8,Math.min(bounds.bottom+5,window.innerHeight-menu.offsetHeight-8))+'px';}
 $('menu-move').addEventListener('click',()=>{const open=$('move-menu').hidden;$('move-menu').hidden=!open;$('menu-move').setAttribute('aria-expanded',String(open));positionMenu();if(open)$('move-menu').querySelector('button')?.focus({preventScroll:true});});
 $('menu-edit').addEventListener('click',()=>{editingId=menuCompany[4];$('edit-name').value=menuCompany[0];$('edit-linkedin').value=menuCompany[1];$('edit-careers').value=menuCompany[2];$('edit-error').hidden=true;closeMenu();$('edit-dialog').showModal();$('edit-name').focus();});
+$('menu-delete').addEventListener('click',()=>{
+ if(!isAdmin()){closeMenu();return;}
+ deletingCompany={id:menuCompany[4],name:menuCompany[0]};
+ $('delete-description').textContent=`${deletingCompany.name} will be removed from the public directory for everyone.`;
+ $('delete-error').hidden=true;closeMenu();$('delete-dialog').showModal();$('delete-cancel').focus();
+});
+$('delete-cancel').addEventListener('click',()=>$('delete-dialog').close());
+$('delete-dialog').addEventListener('close',()=>{if(menuTrigger?.isConnected)menuTrigger.focus();deletingCompany=null;});
+$('delete-form').addEventListener('submit',async event=>{
+ event.preventDefault();if(!deletingCompany)return;
+ if(!isAdmin()){$('delete-error').textContent='Open Admin mode to delete companies.';$('delete-error').hidden=false;return;}
+ const {id,name}=deletingCompany,submit=$('delete-form').querySelector('[type=submit]');submit.disabled=true;
+ try{const response=await fetch('/api/company',{method:'DELETE',headers:{'Content-Type':'application/json','X-Admin-Email':currentEmail.trim().toLowerCase()},body:JSON.stringify({id,version:versions[id]||0})});const result=await response.json();if(!response.ok)throw Error(result.error||'Could not delete the company. Try again.');
+  overrides[id]={...overrides[id],deleted:true};versions[id]=result.version;saved.delete(id);try{localStorage.setItem(storageKey,JSON.stringify([...saved]));}catch{}
+  rebuildCompanies();updateCounts();applyFilter();$('delete-dialog').close();notify(`${name} deleted from the public directory.`);
+ }catch(error){$('delete-error').textContent=error.message;$('delete-error').hidden=false;}finally{submit.disabled=false;}
+});
 $('edit-cancel').addEventListener('click',()=>$('edit-dialog').close());
 $('edit-dialog').addEventListener('close',()=>{if(menuTrigger?.isConnected)menuTrigger.focus();});
 $('edit-form').addEventListener('submit',async event=>{event.preventDefault();const name=$('edit-name').value.trim(),linkedin=$('edit-linkedin').value.trim(),careers=$('edit-careers').value.trim();

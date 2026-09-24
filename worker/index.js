@@ -5,6 +5,7 @@ const json=(body,status=200)=>Response.json(body,{status,headers:{'Cache-Control
 function db(env){if(!env.DB)throw Error('Database unavailable');return env.DB;}
 function link(value){if(typeof value!=='string'||value.length>2048)return false;if(!value)return true;try{const u=new URL(value);return ['http:','https:'].includes(u.protocol)&&!u.username&&!u.password;}catch{return false;}}
 function normalizedName(value){return value.trim().replace(/\s+/g,' ').toLocaleLowerCase();}
+function isAdmin(request){return (request.headers.get('X-Admin-Email')||'').trim().toLocaleLowerCase()==='chatgpt3577@gmail.com';}
 export default {async fetch(request,env){
  const url=new URL(request.url);
  try{
@@ -44,11 +45,28 @@ export default {async fetch(request,env){
    const allowed=['name','linkedin','careers','category'];if(Object.keys(change).some(k=>!allowed.includes(k))||!Object.keys(change).length)return json({error:'Invalid fields.'},400);
    if(('name'in change&&(typeof change.name!=='string'||!change.name.trim()||change.name.length>250))||('linkedin'in change&&!link(change.linkedin))||('careers'in change&&!link(change.careers))||('category'in change&&!['client','implementation','vendor'].includes(change.category)))return json({error:'Check the name, links and category.'},400);
    const database=db(env),old=await database.prepare('SELECT payload,version FROM company_edits WHERE id = ?').bind(id).first();
+   if(old&&JSON.parse(old.payload).deleted)return json({error:'This company has been deleted. Refresh the page.'},409);
    if((old?.version||0)!==version)return json({error:'This company changed since you loaded it. Refresh and try again.'},409);
    const payload={...(old?JSON.parse(old.payload):{}),...change};if(payload.name)payload.name=payload.name.trim();
    const result=old?await database.prepare('UPDATE company_edits SET payload = ?, version = version + 1 WHERE id = ? AND version = ? RETURNING version').bind(JSON.stringify(payload),id,version).first():await database.prepare('INSERT INTO company_edits (id,payload,version) VALUES (?,?,1) ON CONFLICT(id) DO NOTHING RETURNING version').bind(id,JSON.stringify(payload)).first();
    if(!result)return json({error:'Another visitor just updated this company. Refresh and try again.'},409);
    return json({id,...payload,version:result.version});
+  }
+  if(url.pathname==='/api/company'&&request.method==='DELETE'){
+   if(!isAdmin(request))return json({error:'Open Admin mode to delete companies.'},401);
+   if(request.headers.get('Origin')&&request.headers.get('Origin')!==url.origin)return json({error:'Use the directory to delete companies.'},403);
+   if(!request.headers.get('Content-Type')?.includes('application/json'))return json({error:'JSON required.'},415);
+   const body=await request.text();if(body.length>10000)return json({error:'Request too large.'},413);
+   let input;try{input=JSON.parse(body);}catch{return json({error:'Invalid request.'},400);}
+   const {id,version}=input||{};
+   if(typeof id!=='string'||!Number.isInteger(version)||version<0||(!known.has(id)&&!await db(env).prepare('SELECT id FROM added_companies WHERE id = ?').bind(id).first()))return json({error:'Invalid company or version.'},400);
+   const database=db(env),old=await database.prepare('SELECT payload,version FROM company_edits WHERE id = ?').bind(id).first();
+   if(old&&JSON.parse(old.payload).deleted)return json({error:'This company has already been deleted.'},409);
+   if((old?.version||0)!==version)return json({error:'This company changed since you loaded it. Refresh and try again.'},409);
+   const payload={...(old?JSON.parse(old.payload):{}),deleted:true};
+   const result=old?await database.prepare('UPDATE company_edits SET payload = ?, version = version + 1 WHERE id = ? AND version = ? RETURNING version').bind(JSON.stringify(payload),id,version).first():await database.prepare('INSERT INTO company_edits (id,payload,version) VALUES (?,?,1) ON CONFLICT(id) DO NOTHING RETURNING version').bind(id,JSON.stringify(payload)).first();
+   if(!result)return json({error:'Another visitor just updated this company. Refresh and try again.'},409);
+   return json({id,deleted:true,version:result.version});
   }
   if(url.pathname.startsWith('/api/'))return json({error:'Not found.'},404);
   if(!['GET','HEAD'].includes(request.method))return new Response('Method not allowed',{status:405});
