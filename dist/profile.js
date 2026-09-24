@@ -9,6 +9,7 @@ async function loadProfile(){
   const data=await profileApi('/api/profile');if(current!==profileRequest)return;
   showGreeting(data.profile?.first_name||'');
   if(!onProfilePage)return;
+  document.body.classList.add('has-access');
   profileElement('profile-email').value=data.email;
   profileElement('profile-first').value=data.profile?.first_name||'';
   profileElement('profile-last').value=data.profile?.last_name||'';
@@ -17,7 +18,7 @@ async function loadProfile(){
   profileElement('profile-page').hidden=false;
   const session=await profileApi('/api/session');
   profileElement('profile-role').textContent=session.role==='admin'?'Admin':session.role==='coadmin'?'Coadmin':'User';
- }catch(error){if(onProfilePage&&current===profileRequest){if(error.status===403)location.replace('/');else{profileElement('profile-page').hidden=false;profileElement('profile-message').textContent=error.message;}}else showGreeting('');}
+ }catch(error){if(onProfilePage&&current===profileRequest){if(error.status===403)location.replace('/');else{document.body.classList.add('has-access');profileElement('profile-page').hidden=false;profileElement('profile-message').textContent=error.message;}}else showGreeting('');}
 }
 window.refreshHeaderProfile=loadProfile;
 document.addEventListener('directory-access-ready',loadProfile);
