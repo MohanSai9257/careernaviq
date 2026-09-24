@@ -4,6 +4,8 @@
   <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Recruiter Directory</title>
   <link rel="stylesheet" href="/style.css">
+  <script src="/sidebar.js" defer></script>
+  <script src="/section.js" defer></script>
 </head>
 <body>
   <header class="masthead">
@@ -17,18 +19,28 @@
       <button type="button" role="tab" id="tab-devops" aria-selected="false" aria-controls="section-panel" tabindex="-1">DevOps</button>
       <button type="button" role="tab" id="tab-validation" aria-selected="false" aria-controls="section-panel" tabindex="-1">Validation</button>
     </nav>
-    <section id="section-panel" class="section-panel" role="tabpanel" aria-labelledby="tab-java"></section>
+    <section id="section-panel" class="section-panel" role="tabpanel" aria-labelledby="tab-java">
+      <div class="toolbar section-toolbar">
+        <label class="search"><span class="sr-only">Search this category</span><input id="section-search" type="search" placeholder="Search" autocomplete="off"></label>
+        <label id="date-filter-wrap" class="date-filter" hidden><span class="sr-only">Posted within</span><select id="date-filter"><option value="all">Any time</option><option value="day">Past 24 hours</option><option value="week">Past week</option><option value="month">Past month</option></select></label>
+        <button id="section-add" type="button" class="primary">Add recruiter</button>
+      </div>
+      <p id="section-status" class="section-status" role="status" aria-live="polite"></p>
+      <div id="section-items" class="section-items"></div>
+    </section>
   </main>
-  <script src="/sidebar.js" defer></script>
-  <script>
-    fetch('/api/session',{cache:'no-store'}).then(response=>response.json()).then(session=>{
-      if(session.status==='approved') { document.body.classList.add('has-access'); document.getElementById('recruiter-page').hidden=false; document.getElementById('section-role').textContent=session.role==='admin'?'Admin':session.role==='coadmin'?'Coadmin':'User'; }
-      else location.replace('/');
-    }).catch(()=>location.replace('/'));
-    document.getElementById('section-logout').addEventListener('click',()=>fetch('/api/logout',{method:'POST'}).then(()=>location.replace('/')));
-    const tabs=[...document.querySelectorAll('.section-tabs [role="tab"]')];
-    function selectTab(tab){for(const item of tabs){const selected=item===tab;item.setAttribute('aria-selected',String(selected));item.tabIndex=selected?0:-1;}document.getElementById('section-panel').setAttribute('aria-labelledby',tab.id);}
-    for(const tab of tabs){tab.addEventListener('click',()=>selectTab(tab));tab.addEventListener('keydown',event=>{if(event.key!=='ArrowRight'&&event.key!=='ArrowLeft')return;event.preventDefault();const offset=event.key==='ArrowRight'?1:-1;const next=tabs[(tabs.indexOf(tab)+offset+tabs.length)%tabs.length];selectTab(next);next.focus();});}
-  </script>
+  <dialog id="section-dialog" aria-labelledby="section-dialog-title">
+    <form id="section-form">
+      <h2 id="section-dialog-title">Add recruiter</h2>
+      <p id="section-form-note" class="edit-scope">Your submission will appear after Admin approval.</p>
+      <label for="section-title-input" id="section-title-label">Recruiter name</label><input id="section-title-input" name="title" required maxlength="200">
+      <label for="section-organization" id="section-organization-label">Company</label><input id="section-organization" name="organization" maxlength="200">
+      <label for="section-url" id="section-url-label">Link</label><input id="section-url" name="url" type="url" placeholder="https://">
+      <label for="section-details">Details</label><textarea id="section-details" name="details" rows="4" maxlength="2000"></textarea>
+      <div id="section-posted-wrap" hidden><label for="section-posted">Posted date and time</label><input id="section-posted" name="postedAt" type="datetime-local"></div>
+      <p id="section-form-error" role="alert" hidden></p>
+      <div class="dialog-actions"><button id="section-cancel" type="button">Cancel</button><button type="submit" class="primary">Submit</button></div>
+    </form>
+  </dialog>
 </body>
 </html>

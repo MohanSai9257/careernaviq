@@ -5,6 +5,8 @@ const json=(body,status=200)=>Response.json(body,{status,headers:{'Cache-Control
 function db(env){if(!env.DB)throw Error('Database unavailable');return env.DB;}
 function link(value){if(typeof value!=='string'||value.length>2048)return false;if(!value)return true;try{const u=new URL(value);return ['http:','https:'].includes(u.protocol)&&!u.username&&!u.password;}catch{return false;}}
 function normalizedName(value){return value.trim().replace(/\s+/g,' ').toLocaleLowerCase();}
+const sectionNames=new Set(['recruiter-directory','latest-posted-jobs','study-materials','interview-prep','interview-support']);
+const sectionCategories=new Set(['java','data','devops','validation']);
 const adminEmail='chatgpt3577@gmail.com';
 const cookieName='directory_session';
 const emailPattern=/^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -158,7 +160,46 @@ export default {async fetch(request,env){
    if(!reviewed)return json({error:'This request was already reviewed. Refresh the list.'},409);
    return json(reviewed);
   }
+  if(url.pathname==='/api/review/section-items'&&request.method==='GET'){
+   if(!canManage(session))return json({error:'Admin access required.'},403);
+   const {results}=await db(env).prepare("SELECT id,section,category,title,organization,url,details,posted_at,actor_email,created_at FROM section_items WHERE status = 'pending' ORDER BY created_at LIMIT 500").all();
+   return json({items:results});
+  }
+  if(url.pathname==='/api/review/section-items'&&request.method==='PUT'){
+   if(!canManage(session))return json({error:'Admin access required.'},403);
+   if(!sameOrigin(request,url))return json({error:'Use the directory to review submissions.'},403);
+   let input;try{input=await jsonInput(request);}catch{return json({error:'Invalid request.'},400);}
+   if(typeof input?.id!=='string'||!['approve','deny'].includes(input?.action))return json({error:'Invalid review action.'},400);
+   const result=await db(env).prepare("UPDATE section_items SET status = ?,reviewed_at = ?,reviewed_by = ? WHERE id = ? AND status = 'pending' RETURNING id,status").bind(input.action==='approve'?'approved':'denied',new Date().toISOString(),session.email,input.id).first();
+   return result?json(result):json({error:'This submission was already reviewed.'},409);
+  }
   if((url.pathname==='/companies.json'||url.pathname.startsWith('/api/'))&&session?.status!=='approved')return json({error:'Access approval required.'},403);
+  if(url.pathname==='/api/section-items'&&request.method==='GET'){
+   const section=url.searchParams.get('section'),category=url.searchParams.get('category');
+   if(!sectionNames.has(section)||!sectionCategories.has(category))return json({error:'Invalid section or category.'},400);
+   const search=(url.searchParams.get('search')||'').trim().slice(0,100).replace(/[\\%_]/g,'\\$&');
+   const windowName=url.searchParams.get('window')||'all';
+   if(!['all','day','week','month'].includes(windowName))return json({error:'Invalid date filter.'},400);
+   const durations={day:86400000,week:604800000,month:2592000000};
+   const cutoff=windowName==='all'?'':new Date(Date.now()-durations[windowName]).toISOString();
+   const {results}=await db(env).prepare("SELECT id,title,organization,url,details,posted_at,created_at FROM section_items WHERE section = ? AND category = ? AND status = 'approved' AND (? = '' OR title LIKE ? ESCAPE '\\' OR organization LIKE ? ESCAPE '\\' OR details LIKE ? ESCAPE '\\') AND (? = '' OR posted_at >= ?) ORDER BY created_at DESC LIMIT 500").bind(section,category,search,`%${search}%`,`%${search}%`,`%${search}%`,cutoff,cutoff).all();
+   return json({items:results});
+  }
+  if(url.pathname==='/api/section-items'&&request.method==='POST'){
+   if(!sameOrigin(request,url))return json({error:'Use the directory to add items.'},403);
+   let input;try{input=await jsonInput(request);}catch{return json({error:'Invalid submission.'},400);}
+   const section=String(input?.section||''),category=String(input?.category||'');
+   const title=String(input?.title||'').trim(),organization=String(input?.organization||'').trim(),itemUrl=String(input?.url||'').trim(),details=String(input?.details||'').trim();
+   if(!sectionNames.has(section)||!sectionCategories.has(category)||!title||title.length>200||organization.length>200||details.length>2000||!link(itemUrl))return json({error:'Check the required fields and link.'},400);
+   let postedAt='';
+   if(section==='latest-posted-jobs'){
+    const date=new Date(input?.postedAt||'');if(!Number.isFinite(date.getTime()))return json({error:'Enter the posting date and time.'},400);postedAt=date.toISOString();
+   }
+   const status=canManage(session)?'approved':'pending';
+   const item={id:crypto.randomUUID(),section,category,title,organization,url:itemUrl,details,postedAt,status,createdAt:new Date().toISOString()};
+   await db(env).prepare('INSERT INTO section_items (id,section,category,title,organization,url,details,posted_at,actor_email,status,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)').bind(item.id,section,category,title,organization,itemUrl,details,postedAt,session.email,status,item.createdAt).run();
+   return json({item,status},201);
+  }
   if(url.pathname==='/api/changes'&&request.method==='GET'){
    const after=url.searchParams.get('after')||'';
    const {results}=await db(env).prepare('SELECT id,payload,version FROM company_edits WHERE id > ? ORDER BY id LIMIT 500').bind(after).all();

@@ -43,3 +43,18 @@ export const changeRequests=sqliteTable('change_requests',{
  reviewedAt:text('reviewed_at'),
  reviewedBy:text('reviewed_by'),
 });
+export const sectionItems=sqliteTable('section_items',{
+ id:text('id').primaryKey(),
+ section:text('section').notNull(),
+ category:text('category').notNull(),
+ title:text('title').notNull(),
+ organization:text('organization').notNull().default(''),
+ url:text('url').notNull().default(''),
+ details:text('details').notNull().default(''),
+ postedAt:text('posted_at').notNull().default(''),
+ actorEmail:text('actor_email').notNull(),
+ status:text('status').notNull().default('pending'),
+ createdAt:text('created_at').notNull(),
+ reviewedAt:text('reviewed_at'),
+ reviewedBy:text('reviewed_by'),
+});

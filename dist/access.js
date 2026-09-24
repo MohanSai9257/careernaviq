@@ -1,6 +1,7 @@
 const accessEl=id=>document.getElementById(id);
 let accessSession={role:'guest',status:'none'},accessUsers=[],appLoaded=false,checking=false;
 let changeRequests=[],coadmins=[];
+let sectionSubmissions=[];
 window.directoryRole='guest';
 const managesAccess=()=>['admin','coadmin'].includes(accessSession.role)&&accessSession.status==='approved';
 async function accessJson(url,options){
@@ -108,7 +109,24 @@ async function loadCoadmins(){
  try{const data=await accessJson('/api/coadmins');coadmins=data.items;accessError('coadmin-error','');renderCoadmins();}
  catch(error){accessError('coadmin-error',error.message);}
 }
-function loadAdminData(){loadAccessUsers();loadChangeRequests();loadCoadmins();}
+function renderSectionSubmissions(){
+ accessEl('section-review-count').textContent=sectionSubmissions.length;
+ const list=accessEl('section-review-list');list.replaceChildren();
+ if(!sectionSubmissions.length){const empty=document.createElement('p');empty.textContent='No submissions awaiting review.';list.append(empty);return;}
+ for(const item of sectionSubmissions){
+  const row=document.createElement('div'),title=document.createElement('strong'),meta=document.createElement('p'),actions=document.createElement('div');
+  row.className='change-request';title.textContent=item.title;meta.className='change-request-meta';meta.textContent=`${item.actor_email} · ${item.section.replaceAll('-',' ')} · ${item.category}`;actions.className='change-actions';row.append(title,meta);
+  for(const value of [item.organization,item.details,item.posted_at])if(value){const p=document.createElement('p');p.className='change-diff';p.textContent=value;row.append(p);}
+  if(item.url){const a=document.createElement('a');a.href=item.url;a.target='_blank';a.rel='noopener noreferrer';a.textContent=item.url;row.append(a);}
+  for(const [action,label] of [['approve','Approve'],['deny','Deny']]){const button=document.createElement('button');button.type='button';button.textContent=label;button.addEventListener('click',async()=>{
+   for(const control of actions.querySelectorAll('button'))control.disabled=true;accessError('section-review-error','');
+   try{await accessJson('/api/review/section-items',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:item.id,action})});sectionSubmissions=sectionSubmissions.filter(entry=>entry.id!==item.id);renderSectionSubmissions();}
+   catch(error){accessError('section-review-error',error.message);for(const control of actions.querySelectorAll('button'))control.disabled=false;}
+  });actions.append(button);}row.append(actions);list.append(row);
+ }
+}
+async function loadSectionSubmissions(){try{const data=await accessJson('/api/review/section-items');sectionSubmissions=data.items;accessError('section-review-error','');renderSectionSubmissions();}catch(error){accessError('section-review-error',error.message);}}
+function loadAdminData(){loadAccessUsers();loadChangeRequests();loadSectionSubmissions();loadCoadmins();}
 accessEl('coadmin-form').addEventListener('submit',async event=>{
  event.preventDefault();const submit=accessEl('coadmin-form').querySelector('[type=submit]');submit.disabled=true;accessError('coadmin-error','');
  try{const result=await accessJson('/api/coadmins',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:accessEl('coadmin-email').value.trim()})});coadmins.unshift(result);accessEl('coadmin-email').value='';renderCoadmins();loadAccessUsers();}
