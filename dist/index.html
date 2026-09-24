@@ -48,6 +48,10 @@
         <p id="section-review-error" role="alert" hidden></p>
         <div id="section-review-list" class="change-requests"></div>
       </div></details>
+      <details class="management-panel" id="section-change-panel"><summary><span>Section edit, move, and delete requests</span><span id="section-change-count" class="management-count">0</span></summary><div class="management-body">
+        <p id="section-change-error" role="alert" hidden></p>
+        <div id="section-change-list" class="change-requests"></div>
+      </div></details>
       <details id="coadmin-section" class="management-panel" hidden><summary><span>Coadmin access</span><span id="coadmin-count" class="management-count">0</span></summary><div class="management-body">
         <form id="coadmin-form" class="coadmin-form"><label for="coadmin-email">Gmail</label><input id="coadmin-email" type="email" autocomplete="off" required><button type="submit" class="primary">Grant Coadmin access</button></form>
         <p id="coadmin-error" role="alert" hidden></p>
@@ -117,6 +121,15 @@
       <label for="admin-email">Gmail</label><input id="admin-email" name="email" type="email" autocomplete="off" required>
       <p id="admin-error" role="alert" hidden></p>
       <div class="dialog-actions"><button type="button" id="admin-cancel">Cancel</button><button type="submit" class="primary">Login</button></div>
+    </form>
+  </dialog>
+  <dialog id="user-delete-dialog" aria-labelledby="user-delete-title">
+    <form id="user-delete-form">
+      <h2 id="user-delete-title">Delete user permanently?</h2>
+      <p id="user-delete-description" class="edit-scope"></p>
+      <p class="edit-scope">Their access, profile, and active sessions will be removed. This Gmail cannot request access again.</p>
+      <p id="user-delete-error" role="alert" hidden></p>
+      <div class="dialog-actions"><button id="user-delete-cancel" type="button">Cancel</button><button type="submit" class="danger">Delete user</button></div>
     </form>
   </dialog>
 </body>

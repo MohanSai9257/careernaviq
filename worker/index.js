@@ -44,6 +44,7 @@ export default {async fetch(request,env){
    const email=String(input?.email||'').trim().toLowerCase();
    if(email.length>254||!email.endsWith('@gmail.com')||!emailPattern.test(email)||email===adminEmail)return json({error:'Enter a valid Gmail address.'},400);
    const database=db(env),now=new Date().toISOString();
+   if(await database.prepare('SELECT email FROM deleted_users WHERE email = ?').bind(email).first())return json({error:'Access for this Gmail has been permanently removed.'},403);
    await database.prepare("INSERT INTO access_users (email,status,requested_at,updated_at) VALUES (?,'pending',?,?) ON CONFLICT(email) DO NOTHING").bind(email,now,now).run();
    const user=await database.prepare('SELECT status FROM access_users WHERE email = ?').bind(email).first();
    if(user.status==='approved')return json({error:'Access is already approved. Use Login.'},409);
@@ -103,6 +104,23 @@ export default {async fetch(request,env){
    if(!result)return json({error:'This request changed. Refresh the list and try again.'},409);
    return json(result);
   }
+  if(url.pathname==='/api/access/users'&&request.method==='DELETE'){
+   if(session?.role!=='admin')return json({error:'Only the Admin can permanently delete users.'},403);
+   if(!sameOrigin(request,url))return json({error:'Use Access Management to delete users.'},403);
+   let input;try{input=await jsonInput(request);}catch{return json({error:'Invalid request.'},400);}
+   const email=String(input?.email||'').trim().toLowerCase();
+   if(!emailPattern.test(email)||email===adminEmail)return json({error:'The Admin account cannot be deleted.'},400);
+   const database=db(env),existing=await database.prepare('SELECT email FROM access_users WHERE email = ?').bind(email).first();
+   if(!existing)return json({error:'User not found. Refresh the list.'},404);
+   await database.batch([
+    database.prepare('INSERT INTO deleted_users (email,deleted_at,deleted_by) VALUES (?,?,?) ON CONFLICT(email) DO NOTHING').bind(email,new Date().toISOString(),session.email),
+    database.prepare('DELETE FROM access_sessions WHERE email = ?').bind(email),
+    database.prepare('DELETE FROM user_profiles WHERE email = ?').bind(email),
+    database.prepare('DELETE FROM coadmins WHERE email = ?').bind(email),
+    database.prepare('DELETE FROM access_users WHERE email = ?').bind(email),
+   ]);
+   return json({email,deleted:true});
+  }
   if(url.pathname==='/api/coadmins'&&request.method==='GET'){
    if(!canManage(session))return json({error:'Admin access required.'},403);
    const {results}=await db(env).prepare('SELECT email,granted_at FROM coadmins ORDER BY granted_at DESC').all();
@@ -115,6 +133,7 @@ export default {async fetch(request,env){
    const email=String(input?.email||'').trim().toLowerCase();
    if(email.length>254||!email.endsWith('@gmail.com')||!emailPattern.test(email)||email===adminEmail)return json({error:'Enter a valid Gmail address other than the Admin Gmail.'},400);
    const database=db(env),now=new Date().toISOString();
+   if(await database.prepare('SELECT email FROM deleted_users WHERE email = ?').bind(email).first())return json({error:'This Gmail was permanently removed.'},403);
    await database.prepare("INSERT INTO access_users (email,status,requested_at,updated_at) VALUES (?,'approved',?,?) ON CONFLICT(email) DO UPDATE SET status = 'approved', updated_at = excluded.updated_at").bind(email,now,now).run();
    const result=await database.prepare('INSERT INTO coadmins (email,granted_at) VALUES (?,?) ON CONFLICT(email) DO NOTHING RETURNING email,granted_at').bind(email,now).first();
    if(!result)return json({error:'This Gmail already has Coadmin access.'},409);
@@ -174,6 +193,36 @@ export default {async fetch(request,env){
    const result=await db(env).prepare("UPDATE section_items SET status = ?,reviewed_at = ?,reviewed_by = ? WHERE id = ? AND status = 'pending' RETURNING id,status").bind(input.action==='approve'?'approved':'denied',new Date().toISOString(),session.email,input.id).first();
    return result?json(result):json({error:'This submission was already reviewed.'},409);
   }
+  if(url.pathname==='/api/review/section-changes'&&request.method==='GET'){
+   if(!canManage(session))return json({error:'Admin access required.'},403);
+   const {results}=await db(env).prepare("SELECT id,item_id,actor_email,kind,before_payload,after_payload,base_version,pending_file_key,created_at FROM section_change_requests WHERE status = 'pending' ORDER BY created_at LIMIT 500").all();
+   return json({items:results.map(row=>({...row,before:JSON.parse(row.before_payload),after:JSON.parse(row.after_payload)}))});
+  }
+  if(url.pathname==='/api/review/section-changes'&&request.method==='PUT'){
+   if(!canManage(session))return json({error:'Admin access required.'},403);
+   if(!sameOrigin(request,url))return json({error:'Use Access Management to review changes.'},403);
+   let input;try{input=await jsonInput(request);}catch{return json({error:'Invalid review action.'},400);}
+   if(typeof input?.id!=='string'||!['approve','deny'].includes(input?.action))return json({error:'Invalid review action.'},400);
+   const database=db(env),requestRow=await database.prepare("SELECT item_id,kind,after_payload,base_version,pending_file_key FROM section_change_requests WHERE id = ? AND status = 'pending'").bind(input.id).first();
+   if(!requestRow)return json({error:'This change was already reviewed.'},409);
+   const proposed=JSON.parse(requestRow.after_payload);
+   let oldFileKey='';
+   if(input.action==='approve'){
+    const current=await database.prepare('SELECT version,status,file_key FROM section_items WHERE id = ?').bind(requestRow.item_id).first();
+    if(!current||current.status!=='approved'||current.version!==requestRow.base_version)return json({error:'This entry changed. Deny this request and ask for a new one.'},409);
+    oldFileKey=current.file_key;
+    let result;
+    if(requestRow.kind==='move')result=await database.prepare("UPDATE section_items SET category = ?,version = version + 1 WHERE id = ? AND version = ? AND status = 'approved' RETURNING id").bind(proposed.category,requestRow.item_id,requestRow.base_version).first();
+    else if(requestRow.kind==='delete')result=await database.prepare("DELETE FROM section_items WHERE id = ? AND version = ? AND status = 'approved' RETURNING id").bind(requestRow.item_id,requestRow.base_version).first();
+    else result=await database.prepare("UPDATE section_items SET title = ?,organization = ?,url = ?,details = ?,email = ?,phone = ?,extension = ?,posted_at = ?,file_key = ?,file_name = ?,file_type = ?,version = version + 1 WHERE id = ? AND version = ? AND status = 'approved' RETURNING id").bind(proposed.title,proposed.organization,proposed.url,proposed.details,proposed.email,proposed.phone,proposed.extension,proposed.posted_at,proposed.file_key,proposed.file_name,proposed.file_type,requestRow.item_id,requestRow.base_version).first();
+    if(!result)return json({error:'This entry changed. Refresh and try again.'},409);
+   }
+   const reviewed=await database.prepare("UPDATE section_change_requests SET status = ?,reviewed_at = ?,reviewed_by = ? WHERE id = ? AND status = 'pending' RETURNING id,status").bind(input.action==='approve'?'approved':'denied',new Date().toISOString(),session.email,input.id).first();
+   if(!reviewed)return json({error:'This request was already reviewed.'},409);
+   const discardedKey=input.action==='deny'?requestRow.pending_file_key:requestRow.kind==='delete'||requestRow.pending_file_key?oldFileKey:'';
+   if(discardedKey)try{await bucket(env).delete(discardedKey);}catch(error){console.error('Could not remove replaced document',error);}
+   return json(reviewed);
+  }
   if((url.pathname==='/companies.json'||url.pathname.startsWith('/api/'))&&session?.status!=='approved')return json({error:'Access approval required.'},403);
   if(url.pathname==='/api/profile'&&request.method==='GET'){
    const profile=await db(env).prepare('SELECT first_name,last_name,mobile,visa_status FROM user_profiles WHERE email = ?').bind(session.email).first();
@@ -195,7 +244,7 @@ export default {async fetch(request,env){
    if(!['all','day','week','month'].includes(windowName))return json({error:'Invalid date filter.'},400);
    const durations={day:86400000,week:604800000,month:2592000000};
    const cutoff=windowName==='all'?'':new Date(Date.now()-durations[windowName]).toISOString();
-   const {results}=await db(env).prepare("SELECT id,title,organization,url,details,email,phone,extension,file_name,posted_at,created_at FROM section_items WHERE section = ? AND category = ? AND status = 'approved' AND (? = '' OR title LIKE ? ESCAPE '\\' OR organization LIKE ? ESCAPE '\\' OR details LIKE ? ESCAPE '\\' OR email LIKE ? ESCAPE '\\' OR phone LIKE ? ESCAPE '\\') AND (? = '' OR posted_at >= ?) ORDER BY created_at DESC LIMIT 500").bind(section,category,search,`%${search}%`,`%${search}%`,`%${search}%`,`%${search}%`,`%${search}%`,cutoff,cutoff).all();
+   const {results}=await db(env).prepare("SELECT id,version,category,title,organization,url,details,email,phone,extension,file_name,posted_at,created_at FROM section_items WHERE section = ? AND category = ? AND status = 'approved' AND (? = '' OR title LIKE ? ESCAPE '\\' OR organization LIKE ? ESCAPE '\\' OR details LIKE ? ESCAPE '\\' OR email LIKE ? ESCAPE '\\' OR phone LIKE ? ESCAPE '\\') AND (? = '' OR posted_at >= ?) ORDER BY created_at DESC LIMIT 500").bind(section,category,search,`%${search}%`,`%${search}%`,`%${search}%`,`%${search}%`,`%${search}%`,cutoff,cutoff).all();
    return json({items:results});
   }
   if(url.pathname.startsWith('/api/section-file/')&&request.method==='GET'){
@@ -205,6 +254,61 @@ export default {async fetch(request,env){
    if(item.status!=='approved'&&!canManage(session)&&item.actor_email!==session.email)return json({error:'Document is awaiting approval.'},403);
    const file=await bucket(env).get(item.file_key);if(!file)return json({error:'Document unavailable.'},404);
    return new Response(file.body,{headers:{'Content-Type':item.file_type,'Content-Disposition':`attachment; filename*=UTF-8''${encodeURIComponent(item.file_name)}`,'Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'}});
+  }
+  if(url.pathname.startsWith('/api/section-change-file/')&&request.method==='GET'){
+   if(!canManage(session))return json({error:'Admin access required.'},403);
+   const id=url.pathname.slice('/api/section-change-file/'.length);
+   const item=await db(env).prepare("SELECT pending_file_key,after_payload FROM section_change_requests WHERE id = ? AND status = 'pending'").bind(id).first();
+   if(!item?.pending_file_key)return json({error:'Document not found.'},404);
+   const proposed=JSON.parse(item.after_payload),file=await bucket(env).get(item.pending_file_key);
+   if(!file)return json({error:'Document unavailable.'},404);
+   return new Response(file.body,{headers:{'Content-Type':proposed.file_type,'Content-Disposition':`attachment; filename*=UTF-8''${encodeURIComponent(proposed.file_name)}`,'Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'}});
+  }
+  if(url.pathname==='/api/section-changes'&&request.method==='POST'){
+   if(!sameOrigin(request,url))return json({error:'Use the directory to request changes.'},403);
+   let input,file=null;
+   try{if(request.headers.get('Content-Type')?.includes('multipart/form-data')){const data=await request.formData();input=Object.fromEntries([...data.entries()].filter(([key])=>key!=='file'));file=data.get('file');}else input=await jsonInput(request);}
+   catch{return json({error:'Invalid change request.'},400);}
+   const id=String(input?.id||''),version=Number(input?.version),kind=String(input?.kind||'');
+   if(!id||!Number.isSafeInteger(version)||version<1||!['edit','move','delete'].includes(kind))return json({error:'Invalid change request.'},400);
+   const database=db(env),current=await database.prepare("SELECT id,version,section,category,title,organization,url,details,email,phone,extension,posted_at,file_key,file_name,file_type FROM section_items WHERE id = ? AND status = 'approved'").bind(id).first();
+   if(!current)return json({error:'Entry not found.'},404);
+   if(current.version!==version)return json({error:'This entry changed. Refresh and try again.'},409);
+   if(await database.prepare("SELECT id FROM section_change_requests WHERE item_id = ? AND status = 'pending' LIMIT 1").bind(id).first())return json({error:'A change for this entry is already awaiting approval.'},409);
+   const before={section:current.section,category:current.category,title:current.title,organization:current.organization,url:current.url,details:current.details,email:current.email,phone:current.phone,extension:current.extension,posted_at:current.posted_at,file_name:current.file_name};
+   let after={},pendingFileKey='',fileBytes=null;
+   if(kind==='move'){
+    const target=String(input?.category||'');if(!sectionCategories.has(target)||target===current.category)return json({error:'Choose a different category.'},400);
+    after={category:target};
+   }else if(kind==='edit'){
+    const title=String(input?.title||'').trim(),organization=String(input?.organization||'').trim(),itemUrl=String(input?.url||'').trim(),details=String(input?.details||'').trim();
+    const email=String(input?.email||'').trim(),phone=String(input?.phone||'').trim(),extension=String(input?.extension||'').trim();
+    if(!title||title.length>200||organization.length>200||details.length>2000||email.length>254||email&&!emailPattern.test(email)||phone.length>40||extension.length>20||!link(itemUrl))return json({error:'Check the edited fields and link.'},400);
+    if(current.section==='recruiter-directory'&&!organization)return json({error:'Enter the recruiter’s company.'},400);
+    if(current.section==='interview-support'&&(!phone||!details))return json({error:'Enter the contact number and details.'},400);
+    const isDocument=current.section==='study-materials'||current.section==='interview-prep';
+    if(file&&!isDocument)return json({error:'Only materials and interview prep accept uploads.'},400);
+    if(isDocument&&!itemUrl&&!current.file_key&&!file)return json({error:'Add a link or upload a document.'},400);
+    let postedAt=current.posted_at;
+    if(current.section==='latest-posted-jobs'){const date=new Date(input?.postedAt||'');if(!Number.isFinite(date.getTime()))return json({error:'Enter a valid posting date.'},400);postedAt=date.toISOString();}
+    after={title,organization,url:itemUrl,details,email,phone,extension,posted_at:postedAt,file_key:current.file_key,file_name:current.file_name,file_type:current.file_type};
+    if(file){
+     if(typeof file.arrayBuffer!=='function'||file.size===0||file.size>10*1024*1024)return json({error:'Choose a PDF or Word file smaller than 10 MB.'},400);
+     const fileName=String(file.name||'').split(/[\\/]/).pop().slice(0,200),ext=fileName.toLowerCase().split('.').pop();
+     const fileType={pdf:'application/pdf',doc:'application/msword',docx:'application/vnd.openxmlformats-officedocument.wordprocessingml.document'}[ext];
+     if(!fileType)return json({error:'Only PDF, DOC, and DOCX files are allowed.'},400);
+     fileBytes=await file.arrayBuffer();const magic=new Uint8Array(fileBytes.slice(0,8));
+     const pdf=ext==='pdf'&&[37,80,68,70,45].every((n,i)=>magic[i]===n),doc=ext==='doc'&&[208,207,17,224,161,177,26,225].every((n,i)=>magic[i]===n),docx=ext==='docx'&&magic[0]===80&&magic[1]===75&&magic[2]===3&&magic[3]===4;
+     if(!pdf&&!doc&&!docx)return json({error:'The selected file does not match its PDF or Word extension.'},400);
+     after.file_name=fileName;after.file_type=fileType;
+    }
+    if(!file&&Object.entries(after).every(([key,value])=>value===current[key]))return json({error:'No changes to submit.'},400);
+   }else if(file)return json({error:'This action does not accept a file.'},400);
+   const requestId=crypto.randomUUID();
+   if(fileBytes){pendingFileKey=`section-changes/${requestId}`;after.file_key=pendingFileKey;await bucket(env).put(pendingFileKey,fileBytes,{httpMetadata:{contentType:after.file_type}});}
+   try{await database.prepare("INSERT INTO section_change_requests (id,item_id,actor_email,kind,before_payload,after_payload,base_version,pending_file_key,status,created_at) VALUES (?,?,?,?,?,?,?,?,'pending',?)").bind(requestId,id,session.email,kind,JSON.stringify(before),JSON.stringify(after),version,pendingFileKey,new Date().toISOString()).run();}
+   catch(error){if(pendingFileKey)await bucket(env).delete(pendingFileKey);throw error;}
+   return json({pending:true,id:requestId},202);
   }
   if(url.pathname==='/api/section-items'&&request.method==='POST'){
    if(!sameOrigin(request,url))return json({error:'Use the directory to add items.'},403);

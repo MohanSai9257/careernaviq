@@ -41,11 +41,30 @@
       <div id="section-phone-wrap" hidden><label for="section-phone">Number</label><input id="section-phone" name="phone" type="tel" maxlength="40"></div>
       <div id="section-ext-wrap" hidden><label for="section-ext">Ext</label><input id="section-ext" name="extension" type="text" maxlength="20"></div>
       <div id="section-details-wrap"><label for="section-details">Details</label><textarea id="section-details" name="details" rows="4" maxlength="2000"></textarea></div>
-      <div id="section-file-wrap" hidden><label for="section-file">Upload PDF or Word document</label><input id="section-file" name="file" type="file" accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"><p class="form-hint">PDF, DOC, or DOCX. Maximum 10 MB.</p></div>
+      <div id="section-file-wrap" hidden><label for="section-file">Upload PDF or Word document</label><input id="section-file" name="file" type="file" accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"><p id="section-existing-file" class="form-hint" hidden></p><p class="form-hint">PDF, DOC, or DOCX. Maximum 10 MB.</p></div>
       <div id="section-posted-wrap" hidden><label for="section-posted">Posted date and time</label><input id="section-posted" name="postedAt" type="datetime-local"></div>
       <p id="section-form-error" role="alert" hidden></p>
       <div class="dialog-actions"><button id="section-cancel" type="button">Cancel</button><button type="submit" class="primary">Submit</button></div>
     </form>
+  </dialog>
+  <dialog id="section-delete-dialog" aria-labelledby="section-delete-title">
+    <form id="section-delete-form">
+      <h2 id="section-delete-title">Delete entry?</h2>
+      <p id="section-delete-description" class="edit-scope"></p>
+      <p class="edit-scope">An Admin or Coadmin must approve this deletion before it takes effect.</p>
+      <p id="section-delete-error" role="alert" hidden></p>
+      <div class="dialog-actions"><button id="section-delete-cancel" type="button">Cancel</button><button type="submit" class="danger">Request deletion</button></div>
+    </form>
+  </dialog>
+  <dialog id="section-actions-dialog" aria-labelledby="section-actions-title">
+    <h2 id="section-actions-title">Entry actions</h2>
+    <p id="section-actions-name" class="edit-scope"></p>
+    <div class="section-actions-list">
+      <button id="section-action-edit" type="button">Edit</button>
+      <div class="section-move-group"><strong>Move to</strong><div id="section-move-targets"></div></div>
+      <button id="section-action-delete" type="button" class="section-danger">Delete</button>
+    </div>
+    <div class="dialog-actions"><button id="section-action-close" type="button">Close</button></div>
   </dialog>
 </body>
 </html>

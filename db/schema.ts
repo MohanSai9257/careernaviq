@@ -45,6 +45,7 @@ export const changeRequests=sqliteTable('change_requests',{
 });
 export const sectionItems=sqliteTable('section_items',{
  id:text('id').primaryKey(),
+ version:integer('version').notNull().default(1),
  section:text('section').notNull(),
  category:text('category').notNull(),
  title:text('title').notNull(),
@@ -63,6 +64,25 @@ export const sectionItems=sqliteTable('section_items',{
  createdAt:text('created_at').notNull(),
  reviewedAt:text('reviewed_at'),
  reviewedBy:text('reviewed_by'),
+});
+export const sectionChangeRequests=sqliteTable('section_change_requests',{
+ id:text('id').primaryKey(),
+ itemId:text('item_id').notNull(),
+ actorEmail:text('actor_email').notNull(),
+ kind:text('kind').notNull(),
+ beforePayload:text('before_payload').notNull(),
+ afterPayload:text('after_payload').notNull(),
+ baseVersion:integer('base_version').notNull(),
+ pendingFileKey:text('pending_file_key').notNull().default(''),
+ status:text('status').notNull().default('pending'),
+ createdAt:text('created_at').notNull(),
+ reviewedAt:text('reviewed_at'),
+ reviewedBy:text('reviewed_by'),
+});
+export const deletedUsers=sqliteTable('deleted_users',{
+ email:text('email').primaryKey(),
+ deletedAt:text('deleted_at').notNull(),
+ deletedBy:text('deleted_by').notNull(),
 });
 export const userProfiles=sqliteTable('user_profiles',{
  email:text('email').primaryKey(),
