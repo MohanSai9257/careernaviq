@@ -1,20 +1,10 @@
 let companies=[],filtered=[],page=0,category='client',loaded=false;
-const pageSize=100,storageKey='employer-directory-my-list-v1',adminStorageKey='employer-directory-admin-email-v1',adminEmail='chatgpt3577@gmail.com';
+const pageSize=100,storageKey='employer-directory-my-list-v1';
 const $=id=>document.getElementById(id);
 const tabs=[...document.querySelectorAll('[role="tab"]')];
 let saved=new Set();
 try{const value=JSON.parse(localStorage.getItem(storageKey)||'[]');if(Array.isArray(value))saved=new Set(value.filter(x=>typeof x==='string'));}catch{}
-let currentEmail='';
-try{currentEmail=localStorage.getItem(adminStorageKey)||'';}catch{}
-function isAdmin(){return currentEmail.trim().toLowerCase()===adminEmail;}
-function syncAdminRole(){
- let email=currentEmail;try{email=localStorage.getItem(adminStorageKey)||'';}catch{}
- if(email===currentEmail)return;
- currentEmail=email;updateRole();render();
-}
-window.addEventListener('storage',event=>{if(event.key===adminStorageKey||event.key===null)syncAdminRole();});
-window.addEventListener('focus',syncAdminRole);
-document.addEventListener('visibilitychange',()=>{if(!document.hidden)syncAdminRole();});
+function isAdmin(){return window.directoryRole==='admin';}
 function updateRole(){
  const admin=isAdmin();
  $('role-label').textContent=admin?'Admin':'User';
@@ -139,7 +129,7 @@ $('delete-form').addEventListener('submit',async event=>{
  event.preventDefault();if(!deletingCompany)return;
  if(!isAdmin()){$('delete-error').textContent='Open Admin mode to delete companies.';$('delete-error').hidden=false;return;}
  const {id,name}=deletingCompany,submit=$('delete-form').querySelector('[type=submit]');submit.disabled=true;
- try{const response=await fetch('/api/company',{method:'DELETE',headers:{'Content-Type':'application/json','X-Admin-Email':currentEmail.trim().toLowerCase()},body:JSON.stringify({id,version:versions[id]||0})});const result=await response.json();if(!response.ok)throw Error(result.error||'Could not delete the company. Try again.');
+  try{const response=await fetch('/api/company',{method:'DELETE',headers:{'Content-Type':'application/json'},body:JSON.stringify({id,version:versions[id]||0})});const result=await response.json();if(!response.ok)throw Error(result.error||'Could not delete the company. Try again.');
   overrides[id]={...overrides[id],deleted:true};versions[id]=result.version;saved.delete(id);try{localStorage.setItem(storageKey,JSON.stringify([...saved]));}catch{}
   rebuildCompanies();updateCounts();applyFilter();$('delete-dialog').close();notify(`${name} deleted from the public directory.`);
  }catch(error){$('delete-error').textContent=error.message;$('delete-error').hidden=false;}finally{submit.disabled=false;}
@@ -175,15 +165,4 @@ $('add-form').addEventListener('submit',async event=>{
  }catch(error){$('add-error').textContent=error.message;$('add-error').hidden=false;}finally{submit.disabled=false;}
 });
 updateRole();
-$('admin-open').addEventListener('click',()=>{
- if(isAdmin()){currentEmail='';try{localStorage.removeItem(adminStorageKey);}catch{}updateRole();render();notify('Logged out. You are viewing as User.');return;}
- $('admin-email').value='';$('admin-error').hidden=true;$('admin-dialog').showModal();$('admin-email').focus();
-});
-$('admin-cancel').addEventListener('click',()=>$('admin-dialog').close());
-$('admin-form').addEventListener('submit',event=>{
- event.preventDefault();
- const email=$('admin-email').value.trim().toLowerCase();
- if(email!==adminEmail){$('admin-error').textContent='This Gmail is not registered as Admin.';$('admin-error').hidden=false;return;}
- currentEmail=email;try{localStorage.setItem(adminStorageKey,currentEmail);}catch{}
- $('admin-dialog').close();updateRole();render();notify('Admin mode is active.');
-});
+window.updateDirectoryRole=()=>{updateRole();render();};

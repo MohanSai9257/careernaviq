@@ -5,10 +5,73 @@ const json=(body,status=200)=>Response.json(body,{status,headers:{'Cache-Control
 function db(env){if(!env.DB)throw Error('Database unavailable');return env.DB;}
 function link(value){if(typeof value!=='string'||value.length>2048)return false;if(!value)return true;try{const u=new URL(value);return ['http:','https:'].includes(u.protocol)&&!u.username&&!u.password;}catch{return false;}}
 function normalizedName(value){return value.trim().replace(/\s+/g,' ').toLocaleLowerCase();}
-function isAdmin(request){return (request.headers.get('X-Admin-Email')||'').trim().toLocaleLowerCase()==='chatgpt3577@gmail.com';}
+const adminEmail='chatgpt3577@gmail.com';
+const cookieName='directory_session';
+const emailPattern=/^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+function sessionCookie(token){return `${cookieName}=${token}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=31536000`;}
+function clearSessionCookie(){return `${cookieName}=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`;}
+function requestToken(request){return (request.headers.get('Cookie')||'').split(';').map(part=>part.trim()).find(part=>part.startsWith(cookieName+'='))?.slice(cookieName.length+1)||'';}
+async function sessionFor(request,env){
+ const token=requestToken(request);if(!token)return null;
+ const session=await db(env).prepare('SELECT email,role FROM access_sessions WHERE token = ?').bind(token).first();
+ if(!session)return null;
+ if(session.role==='admin'&&session.email===adminEmail)return {...session,status:'approved'};
+ const user=await db(env).prepare('SELECT status FROM access_users WHERE email = ?').bind(session.email).first();
+ return {...session,status:user?.status||'pending'};
+}
+function sameOrigin(request,url){return !request.headers.get('Origin')||request.headers.get('Origin')===url.origin;}
+async function jsonInput(request){if(!request.headers.get('Content-Type')?.includes('application/json'))throw Error('JSON required.');const body=await request.text();if(body.length>10000)throw Error('Request too large.');return JSON.parse(body);}
 export default {async fetch(request,env){
  const url=new URL(request.url);
  try{
+  if(url.pathname==='/api/session'&&request.method==='GET'){
+   const session=await sessionFor(request,env);return json(session?{email:session.email,role:session.role,status:session.status}:{role:'guest',status:'none'});
+  }
+  if(url.pathname==='/api/access/request'&&request.method==='POST'){
+   if(!sameOrigin(request,url))return json({error:'Use the directory to request access.'},403);
+   let input;try{input=await jsonInput(request);}catch{return json({error:'Enter a valid Gmail address.'},400);}
+   const email=String(input?.email||'').trim().toLowerCase();
+   if(email.length>254||!email.endsWith('@gmail.com')||!emailPattern.test(email)||email===adminEmail)return json({error:'Enter a valid Gmail address.'},400);
+   const database=db(env),now=new Date().toISOString();
+   await database.prepare("INSERT INTO access_users (email,status,requested_at,updated_at) VALUES (?,'pending',?,?) ON CONFLICT(email) DO NOTHING").bind(email,now,now).run();
+   const user=await database.prepare('SELECT status FROM access_users WHERE email = ?').bind(email).first();
+   const token=crypto.randomUUID()+crypto.randomUUID();
+   await database.prepare('INSERT INTO access_sessions (token,email,role,created_at) VALUES (?,?,?,?)').bind(token,email,'user',now).run();
+   return Response.json({email,role:'user',status:user.status},{headers:{'Set-Cookie':sessionCookie(token),'Cache-Control':'no-store'}});
+  }
+  if(url.pathname==='/api/admin/login'&&request.method==='POST'){
+   if(!sameOrigin(request,url))return json({error:'Use the directory to open Admin mode.'},403);
+   let input;try{input=await jsonInput(request);}catch{return json({error:'Enter the admin Gmail.'},400);}
+   const email=String(input?.email||'').trim().toLowerCase();
+   if(email!==adminEmail)return json({error:'This Gmail is not registered as Admin.'},403);
+   const token=crypto.randomUUID()+crypto.randomUUID();
+   await db(env).prepare('INSERT INTO access_sessions (token,email,role,created_at) VALUES (?,?,?,?)').bind(token,email,'admin',new Date().toISOString()).run();
+   return Response.json({email,role:'admin',status:'approved'},{headers:{'Set-Cookie':sessionCookie(token),'Cache-Control':'no-store'}});
+  }
+  if(url.pathname==='/api/logout'&&request.method==='POST'){
+   if(!sameOrigin(request,url))return json({error:'Use the directory to sign out.'},403);
+   const token=requestToken(request);if(token)await db(env).prepare('DELETE FROM access_sessions WHERE token = ?').bind(token).run();
+   return Response.json({ok:true},{headers:{'Set-Cookie':clearSessionCookie(),'Cache-Control':'no-store'}});
+  }
+  const session=await sessionFor(request,env);
+  if(url.pathname==='/api/access/users'&&request.method==='GET'){
+   if(session?.role!=='admin')return json({error:'Admin access required.'},403);
+   const {results}=await db(env).prepare('SELECT email,status,requested_at,updated_at FROM access_users ORDER BY requested_at DESC').all();
+   return json({items:results});
+  }
+  if(url.pathname==='/api/access/users'&&request.method==='PUT'){
+   if(session?.role!=='admin')return json({error:'Admin access required.'},403);
+   if(!sameOrigin(request,url))return json({error:'Use the directory to manage access.'},403);
+   let input;try{input=await jsonInput(request);}catch{return json({error:'Invalid request.'},400);}
+   const email=String(input?.email||'').trim().toLowerCase(),action=input?.action;
+   const transitions={approve:['pending','approved'],deny:['pending','blocked'],block:['approved','blocked'],unblock:['blocked','approved']};
+   if(!emailPattern.test(email)||!Object.hasOwn(transitions,action))return json({error:'Invalid user or action.'},400);
+   const [from,to]=transitions[action];
+   const result=await db(env).prepare('UPDATE access_users SET status = ?, updated_at = ? WHERE email = ? AND status = ? RETURNING email,status').bind(to,new Date().toISOString(),email,from).first();
+   if(!result)return json({error:'This request changed. Refresh the list and try again.'},409);
+   return json(result);
+  }
+  if((url.pathname==='/companies.json'||url.pathname.startsWith('/api/'))&&session?.status!=='approved')return json({error:'Access approval required.'},403);
   if(url.pathname==='/api/changes'&&request.method==='GET'){
    const after=url.searchParams.get('after')||'';
    const {results}=await db(env).prepare('SELECT id,payload,version FROM company_edits WHERE id > ? ORDER BY id LIMIT 500').bind(after).all();
@@ -53,7 +116,7 @@ export default {async fetch(request,env){
    return json({id,...payload,version:result.version});
   }
   if(url.pathname==='/api/company'&&request.method==='DELETE'){
-   if(!isAdmin(request))return json({error:'Open Admin mode to delete companies.'},401);
+   if(session?.role!=='admin')return json({error:'Open Admin mode to delete companies.'},403);
    if(request.headers.get('Origin')&&request.headers.get('Origin')!==url.origin)return json({error:'Use the directory to delete companies.'},403);
    if(!request.headers.get('Content-Type')?.includes('application/json'))return json({error:'JSON required.'},415);
    const body=await request.text();if(body.length>10000)return json({error:'Request too large.'},413);

@@ -6,7 +6,7 @@
   <meta name="description" content="Find company LinkedIn profiles and careers portals in a directory of U.S. technology employers. Link verification is in progress.">
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230c2634'/%3E%3Cpath d='M9 9h14v4H13v3h8v4h-8v3H9z' fill='%2373e2c0'/%3E%3C/svg%3E">
   <link rel="stylesheet" href="style.css">
-  <script src="app.js" defer></script>
+  <script src="access.js" defer></script>
 </head>
 <body>
   <header class="masthead">
@@ -18,7 +18,27 @@
       </div>
     </div>
   </header>
-  <main class="wrap">
+  <div id="access-gate" class="access-gate wrap" hidden>
+    <div class="access-card">
+      <p class="eyebrow">EMPLOYER DIRECTORY</p>
+      <h1>Request access</h1>
+      <p id="access-message" class="description">Enter your Gmail to request access to the directory.</p>
+      <form id="access-form"><label for="access-email">Gmail</label><input id="access-email" type="email" autocomplete="email" required><button type="submit" class="primary">Request access</button></form>
+      <p id="access-error" role="alert" hidden></p>
+      <button id="access-change" type="button" hidden>Use a different Gmail</button>
+    </div>
+  </div>
+  <main id="directory-app" class="wrap" hidden>
+    <section id="admin-dashboard" class="admin-dashboard" hidden>
+      <h2>Access management</h2>
+      <div class="access-tabs" aria-label="User access">
+        <button type="button" data-access-tab="pending" class="active">Requests <span id="access-count-pending">0</span></button>
+        <button type="button" data-access-tab="approved">Existing Users <span id="access-count-approved">0</span></button>
+        <button type="button" data-access-tab="blocked">Blocked users <span id="access-count-blocked">0</span></button>
+      </div>
+      <p id="admin-access-error" role="alert" hidden></p>
+      <div id="access-users" class="access-users"></div>
+    </section>
     <div class="intro"><div><p class="eyebrow">U.S. TECHNOLOGY EMPLOYERS</p><h1>Find your next company.</h1><p class="description">Company profiles and careers pages, in one place.</p></div><div class="total"><strong id="total">23,957</strong><span>companies</span></div></div>
     <div class="notice"><strong>Link verification is in progress.</strong> The original 23,957 company names are included. Visitors can add companies and links; an entry does not confirm current hiring or sponsorship.</div>
     <nav class="category-tabs" role="tablist" aria-label="Company categories">

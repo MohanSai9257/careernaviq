@@ -13,3 +13,15 @@ export const addedCompanies=sqliteTable('added_companies',{
  careers:text('careers').notNull().default(''),
  category:text('category').notNull(),
 });
+export const accessUsers=sqliteTable('access_users',{
+ email:text('email').primaryKey(),
+ status:text('status').notNull().default('pending'),
+ requestedAt:text('requested_at').notNull(),
+ updatedAt:text('updated_at').notNull(),
+});
+export const accessSessions=sqliteTable('access_sessions',{
+ token:text('token').primaryKey(),
+ email:text('email').notNull(),
+ role:text('role').notNull(),
+ createdAt:text('created_at').notNull(),
+});
