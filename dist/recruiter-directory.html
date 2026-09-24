@@ -34,9 +34,13 @@
       <h2 id="section-dialog-title">Add recruiter</h2>
       <p id="section-form-note" class="edit-scope">Your submission will appear after Admin approval.</p>
       <label for="section-title-input" id="section-title-label">Recruiter name</label><input id="section-title-input" name="title" required maxlength="200">
-      <label for="section-organization" id="section-organization-label">Company</label><input id="section-organization" name="organization" maxlength="200">
-      <label for="section-url" id="section-url-label">Link</label><input id="section-url" name="url" type="url" placeholder="https://">
-      <label for="section-details">Details</label><textarea id="section-details" name="details" rows="4" maxlength="2000"></textarea>
+      <div id="section-organization-wrap"><label for="section-organization" id="section-organization-label">Company</label><input id="section-organization" name="organization" maxlength="200"></div>
+      <div id="section-url-wrap"><label for="section-url" id="section-url-label">Link</label><input id="section-url" name="url" type="url" placeholder="https://"></div>
+      <div id="section-email-wrap" hidden><label for="section-email">Email</label><input id="section-email" name="email" type="email" maxlength="254"></div>
+      <div id="section-phone-wrap" hidden><label for="section-phone">Number</label><input id="section-phone" name="phone" type="tel" maxlength="40"></div>
+      <div id="section-ext-wrap" hidden><label for="section-ext">Ext</label><input id="section-ext" name="extension" type="text" maxlength="20"></div>
+      <div id="section-details-wrap"><label for="section-details">Details</label><textarea id="section-details" name="details" rows="4" maxlength="2000"></textarea></div>
+      <div id="section-file-wrap" hidden><label for="section-file">Upload PDF or Word document</label><input id="section-file" name="file" type="file" accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"><p class="form-hint">PDF, DOC, or DOCX. Maximum 10 MB.</p></div>
       <div id="section-posted-wrap" hidden><label for="section-posted">Posted date and time</label><input id="section-posted" name="postedAt" type="datetime-local"></div>
       <p id="section-form-error" role="alert" hidden></p>
       <div class="dialog-actions"><button id="section-cancel" type="button">Cancel</button><button type="submit" class="primary">Submit</button></div>

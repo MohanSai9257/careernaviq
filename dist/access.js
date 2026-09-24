@@ -116,8 +116,9 @@ function renderSectionSubmissions(){
  for(const item of sectionSubmissions){
   const row=document.createElement('div'),title=document.createElement('strong'),meta=document.createElement('p'),actions=document.createElement('div');
   row.className='change-request';title.textContent=item.title;meta.className='change-request-meta';meta.textContent=`${item.actor_email} · ${item.section.replaceAll('-',' ')} · ${item.category}`;actions.className='change-actions';row.append(title,meta);
-  for(const value of [item.organization,item.details,item.posted_at])if(value){const p=document.createElement('p');p.className='change-diff';p.textContent=value;row.append(p);}
+  for(const value of [item.organization,item.email,item.phone&&`${item.phone}${item.extension?` ext. ${item.extension}`:''}`,item.details,item.posted_at])if(value){const p=document.createElement('p');p.className='change-diff';p.textContent=value;row.append(p);}
   if(item.url){const a=document.createElement('a');a.href=item.url;a.target='_blank';a.rel='noopener noreferrer';a.textContent=item.url;row.append(a);}
+  if(item.file_name){const a=document.createElement('a');a.href=`/api/section-file/${encodeURIComponent(item.id)}`;a.target='_blank';a.rel='noopener noreferrer';a.textContent=`Download ${item.file_name}`;row.append(a);}
   for(const [action,label] of [['approve','Approve'],['deny','Deny']]){const button=document.createElement('button');button.type='button';button.textContent=label;button.addEventListener('click',async()=>{
    for(const control of actions.querySelectorAll('button'))control.disabled=true;accessError('section-review-error','');
    try{await accessJson('/api/review/section-items',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:item.id,action})});sectionSubmissions=sectionSubmissions.filter(entry=>entry.id!==item.id);renderSectionSubmissions();}

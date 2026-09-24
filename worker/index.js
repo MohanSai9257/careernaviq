@@ -3,6 +3,7 @@ const known=new Map(baseRows.map(r=>[r[0],r]));
 const baseNames=new Set(baseRows.map(r=>r[0].trim().replace(/\s+/g,' ').toLocaleLowerCase()));
 const json=(body,status=200)=>Response.json(body,{status,headers:{'Cache-Control':'no-store','X-Content-Type-Options':'nosniff'}});
 function db(env){if(!env.DB)throw Error('Database unavailable');return env.DB;}
+function bucket(env){if(!env.BUCKET)throw Error('Document storage unavailable');return env.BUCKET;}
 function link(value){if(typeof value!=='string'||value.length>2048)return false;if(!value)return true;try{const u=new URL(value);return ['http:','https:'].includes(u.protocol)&&!u.username&&!u.password;}catch{return false;}}
 function normalizedName(value){return value.trim().replace(/\s+/g,' ').toLocaleLowerCase();}
 const sectionNames=new Set(['recruiter-directory','latest-posted-jobs','study-materials','interview-prep','interview-support']);
@@ -162,7 +163,7 @@ export default {async fetch(request,env){
   }
   if(url.pathname==='/api/review/section-items'&&request.method==='GET'){
    if(!canManage(session))return json({error:'Admin access required.'},403);
-   const {results}=await db(env).prepare("SELECT id,section,category,title,organization,url,details,posted_at,actor_email,created_at FROM section_items WHERE status = 'pending' ORDER BY created_at LIMIT 500").all();
+   const {results}=await db(env).prepare("SELECT id,section,category,title,organization,url,details,email,phone,extension,file_name,posted_at,actor_email,created_at FROM section_items WHERE status = 'pending' ORDER BY created_at LIMIT 500").all();
    return json({items:results});
   }
   if(url.pathname==='/api/review/section-items'&&request.method==='PUT'){
@@ -182,22 +183,56 @@ export default {async fetch(request,env){
    if(!['all','day','week','month'].includes(windowName))return json({error:'Invalid date filter.'},400);
    const durations={day:86400000,week:604800000,month:2592000000};
    const cutoff=windowName==='all'?'':new Date(Date.now()-durations[windowName]).toISOString();
-   const {results}=await db(env).prepare("SELECT id,title,organization,url,details,posted_at,created_at FROM section_items WHERE section = ? AND category = ? AND status = 'approved' AND (? = '' OR title LIKE ? ESCAPE '\\' OR organization LIKE ? ESCAPE '\\' OR details LIKE ? ESCAPE '\\') AND (? = '' OR posted_at >= ?) ORDER BY created_at DESC LIMIT 500").bind(section,category,search,`%${search}%`,`%${search}%`,`%${search}%`,cutoff,cutoff).all();
+   const {results}=await db(env).prepare("SELECT id,title,organization,url,details,email,phone,extension,file_name,posted_at,created_at FROM section_items WHERE section = ? AND category = ? AND status = 'approved' AND (? = '' OR title LIKE ? ESCAPE '\\' OR organization LIKE ? ESCAPE '\\' OR details LIKE ? ESCAPE '\\' OR email LIKE ? ESCAPE '\\' OR phone LIKE ? ESCAPE '\\') AND (? = '' OR posted_at >= ?) ORDER BY created_at DESC LIMIT 500").bind(section,category,search,`%${search}%`,`%${search}%`,`%${search}%`,`%${search}%`,`%${search}%`,cutoff,cutoff).all();
    return json({items:results});
+  }
+  if(url.pathname.startsWith('/api/section-file/')&&request.method==='GET'){
+   const id=url.pathname.slice('/api/section-file/'.length);
+   const item=await db(env).prepare('SELECT file_key,file_name,file_type,status,actor_email FROM section_items WHERE id = ?').bind(id).first();
+   if(!item?.file_key)return json({error:'Document not found.'},404);
+   if(item.status!=='approved'&&!canManage(session)&&item.actor_email!==session.email)return json({error:'Document is awaiting approval.'},403);
+   const file=await bucket(env).get(item.file_key);if(!file)return json({error:'Document unavailable.'},404);
+   return new Response(file.body,{headers:{'Content-Type':item.file_type,'Content-Disposition':`attachment; filename*=UTF-8''${encodeURIComponent(item.file_name)}`,'Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'}});
   }
   if(url.pathname==='/api/section-items'&&request.method==='POST'){
    if(!sameOrigin(request,url))return json({error:'Use the directory to add items.'},403);
-   let input;try{input=await jsonInput(request);}catch{return json({error:'Invalid submission.'},400);}
+   let input,file=null;
+   try{
+    if(request.headers.get('Content-Type')?.includes('multipart/form-data')){
+     const data=await request.formData();input=Object.fromEntries([...data.entries()].filter(([key])=>key!=='file'));file=data.get('file');
+    }else input=await jsonInput(request);
+   }catch{return json({error:'Invalid submission.'},400);}
    const section=String(input?.section||''),category=String(input?.category||'');
    const title=String(input?.title||'').trim(),organization=String(input?.organization||'').trim(),itemUrl=String(input?.url||'').trim(),details=String(input?.details||'').trim();
-   if(!sectionNames.has(section)||!sectionCategories.has(category)||!title||title.length>200||organization.length>200||details.length>2000||!link(itemUrl))return json({error:'Check the required fields and link.'},400);
+   const email=String(input?.email||'').trim(),phone=String(input?.phone||'').trim(),extension=String(input?.extension||'').trim();
+   if(!sectionNames.has(section)||!sectionCategories.has(category)||!title||title.length>200||organization.length>200||details.length>2000||email.length>254||email&&!emailPattern.test(email)||phone.length>40||extension.length>20||!link(itemUrl))return json({error:'Check the required fields and link.'},400);
+   if(section==='recruiter-directory'&&!organization)return json({error:'Enter the recruiter’s company.'},400);
+   if(section==='interview-support'&&(!phone||!details))return json({error:'Enter the contact number and details.'},400);
+   const documentSection=section==='study-materials'||section==='interview-prep';
+   if(documentSection&&!itemUrl&&!file)return json({error:'Add a link or upload a document.'},400);
+   if(file&&!documentSection)return json({error:'Uploads are available only for materials and interview prep.'},400);
+   let fileKey='',fileName='',fileType='',fileBytes=null;
+   if(file){
+    if(typeof file.arrayBuffer!=='function'||file.size===0||file.size>10*1024*1024)return json({error:'Choose a PDF or Word file smaller than 10 MB.'},400);
+    fileName=String(file.name||'').split(/[\\/]/).pop().slice(0,200);
+    const ext=fileName.toLowerCase().split('.').pop();
+    fileType={pdf:'application/pdf',doc:'application/msword',docx:'application/vnd.openxmlformats-officedocument.wordprocessingml.document'}[ext];
+    if(!fileType)return json({error:'Only PDF, DOC, and DOCX files are allowed.'},400);
+    fileBytes=await file.arrayBuffer();const magic=new Uint8Array(fileBytes.slice(0,8));
+    const pdf=ext==='pdf'&&[37,80,68,70,45].every((n,i)=>magic[i]===n);
+    const doc=ext==='doc'&&[208,207,17,224,161,177,26,225].every((n,i)=>magic[i]===n);
+    const docx=ext==='docx'&&magic[0]===80&&magic[1]===75&&magic[2]===3&&magic[3]===4;
+    if(!pdf&&!doc&&!docx)return json({error:'The selected file does not match its PDF or Word extension.'},400);
+   }
    let postedAt='';
    if(section==='latest-posted-jobs'){
     const date=new Date(input?.postedAt||'');if(!Number.isFinite(date.getTime()))return json({error:'Enter the posting date and time.'},400);postedAt=date.toISOString();
    }
    const status=canManage(session)?'approved':'pending';
-   const item={id:crypto.randomUUID(),section,category,title,organization,url:itemUrl,details,postedAt,status,createdAt:new Date().toISOString()};
-   await db(env).prepare('INSERT INTO section_items (id,section,category,title,organization,url,details,posted_at,actor_email,status,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)').bind(item.id,section,category,title,organization,itemUrl,details,postedAt,session.email,status,item.createdAt).run();
+   const item={id:crypto.randomUUID(),section,category,title,organization,url:itemUrl,details,email,phone,extension,postedAt,status,createdAt:new Date().toISOString()};
+   if(fileBytes){fileKey=`section-items/${item.id}`;await bucket(env).put(fileKey,fileBytes,{httpMetadata:{contentType:fileType}});}
+   try{await db(env).prepare('INSERT INTO section_items (id,section,category,title,organization,url,details,email,phone,extension,file_key,file_name,file_type,posted_at,actor_email,status,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)').bind(item.id,section,category,title,organization,itemUrl,details,email,phone,extension,fileKey,fileName,fileType,postedAt,session.email,status,item.createdAt).run();}
+   catch(error){if(fileKey)await bucket(env).delete(fileKey);throw error;}
    return json({item,status},201);
   }
   if(url.pathname==='/api/changes'&&request.method==='GET'){

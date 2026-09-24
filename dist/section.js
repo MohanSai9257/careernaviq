@@ -1,9 +1,9 @@
 const sectionConfig={
- 'recruiter-directory':{title:'Recruiter Directory',action:'Add recruiter',name:'Recruiter name',organization:'Company',url:'LinkedIn or profile link'},
+ 'recruiter-directory':{title:'Recruiter Directory',action:'Add recruiter',name:'Name',organization:'Company',url:'LinkedIn'},
  'latest-posted-jobs':{title:'Latest Posted Jobs',action:'',name:'Job title',organization:'Company',url:'Job posting link'},
- 'study-materials':{title:'Study Materials',action:'Add material',name:'Material title',organization:'Source',url:'Material link'},
- 'interview-prep':{title:'Interview Prep',action:'Add DOCs',name:'Document title',organization:'Source',url:'Document link'},
- 'interview-support':{title:'Interview Support',action:'Add contact',name:'Contact name',organization:'Organization',url:'Contact link'}
+ 'study-materials':{title:'Study Materials',action:'Add material',name:'Name',organization:'',url:'Link'},
+ 'interview-prep':{title:'Interview Prep',action:'Add DOCs',name:'Name',organization:'',url:'Link'},
+ 'interview-support':{title:'Interview Support',action:'Add contact',name:'Contact name',organization:'',url:''}
 };
 const sectionKey=location.pathname.split('/').filter(Boolean)[0]||'recruiter-directory';
 const config=sectionConfig[sectionKey];
@@ -14,6 +14,14 @@ byId('section-title').textContent=config.title;document.title=config.title;
 byId('section-add').textContent=config.action;byId('section-dialog-title').textContent=config.action;
 byId('section-add').hidden=!config.action;
 byId('section-title-label').textContent=config.name;byId('section-organization-label').textContent=config.organization;byId('section-url-label').textContent=config.url;
+const isRecruiter=sectionKey==='recruiter-directory',isDocument=sectionKey==='study-materials'||sectionKey==='interview-prep',isContact=sectionKey==='interview-support';
+byId('section-organization-wrap').hidden=!config.organization;byId('section-organization').required=isRecruiter;
+byId('section-url-wrap').hidden=!config.url;
+byId('section-email-wrap').hidden=!isRecruiter;
+byId('section-phone-wrap').hidden=!(isRecruiter||isContact);byId('section-phone').required=isContact;
+byId('section-ext-wrap').hidden=!isRecruiter;
+byId('section-details-wrap').hidden=!isContact;byId('section-details').required=isContact;
+byId('section-file-wrap').hidden=!isDocument;
 byId('section-search').placeholder=`Search ${config.title.toLowerCase()}`;
 byId('date-filter-wrap').hidden=sectionKey!=='latest-posted-jobs';
 byId('section-posted-wrap').hidden=sectionKey!=='latest-posted-jobs';
@@ -28,8 +36,11 @@ function render(items){
   const heading=document.createElement('h2');heading.textContent=item.title;card.append(heading);
   if(item.organization){const organization=document.createElement('p');organization.className='section-organization';organization.textContent=item.organization;card.append(organization);}
   if(item.details){const details=document.createElement('p');details.textContent=item.details;card.append(details);}
+  if(item.email){const email=document.createElement('a');email.href=`mailto:${item.email}`;email.textContent=item.email;card.append(email);}
+  if(item.phone){const phone=document.createElement('p');phone.textContent=`${item.phone}${item.extension?` ext. ${item.extension}`:''}`;card.append(phone);}
   if(item.posted_at){const date=document.createElement('time');date.dateTime=item.posted_at;date.textContent=`Posted ${new Date(item.posted_at).toLocaleString()}`;card.append(date);}
   if(item.url){const link=document.createElement('a');link.href=item.url;link.target='_blank';link.rel='noopener noreferrer';link.textContent='Open link ↗';card.append(link);}
+  if(item.file_name){const file=document.createElement('a');file.href=`/api/section-file/${encodeURIComponent(item.id)}`;file.textContent=`Download ${item.file_name}`;card.append(file);}
   list.append(card);
  }
 }
@@ -48,8 +59,13 @@ byId('section-cancel').addEventListener('click',()=>byId('section-dialog').close
 byId('section-form').addEventListener('submit',async event=>{
  event.preventDefault();const form=event.currentTarget,button=form.querySelector('[type="submit"]');button.disabled=true;byId('section-form-error').hidden=true;
  const postedValue=byId('section-posted').value;
- const input={section:sectionKey,category,title:byId('section-title-input').value,organization:byId('section-organization').value,url:byId('section-url').value,details:byId('section-details').value,postedAt:postedValue?new Date(postedValue).toISOString():''};
- try{const result=await api('/api/section-items',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(input)});byId('section-dialog').close();status(result.status==='pending'?'Submitted for Admin approval.':'Added successfully.');if(result.status==='approved')loadItems();}
+ const input={section:sectionKey,category,title:byId('section-title-input').value,organization:byId('section-organization').value,url:byId('section-url').value,details:byId('section-details').value,email:byId('section-email').value,phone:byId('section-phone').value,extension:byId('section-ext').value,postedAt:postedValue?new Date(postedValue).toISOString():''};
+ const file=byId('section-file').files[0];
+ if(isDocument&&!input.url.trim()&&!file){byId('section-form-error').textContent='Add a link or upload a PDF or Word document.';byId('section-form-error').hidden=false;button.disabled=false;return;}
+ if(file&&file.size>10*1024*1024){byId('section-form-error').textContent='Choose a file smaller than 10 MB.';byId('section-form-error').hidden=false;button.disabled=false;return;}
+ let options={method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(input)};
+ if(file){const formData=new FormData();for(const [key,value] of Object.entries(input))formData.append(key,value);formData.append('file',file);options={method:'POST',body:formData};}
+ try{const result=await api('/api/section-items',options);byId('section-dialog').close();status(result.status==='pending'?'Submitted for Admin approval.':'Added successfully.');if(result.status==='approved')loadItems();}
  catch(error){byId('section-form-error').textContent=error.message;byId('section-form-error').hidden=false;}finally{button.disabled=false;}
 });
 byId('section-logout').addEventListener('click',async()=>{try{await api('/api/logout',{method:'POST'});location.replace('/');}catch(error){status(error.message);}});
