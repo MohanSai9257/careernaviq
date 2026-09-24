@@ -42,7 +42,7 @@ function render(){
   wrapper.className='company-name';label.textContent=company[0];star.className='save-company';star.type='button';
   const isSaved=saved.has(company[4]);star.textContent=isSaved?'★':'☆';star.setAttribute('aria-pressed',String(isSaved));star.setAttribute('aria-label',`${isSaved?'Remove':'Save'} ${company[0]} ${isSaved?'from':'to'} My List`);star.title=isSaved?'Remove from My List':'Save to My List';
   star.addEventListener('click',()=>{setSaved(company[4],!saved.has(company[4]));const replacement=[...body.querySelectorAll('.save-company')].find(b=>b.getAttribute('aria-label').includes(company[0]));if(replacement)replacement.focus();else $('tab-mylist').focus();});
-  wrapper.append(star,label);name.append(wrapper);tr.append(name,linkCell(company[1],'LinkedIn',company[0]),linkCell(company[2],'Careers',company[0]),actionsCell(company));body.append(tr);
+  wrapper.append(star,label);if(company[5]){const added=document.createElement('small');added.className='added-label';added.textContent='Added by a visitor';wrapper.append(added);}name.append(wrapper);tr.append(name,linkCell(company[1],'LinkedIn',company[0]),linkCell(company[2],'Careers',company[0]),actionsCell(company));body.append(tr);
  }
  $('empty').hidden=filtered.length>0||!loaded;
  $('empty').textContent=category==='mylist'&&!companies.some(r=>saved.has(r[4]))?'Your list is empty. Select the star beside any company to save it here.':'No companies found in this tab. Try another name or category.';
@@ -59,13 +59,12 @@ for(const [i,tab] of tabs.entries()){
 for(const [id,change] of [['previous',-1],['next',1]])$(id).addEventListener('click',()=>{page+=change;render();document.querySelector('.category-tabs').scrollIntoView({behavior:'smooth',block:'start'});});
 window.addEventListener('storage',event=>{if(event.key===storageKey||event.key===null){try{const value=JSON.parse(event.newValue||'[]');saved=new Set(Array.isArray(value)?value.filter(x=>typeof x==='string'):[]);updateCounts();applyFilter();}catch{}}});
 fetch('companies.json').then(r=>{if(!r.ok)throw Error('Data unavailable');return r.json();}).then(async data=>{
- baseData=data;companies=data.map(r=>[...r.slice(0,4),r[0]]);loaded=true;await loadChanges();$('total').textContent=data.length.toLocaleString();updateCounts();applyFilter();
- const careerCount=companies.filter(r=>r[2]).length,linkedinCount=companies.filter(r=>r[1]).length;
- $('coverage').textContent=`${careerCount} careers links · ${linkedinCount} LinkedIn links. Checked September 23, 2026. Links open in a new tab.`;
+ baseData=data;loaded=true;await loadChanges();updateCounts();applyFilter();
+
 }).catch(()=>{$('results').textContent='Could not load companies';$('empty').hidden=false;$('empty').textContent='The directory could not be loaded. Please refresh the page to try again.';});
 
 let overrides={},versions={},menuCompany=null,menuTrigger=null,editingId=null,sharedReady=false,saving=false;
-let baseData=[];
+let baseData=[],addedData=[];
 function validLink(value){if(!value)return true;try{const url=new URL(value);return ['https:','http:'].includes(url.protocol)&&!url.username&&!url.password;}catch{return false;}}
 function applyOverrides(){
  for(const row of companies){const value=overrides[row[4]];if(!value||typeof value!=='object')continue;
@@ -76,14 +75,21 @@ function applyOverrides(){
  }
 }
 async function loadChanges(){
+ const additions=[];let cursor=0;
+ do{const response=await fetch('/api/companies'+(cursor?'?after='+cursor:''),{cache:'no-store'});if(!response.ok)throw Error('Could not load added companies. Please refresh and try again.');const data=await response.json();additions.push(...data.items);cursor=data.next;}while(cursor);
  const next={},nextVersions={};let after='';
  do{const response=await fetch('/api/changes'+(after?'?after='+encodeURIComponent(after):''),{cache:'no-store'});if(!response.ok)throw Error('Could not load shared changes. Please refresh and try again.');const data=await response.json();for(const item of data.items){const {id,version,...fields}=item;next[id]=fields;nextVersions[id]=version;}after=data.next;}while(after);
- overrides=next;versions=nextVersions;companies=baseData.map(r=>[...r.slice(0,4),r[0]]);applyOverrides();sharedReady=true;updateCounts();applyFilter();
+ addedData=additions;overrides=next;versions=nextVersions;rebuildCompanies();sharedReady=true;updateCounts();applyFilter();
+}
+function updateCoverage(){const careerCount=companies.filter(r=>r[2]).length,linkedinCount=companies.filter(r=>r[1]).length;$('coverage').textContent=`${careerCount} careers links · ${linkedinCount} LinkedIn links. Initial links reviewed September 23, 2026; visitor-added links are not verified.`;}
+function rebuildCompanies(){
+ companies=[...baseData.map(r=>[...r.slice(0,4),r[0],false]),...addedData.map(r=>[r.name,r.linkedin,r.careers,r.category,r.id,true])];
+ applyOverrides();$('total').textContent=companies.length.toLocaleString();updateCoverage();
 }
 async function persistChange(id,change){
  if(!sharedReady)throw Error('Shared data is not ready. Refresh and try again.');
  if(saving)throw Error('Please wait for the current save to finish.');saving=true;
- try{const response=await fetch('/api/company',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({id,version:versions[id]||0,change})});const result=await response.json();if(!response.ok)throw Error(result.error||'Could not save. Try again.');const {id:companyId,version,...fields}=result;overrides[companyId]=fields;versions[companyId]=version;applyOverrides();updateCounts();applyFilter();}finally{saving=false;}
+ try{const response=await fetch('/api/company',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({id,version:versions[id]||0,change})});const result=await response.json();if(!response.ok)throw Error(result.error||'Could not save. Try again.');const {id:companyId,version,...fields}=result;overrides[companyId]=fields;versions[companyId]=version;applyOverrides();updateCoverage();updateCounts();applyFilter();}finally{saving=false;}
 }
 function notify(message){$('save-status').textContent=message;$('save-status').hidden=false;}
 function closeMenu(restore=false){$('company-menu').hidden=true;$('move-menu').hidden=true;$('menu-move').setAttribute('aria-expanded','false');if(menuTrigger){menuTrigger.setAttribute('aria-expanded','false');if(restore&&menuTrigger.isConnected)menuTrigger.focus();}}
@@ -114,3 +120,18 @@ $('company-menu').addEventListener('keydown',event=>{const items=[...$('company-
 window.addEventListener('resize',()=>closeMenu());window.addEventListener('scroll',()=>{if(!$('company-menu').hidden)positionMenu();},true);
 
 window.addEventListener('focus',()=>{if(loaded&&!saving&&!$('edit-dialog').open&&$('company-menu').hidden)loadChanges().catch(error=>notify(error.message));});
+
+$('add-company').addEventListener('click',()=>{
+ $('add-form').reset();$('add-category').value=['client','implementation','vendor'].includes(category)?category:'vendor';$('add-error').hidden=true;$('add-dialog').showModal();$('add-name').focus();
+});
+$('add-cancel').addEventListener('click',()=>$('add-dialog').close());
+$('add-form').addEventListener('submit',async event=>{
+ event.preventDefault();
+ const name=$('add-name').value.trim(),categoryValue=$('add-category').value,linkedin=$('add-linkedin').value.trim(),careers=$('add-careers').value.trim();
+ let error='';if(!name)error='Enter a company name.';else if(!validLink(linkedin)||!validLink(careers))error='Links must be valid http:// or https:// addresses, without embedded credentials.';else if(companies.some(r=>r[0].trim().toLowerCase()===name.toLowerCase()))error='This company is already in the directory.';
+ if(error){$('add-error').textContent=error;$('add-error').hidden=false;return;}
+ const submit=$('add-form').querySelector('[type=submit]');submit.disabled=true;
+ try{const response=await fetch('/api/companies',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,category:categoryValue,linkedin,careers})});const result=await response.json();if(!response.ok)throw Error(result.error||'Could not add the company. Try again.');
+  addedData.push(result);rebuildCompanies();updateCounts();$('search').value=result.name;setCategory(result.category);$('add-dialog').close();notify(`${result.name} added. Visible to everyone.`);
+ }catch(error){$('add-error').textContent=error.message;$('add-error').hidden=false;}finally{submit.disabled=false;}
+});
