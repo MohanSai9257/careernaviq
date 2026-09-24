@@ -8,7 +8,12 @@ const directorySections=[
 ];
 const currentSection=directorySections.find(section=>section.path===location.pathname.replace(/\/$/,'')||section.path==='/'&&location.pathname==='/')||(['/profile','/admin','/admin/'].includes(location.pathname)?null:directorySections[0]);
 const sidebar=document.createElement('aside');sidebar.className='side-nav';sidebar.setAttribute('aria-label','Main navigation');
-const toggle=document.createElement('button');toggle.type='button';toggle.className='side-toggle';toggle.setAttribute('aria-label','Toggle navigation');toggle.setAttribute('aria-expanded','true');toggle.textContent='‹';sidebar.append(toggle);
+const sideHead=document.createElement('div');sideHead.className='side-head';
+const homeBrand=document.createElement('a');homeBrand.href='/';homeBrand.className='side-brand';homeBrand.title='CareerNaviq home';
+const homeLogo=document.createElement('img');homeLogo.src='/logo.svg';homeLogo.alt='';homeLogo.className='side-brand-logo';
+const homeName=document.createElement('span');homeName.className='side-label';homeName.textContent='CareerNaviq';homeBrand.append(homeLogo,homeName);sideHead.append(homeBrand);
+const toggle=document.createElement('button');toggle.type='button';toggle.className='side-toggle';toggle.setAttribute('aria-label','Toggle navigation');toggle.setAttribute('aria-expanded','true');toggle.textContent='‹';
+sideHead.append(toggle);sidebar.append(sideHead);
 const links=document.createElement('nav');
 for(const section of directorySections){
  const link=document.createElement('a');link.href=section.path;link.title=section.name;
@@ -32,7 +37,7 @@ sidebar.append(profileLink);document.body.prepend(sidebar);
 function setSidebarCollapsed(collapsed){document.body.classList.toggle('sidebar-collapsed',collapsed);toggle.textContent=collapsed?'›':'‹';toggle.setAttribute('aria-expanded',String(!collapsed));}
 setSidebarCollapsed(localStorage.getItem('directory-sidebar-collapsed')==='true');
 toggle.addEventListener('click',()=>{const collapsed=!document.body.classList.contains('sidebar-collapsed');setSidebarCollapsed(collapsed);localStorage.setItem('directory-sidebar-collapsed',String(collapsed));});
-const sectionTitle=document.getElementById('section-title');if(sectionTitle){sectionTitle.textContent=currentSection.name;document.title=currentSection.name;}
+const sectionTitle=document.getElementById('section-title');if(sectionTitle&&currentSection){sectionTitle.textContent=currentSection.name;document.title=`${currentSection.name} — CareerNaviq`;}
 
 const appNotice=document.createElement('div');appNotice.className='app-notice';appNotice.hidden=true;
 const appNoticeText=document.createElement('span');appNoticeText.setAttribute('role','status');appNoticeText.setAttribute('aria-live','polite');appNoticeText.setAttribute('aria-atomic','true');

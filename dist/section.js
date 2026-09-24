@@ -10,7 +10,7 @@ const config=sectionConfig[sectionKey];
 const byId=id=>document.getElementById(id);
 const tabs=[...document.querySelectorAll('.section-tabs [role="tab"]')];
 let category='java',requestNumber=0,searchTimer,editingItem=null,deletingItem=null,actionItem=null,accessRole='user';
-byId('section-title').textContent=config.title;document.title=config.title;
+byId('section-title').textContent=config.title;document.title=`${config.title} — CareerNaviq`;
 byId('section-add').textContent=config.action;byId('section-dialog-title').textContent=config.action;
 byId('section-add').hidden=!config.action;
 byId('section-title-label').textContent=config.name;byId('section-organization-label').textContent=config.organization;byId('section-url-label').textContent=config.url;
