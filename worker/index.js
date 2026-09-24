@@ -175,6 +175,18 @@ export default {async fetch(request,env){
    return result?json(result):json({error:'This submission was already reviewed.'},409);
   }
   if((url.pathname==='/companies.json'||url.pathname.startsWith('/api/'))&&session?.status!=='approved')return json({error:'Access approval required.'},403);
+  if(url.pathname==='/api/profile'&&request.method==='GET'){
+   const profile=await db(env).prepare('SELECT first_name,last_name,mobile,visa_status FROM user_profiles WHERE email = ?').bind(session.email).first();
+   return json({email:session.email,profile:profile||null});
+  }
+  if(url.pathname==='/api/profile'&&request.method==='PUT'){
+   if(!sameOrigin(request,url))return json({error:'Use the profile page to save changes.'},403);
+   let input;try{input=await jsonInput(request);}catch{return json({error:'Invalid profile details.'},400);}
+   const firstName=String(input?.firstName||'').trim(),lastName=String(input?.lastName||'').trim(),mobile=String(input?.mobile||'').trim(),visaStatus=String(input?.visaStatus||'').trim();
+   if(!firstName||firstName.length>80||!lastName||lastName.length>80||!mobile||mobile.length>40||!/^[+()\d.\s-]+$/.test(mobile)||!['OPT','STEMOPT','CPT','H1B','H4'].includes(visaStatus))return json({error:'Enter your name, mobile number, and a valid status.'},400);
+   const result=await db(env).prepare('INSERT INTO user_profiles (email,first_name,last_name,mobile,visa_status,updated_at) VALUES (?,?,?,?,?,?) ON CONFLICT(email) DO UPDATE SET first_name = excluded.first_name,last_name = excluded.last_name,mobile = excluded.mobile,visa_status = excluded.visa_status,updated_at = excluded.updated_at RETURNING first_name,last_name,mobile,visa_status').bind(session.email,firstName,lastName,mobile,visaStatus,new Date().toISOString()).first();
+   return json({email:session.email,profile:result});
+  }
   if(url.pathname==='/api/section-items'&&request.method==='GET'){
    const section=url.searchParams.get('section'),category=url.searchParams.get('category');
    if(!sectionNames.has(section)||!sectionCategories.has(category))return json({error:'Invalid section or category.'},400);
@@ -314,7 +326,7 @@ export default {async fetch(request,env){
   if(!['GET','HEAD'].includes(request.method))return new Response('Method not allowed',{status:405});
   const sections=['recruiter-directory','latest-posted-jobs','study-materials','interview-prep','interview-support'];
   const section=sections.find(name=>url.pathname===`/${name}`||url.pathname===`/${name}/`);
-  const path=url.pathname==='/'?'/index.html':section?'/recruiter-directory.html':url.pathname;
+  const path=url.pathname==='/'?'/index.html':section?'/recruiter-directory.html':url.pathname==='/profile'||url.pathname==='/profile/'?'/profile.html':url.pathname;
   if(!Object.hasOwn(ASSETS,path))return new Response('Not found',{status:404});
   const type=path.endsWith('.html')?'text/html':path.endsWith('.css')?'text/css':path.endsWith('.js')?'text/javascript':'application/json';
   return new Response(request.method==='HEAD'?null:ASSETS[path],{headers:{'Content-Type':type+'; charset=utf-8','Cache-Control':'no-cache','X-Content-Type-Options':'nosniff'}});

@@ -64,3 +64,11 @@ export const sectionItems=sqliteTable('section_items',{
  reviewedAt:text('reviewed_at'),
  reviewedBy:text('reviewed_by'),
 });
+export const userProfiles=sqliteTable('user_profiles',{
+ email:text('email').primaryKey(),
+ firstName:text('first_name').notNull(),
+ lastName:text('last_name').notNull(),
+ mobile:text('mobile').notNull(),
+ visaStatus:text('visa_status').notNull(),
+ updatedAt:text('updated_at').notNull(),
+});

@@ -13,6 +13,7 @@ async function accessJson(url,options){
 function accessError(id,message){const el=accessEl(id);el.textContent=message;el.hidden=!message;}
 function showAccessState(){
  const active=accessSession.status==='approved';
+ if(!active){const greeting=accessEl('profile-greeting');if(greeting)greeting.hidden=true;}
  document.body.classList.toggle('has-access',active);
  window.directoryRole=active?accessSession.role:'guest';
  accessEl('access-gate').hidden=active;
@@ -25,6 +26,7 @@ function showAccessState(){
  accessEl('admin-open').classList.toggle('is-admin',managesAccess());
  accessEl('user-logout').hidden=!(active&&accessSession.role==='user');
  if(active){
+  document.dispatchEvent(new Event('directory-access-ready'));
   if(!appLoaded){appLoaded=true;const script=document.createElement('script');script.src='app.js';script.onerror=()=>accessError('admin-access-error','Could not load the directory. Refresh the page.');document.body.append(script);}
   else window.updateDirectoryRole?.();
   if(managesAccess())loadAdminData();
