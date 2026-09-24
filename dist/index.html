@@ -33,25 +33,19 @@
     <details id="admin-dashboard" class="admin-dashboard" hidden>
       <summary>Access management</summary>
       <div class="admin-dashboard-content">
-      <h2>User access</h2>
-      <div class="access-tabs" aria-label="User access">
-        <button type="button" data-access-tab="pending" class="active">Requests <span id="access-count-pending">0</span></button>
-        <button type="button" data-access-tab="approved">Existing Users <span id="access-count-approved">0</span></button>
-        <button type="button" data-access-tab="blocked">Blocked users <span id="access-count-blocked">0</span></button>
-      </div>
       <p id="admin-access-error" role="alert" hidden></p>
-      <div id="access-users" class="access-users"></div>
-      <div class="admin-subsection">
-        <h2>Company change requests <span id="change-count" class="badge">0</span></h2>
+      <details class="management-panel" id="users-pending"><summary><span>Requests</span><span id="access-count-pending" class="management-count">0</span></summary><div id="access-users-pending" class="management-body access-users"></div></details>
+      <details class="management-panel" id="users-approved"><summary><span>Existing Users</span><span id="access-count-approved" class="management-count">0</span></summary><div id="access-users-approved" class="management-body access-users"></div></details>
+      <details class="management-panel" id="users-blocked"><summary><span>Blocked users</span><span id="access-count-blocked" class="management-count">0</span></summary><div id="access-users-blocked" class="management-body access-users"></div></details>
+      <details class="management-panel" id="company-change-panel"><summary><span>Company change requests</span><span id="change-count" class="management-count">0</span></summary><div class="management-body">
         <p id="change-error" role="alert" hidden></p>
         <div id="change-requests" class="change-requests"></div>
-      </div>
-      <div id="coadmin-section" class="admin-subsection" hidden>
-        <h2>Coadmin access</h2>
+      </div></details>
+      <details id="coadmin-section" class="management-panel" hidden><summary><span>Coadmin access</span><span id="coadmin-count" class="management-count">0</span></summary><div class="management-body">
         <form id="coadmin-form" class="coadmin-form"><label for="coadmin-email">Gmail</label><input id="coadmin-email" type="email" autocomplete="off" required><button type="submit" class="primary">Grant Coadmin access</button></form>
         <p id="coadmin-error" role="alert" hidden></p>
         <div id="coadmin-list" class="access-users"></div>
-      </div>
+      </div></details>
       </div>
     </details>
     <div class="intro"><div><p class="eyebrow">U.S. TECHNOLOGY EMPLOYERS</p><h1>Find your next company.</h1><p class="description">Company profiles and careers pages, in one place.</p></div><div class="total"><strong id="total">23,957</strong><span>companies</span></div></div>

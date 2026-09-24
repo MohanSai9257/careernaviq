@@ -1,5 +1,5 @@
 const accessEl=id=>document.getElementById(id);
-let accessSession={role:'guest',status:'none'},accessUsers=[],accessTab='pending',appLoaded=false,checking=false;
+let accessSession={role:'guest',status:'none'},accessUsers=[],appLoaded=false,checking=false;
 let changeRequests=[],coadmins=[];
 window.directoryRole='guest';
 const managesAccess=()=>['admin','coadmin'].includes(accessSession.role)&&accessSession.status==='approved';
@@ -40,21 +40,21 @@ async function checkAccess(){
  finally{checking=false;}
 }
 function renderAccessUsers(){
- for(const status of ['pending','approved','blocked'])accessEl('access-count-'+status).textContent=accessUsers.filter(u=>u.status===status).length;
- for(const button of document.querySelectorAll('[data-access-tab]'))button.classList.toggle('active',button.dataset.accessTab===accessTab);
- const list=accessEl('access-users');list.replaceChildren();
- const people=accessUsers.filter(u=>u.status===accessTab);
- if(!people.length){const empty=document.createElement('p');empty.textContent=accessTab==='pending'?'No access requests.':accessTab==='approved'?'No approved users yet.':'No blocked users.';list.append(empty);return;}
+ for(const status of ['pending','approved','blocked']){
+ const people=accessUsers.filter(u=>u.status===status),list=accessEl('access-users-'+status);
+ accessEl('access-count-'+status).textContent=people.length;list.replaceChildren();
+ if(!people.length){const empty=document.createElement('p');empty.className='management-empty';empty.textContent=status==='pending'?'No access requests.':status==='approved'?'No approved users yet.':'No blocked users.';list.append(empty);continue;}
  for(const user of people){
   const row=document.createElement('div'),email=document.createElement('strong'),actions=document.createElement('div');
   row.className='access-user';email.textContent=user.email;actions.className='access-user-actions';
-  const choices=accessTab==='pending'?[['approve','Approve'],['deny','Deny']]:accessTab==='approved'?[['block','Block']]:[['unblock','Unblock']];
+  const choices=status==='pending'?[['approve','Approve'],['deny','Deny']]:status==='approved'?[['block','Block']]:[['unblock','Unblock']];
   for(const [action,label] of choices){const button=document.createElement('button');button.type='button';button.dataset.action=action;button.textContent=label;button.addEventListener('click',async()=>{
    button.disabled=true;accessError('admin-access-error','');
    try{const updated=await accessJson('/api/access/users',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:user.email,action})});user.status=updated.status;renderAccessUsers();}
    catch(error){accessError('admin-access-error',error.message);button.disabled=false;}
   });actions.append(button);}
   row.append(email,actions);list.append(row);
+ }
  }
 }
 async function loadAccessUsers(){
@@ -91,6 +91,7 @@ async function loadChangeRequests(){
 }
 function renderCoadmins(){
  const list=accessEl('coadmin-list');list.replaceChildren();
+ accessEl('coadmin-count').textContent=coadmins.length;
  if(!coadmins.length){const empty=document.createElement('p');empty.textContent='No Coadmins yet.';list.append(empty);return;}
  for(const user of coadmins){
   const row=document.createElement('div'),email=document.createElement('strong'),actions=document.createElement('div'),button=document.createElement('button');
@@ -112,7 +113,6 @@ accessEl('coadmin-form').addEventListener('submit',async event=>{
  try{const result=await accessJson('/api/coadmins',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:accessEl('coadmin-email').value.trim()})});coadmins.unshift(result);accessEl('coadmin-email').value='';renderCoadmins();loadAccessUsers();}
  catch(error){accessError('coadmin-error',error.message);}finally{submit.disabled=false;}
 });
-for(const button of document.querySelectorAll('[data-access-tab]'))button.addEventListener('click',()=>{accessTab=button.dataset.accessTab;renderAccessUsers();});
 accessEl('access-form').addEventListener('submit',async event=>{
  event.preventDefault();const submit=accessEl('access-form').querySelector('[type=submit]');submit.disabled=true;accessEl('access-login').disabled=true;accessError('access-error','');
  try{accessSession=await accessJson('/api/access/request',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:accessEl('access-email').value.trim()})});showAccessState();}
