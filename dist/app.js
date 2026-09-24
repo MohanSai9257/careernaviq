@@ -160,6 +160,7 @@ $('add-form').addEventListener('submit',async event=>{
  if(error){$('add-error').textContent=error;$('add-error').hidden=false;return;}
  const submit=$('add-form').querySelector('[type=submit]');submit.disabled=true;
  try{const response=await fetch('/api/companies',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,category:categoryValue,linkedin,careers})});const result=await response.json();if(!response.ok)throw Error(result.error||'Could not add the company. Try again.');
+  if(result.pending){$('add-dialog').close();notify(`Add request for ${name} sent for approval.`);return;}
   addedData.push(result);rebuildCompanies();updateCounts();$('search').value=result.name;setCategory(result.category);$('add-dialog').close();notify(`${result.name} added. Visible to everyone.`);
  }catch(error){$('add-error').textContent=error.message;$('add-error').hidden=false;}finally{submit.disabled=false;}
 });

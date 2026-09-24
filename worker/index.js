@@ -138,14 +138,21 @@ export default {async fetch(request,env){
    let input;try{input=await jsonInput(request);}catch{return json({error:'Invalid request.'},400);}
    const id=String(input?.id||''),action=input?.action;
    if(!id||!['approve','deny'].includes(action))return json({error:'Invalid review action.'},400);
-   const database=db(env),item=await database.prepare("SELECT company_id,after_payload,base_version FROM change_requests WHERE id = ? AND status = 'pending'").bind(id).first();
+   const database=db(env),item=await database.prepare("SELECT company_id,kind,after_payload,base_version FROM change_requests WHERE id = ? AND status = 'pending'").bind(id).first();
    if(!item)return json({error:'This request was already reviewed. Refresh the list.'},409);
    if(action==='approve'){
+    if(item.kind==='add'){
+     const proposed=JSON.parse(item.after_payload),normalized=normalizedName(proposed.name);
+     if(baseNames.has(normalized))return json({error:'This company is already in the directory. Deny the request.'},409);
+     const inserted=await database.prepare('INSERT INTO added_companies (id,normalized_name,name,linkedin,careers,category) VALUES (?,?,?,?,?,?) ON CONFLICT(normalized_name) DO NOTHING RETURNING id').bind(item.company_id,normalized,proposed.name,proposed.linkedin,proposed.careers,proposed.category).first();
+     if(!inserted)return json({error:'This company was added already. Deny the duplicate request.'},409);
+    }else{
     const old=await database.prepare('SELECT payload,version FROM company_edits WHERE id = ?').bind(item.company_id).first();
     if((old?.version||0)!==item.base_version||old&&JSON.parse(old.payload).deleted)return json({error:'The company changed since this request. Deny it and ask the user to submit a new edit.'},409);
     const payload={...(old?JSON.parse(old.payload):{}),...JSON.parse(item.after_payload)};
     const result=old?await database.prepare('UPDATE company_edits SET payload = ?,version = version + 1 WHERE id = ? AND version = ? RETURNING version').bind(JSON.stringify(payload),item.company_id,item.base_version).first():await database.prepare('INSERT INTO company_edits (id,payload,version) VALUES (?,?,1) ON CONFLICT(id) DO NOTHING RETURNING version').bind(item.company_id,JSON.stringify(payload)).first();
     if(!result)return json({error:'The company changed since this request. Refresh and try again.'},409);
+    }
    }
    const reviewed=await database.prepare('UPDATE change_requests SET status = ?, reviewed_at = ?, reviewed_by = ? WHERE id = ? AND status = ? RETURNING id,status').bind(action==='approve'?'approved':'denied',new Date().toISOString(),session.email,id,'pending').first();
    if(!reviewed)return json({error:'This request was already reviewed. Refresh the list.'},409);
@@ -174,6 +181,13 @@ export default {async fetch(request,env){
    const database=db(env),existing=await database.prepare('SELECT id FROM added_companies WHERE normalized_name = ?').bind(normalized).first();
    if(existing)return json({error:'This company is already in the directory.'},409);
    const id='added:'+crypto.randomUUID();
+   if(!canManage(session)){
+    const pending=await database.prepare("SELECT id FROM change_requests WHERE kind = 'add' AND status = 'pending' AND lower(company_name) = ? LIMIT 1").bind(normalized).first();
+    if(pending)return json({error:'An add request for this company is already awaiting approval.'},409);
+    const requestId=crypto.randomUUID(),proposed={name,linkedin:input.linkedin,careers:input.careers,category:input.category};
+    await database.prepare("INSERT INTO change_requests (id,actor_email,company_id,company_name,kind,before_payload,after_payload,base_version,status,created_at) VALUES (?,?,?,?,?,?,?,?,'pending',?)").bind(requestId,session.email,id,name,'add','{}',JSON.stringify(proposed),0,new Date().toISOString()).run();
+    return json({pending:true,requestId,name},202);
+   }
    const inserted=await database.prepare('INSERT INTO added_companies (id,normalized_name,name,linkedin,careers,category) VALUES (?,?,?,?,?,?) ON CONFLICT(normalized_name) DO NOTHING RETURNING id').bind(id,normalized,name,input.linkedin,input.careers,input.category).first();
    if(!inserted)return json({error:'Another visitor just added this company. Refresh the page.'},409);
    return json({id,name,linkedin:input.linkedin,careers:input.careers,category:input.category},201);

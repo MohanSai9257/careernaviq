@@ -69,10 +69,10 @@ function renderChangeRequests(){
  for(const item of changeRequests){
   const row=document.createElement('div'),title=document.createElement('div'),meta=document.createElement('div'),actions=document.createElement('div');
   row.className='change-request';title.className='change-request-title';meta.className='change-request-meta';actions.className='change-actions';
-  title.textContent=item.company_name;meta.textContent=`${item.actor_email} · ${item.kind==='move'?'Move':'Edit'}`;row.append(title,meta);
+  title.textContent=item.company_name;meta.textContent=`${item.actor_email} · ${item.kind==='move'?'Move':item.kind==='add'?'Add company':'Edit'}`;row.append(title,meta);
   for(const [field,to] of Object.entries(item.after)){
    const line=document.createElement('p');line.className='change-diff';const from=item.before[field]||'Empty';
-   line.textContent=item.kind==='move'?`Moving: ${from} → ${to}`:`${names[field]||field}: ${from} → ${to||'Empty'}`;row.append(line);
+   line.textContent=item.kind==='move'?`Moving: ${from} → ${to}`:item.kind==='add'?`${names[field]||field}: ${to||'Empty'}`:`${names[field]||field}: ${from} → ${to||'Empty'}`;row.append(line);
   }
   for(const [action,label] of [['approve','Approve'],['deny','Deny']]){
    const button=document.createElement('button');button.type='button';button.dataset.action=action;button.textContent=label;
