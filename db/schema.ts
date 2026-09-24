@@ -25,3 +25,21 @@ export const accessSessions=sqliteTable('access_sessions',{
  role:text('role').notNull(),
  createdAt:text('created_at').notNull(),
 });
+export const coadmins=sqliteTable('coadmins',{
+ email:text('email').primaryKey(),
+ grantedAt:text('granted_at').notNull(),
+});
+export const changeRequests=sqliteTable('change_requests',{
+ id:text('id').primaryKey(),
+ actorEmail:text('actor_email').notNull(),
+ companyId:text('company_id').notNull(),
+ companyName:text('company_name').notNull(),
+ kind:text('kind').notNull(),
+ beforePayload:text('before_payload').notNull(),
+ afterPayload:text('after_payload').notNull(),
+ baseVersion:integer('base_version').notNull(),
+ status:text('status').notNull().default('pending'),
+ createdAt:text('created_at').notNull(),
+ reviewedAt:text('reviewed_at'),
+ reviewedBy:text('reviewed_by'),
+});

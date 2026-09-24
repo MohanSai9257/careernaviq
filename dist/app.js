@@ -4,10 +4,10 @@ const $=id=>document.getElementById(id);
 const tabs=[...document.querySelectorAll('[role="tab"]')];
 let saved=new Set();
 try{const value=JSON.parse(localStorage.getItem(storageKey)||'[]');if(Array.isArray(value))saved=new Set(value.filter(x=>typeof x==='string'));}catch{}
-function isAdmin(){return window.directoryRole==='admin';}
+function isAdmin(){return ['admin','coadmin'].includes(window.directoryRole);}
 function updateRole(){
  const admin=isAdmin();
- $('role-label').textContent=admin?'Admin':'User';
+ $('role-label').textContent=window.directoryRole==='coadmin'?'Coadmin':admin?'Admin':'User';
  $('admin-open').textContent=admin?'Logout':'Admin';
  $('admin-open').classList.toggle('is-admin',admin);
  document.body.classList.toggle('admin-mode',admin);
@@ -99,7 +99,7 @@ function rebuildCompanies(){
 async function persistChange(id,change){
  if(!sharedReady)throw Error('Shared data is not ready. Refresh and try again.');
  if(saving)throw Error('Please wait for the current save to finish.');saving=true;
- try{const response=await fetch('/api/company',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({id,version:versions[id]||0,change})});const result=await response.json();if(!response.ok)throw Error(result.error||'Could not save. Try again.');const {id:companyId,version,...fields}=result;overrides[companyId]=fields;versions[companyId]=version;applyOverrides();updateCounts();applyFilter();}finally{saving=false;}
+ try{const response=await fetch('/api/company',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({id,version:versions[id]||0,change})});const result=await response.json();if(!response.ok)throw Error(result.error||'Could not save. Try again.');if(result.pending)return result;const {id:companyId,version,...fields}=result;overrides[companyId]=fields;versions[companyId]=version;applyOverrides();updateCounts();applyFilter();return result;}finally{saving=false;}
 }
 function notify(message){$('save-status').textContent=message;$('save-status').hidden=false;}
 function closeMenu(restore=false){$('company-menu').hidden=true;$('move-menu').hidden=true;$('menu-move').setAttribute('aria-expanded','false');if(menuTrigger){menuTrigger.setAttribute('aria-expanded','false');if(restore&&menuTrigger.isConnected)menuTrigger.focus();}}
@@ -107,7 +107,7 @@ function actionsCell(company){
  const td=document.createElement('td');td.className='actions-cell';const button=document.createElement('button');button.type='button';button.className='more-button';button.textContent='⋮';button.setAttribute('aria-label',`Actions for ${company[0]}`);button.setAttribute('aria-haspopup','menu');button.setAttribute('aria-expanded','false');
  button.addEventListener('click',()=>{if(menuTrigger===button&&!$('company-menu').hidden){closeMenu(true);return;}closeMenu();menuCompany=company;menuTrigger=button;button.setAttribute('aria-expanded','true');
   const submenu=$('move-menu');submenu.replaceChildren();for(const [key,label] of [['client','Client'],['implementation','Implementation'],['vendor','Vendor']]){if(key===company[3])continue;const option=document.createElement('button');option.type='button';option.role='menuitem';option.textContent=label;option.addEventListener('click',async()=>{option.disabled=true;
-   try{await persistChange(company[4],{category:key});notify(`${company[0]} moved to ${label}. Visible to everyone.`);$('tab-'+category).focus();}catch(error){notify(error.message);option.disabled=false;closeMenu(true);}
+   try{const result=await persistChange(company[4],{category:key});closeMenu();notify(result.pending?`Move request for ${company[0]} sent for approval.`:`${company[0]} moved to ${label}. Visible to everyone.`);$('tab-'+category).focus();}catch(error){notify(error.message);option.disabled=false;closeMenu(true);}
   });submenu.append(option);}
   $('menu-delete').hidden=!isAdmin();
   $('company-menu').hidden=false;positionMenu();$('menu-edit').focus({preventScroll:true});
@@ -139,7 +139,7 @@ $('edit-form').addEventListener('submit',async event=>{event.preventDefault();co
  let error='';if(!name)error='Enter a company name.';else if(!validLink(linkedin)||!validLink(careers))error='Links must be valid http:// or https:// addresses, without embedded credentials.';else if(companies.some(r=>r[4]!==editingId&&r[0].toLowerCase()===name.toLowerCase()))error='A company with this name already exists.';
  if(error){$('edit-error').textContent=error;$('edit-error').hidden=false;return;}
  const submit=$('edit-form').querySelector('[type=submit]');submit.disabled=true;
- try{await persistChange(editingId,{name,linkedin,careers});$('edit-dialog').close();notify(`${name} updated. Visible to everyone.`);$('tab-'+category).focus();}catch(error){$('edit-error').textContent=error.message;$('edit-error').hidden=false;}finally{submit.disabled=false;}
+ try{const result=await persistChange(editingId,{name,linkedin,careers});$('edit-dialog').close();notify(result.pending?`Edit request for ${name} sent for approval.`:`${name} updated. Visible to everyone.`);$('tab-'+category).focus();}catch(error){$('edit-error').textContent=error.message;$('edit-error').hidden=false;}finally{submit.disabled=false;}
 });
 document.addEventListener('click',event=>{if(!$('company-menu').contains(event.target)&&!event.target.closest('.more-button'))closeMenu();});
 $('company-menu').addEventListener('keydown',event=>{const items=[...$('company-menu').querySelectorAll('button')].filter(b=>!b.parentElement.hidden);const index=items.indexOf(document.activeElement);
@@ -165,3 +165,4 @@ $('add-form').addEventListener('submit',async event=>{
 });
 updateRole();
 window.updateDirectoryRole=()=>{updateRole();render();};
+window.refreshDirectory=()=>loadChanges().catch(error=>notify(error.message));

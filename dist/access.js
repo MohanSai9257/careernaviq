@@ -1,6 +1,8 @@
 const accessEl=id=>document.getElementById(id);
 let accessSession={role:'guest',status:'none'},accessUsers=[],accessTab='pending',appLoaded=false,checking=false;
+let changeRequests=[],coadmins=[];
 window.directoryRole='guest';
+const managesAccess=()=>['admin','coadmin'].includes(accessSession.role)&&accessSession.status==='approved';
 async function accessJson(url,options){
  const response=await fetch(url,{cache:'no-store',...options});
  const result=await response.json();
@@ -13,15 +15,17 @@ function showAccessState(){
  window.directoryRole=active?accessSession.role:'guest';
  accessEl('access-gate').hidden=active;
  accessEl('directory-app').hidden=!active;
- accessEl('admin-dashboard').hidden=!active||accessSession.role!=='admin';
- accessEl('role-label').textContent=accessSession.role==='admin'?'Admin':'User';
- accessEl('admin-open').textContent=accessSession.role==='admin'?'Logout':'Admin';
- accessEl('admin-open').classList.toggle('is-admin',accessSession.role==='admin');
+ accessEl('admin-dashboard').hidden=!managesAccess();
+ if(!managesAccess())accessEl('admin-dashboard').open=false;
+ accessEl('coadmin-section').hidden=accessSession.role!=='admin';
+ accessEl('role-label').textContent=accessSession.role==='admin'?'Admin':accessSession.role==='coadmin'?'Coadmin':'User';
+ accessEl('admin-open').textContent=managesAccess()?'Logout':'Admin';
+ accessEl('admin-open').classList.toggle('is-admin',managesAccess());
  accessEl('user-logout').hidden=!(active&&accessSession.role==='user');
  if(active){
   if(!appLoaded){appLoaded=true;const script=document.createElement('script');script.src='app.js';script.onerror=()=>accessError('admin-access-error','Could not load the directory. Refresh the page.');document.body.append(script);}
   else window.updateDirectoryRole?.();
-  if(accessSession.role==='admin')loadAccessUsers();
+  if(managesAccess())loadAdminData();
   return;
  }
  const pending=accessSession.status==='pending',blocked=accessSession.status==='blocked';
@@ -57,6 +61,57 @@ async function loadAccessUsers(){
  try{const data=await accessJson('/api/access/users');accessUsers=data.items;accessError('admin-access-error','');renderAccessUsers();}
  catch(error){accessError('admin-access-error',error.message);}
 }
+function renderChangeRequests(){
+ accessEl('change-count').textContent=changeRequests.length;
+ const list=accessEl('change-requests');list.replaceChildren();
+ if(!changeRequests.length){const empty=document.createElement('p');empty.textContent='No company changes awaiting review.';list.append(empty);return;}
+ const names={name:'Company name',linkedin:'LinkedIn',careers:'Careers portal',category:'Category'};
+ for(const item of changeRequests){
+  const row=document.createElement('div'),title=document.createElement('div'),meta=document.createElement('div'),actions=document.createElement('div');
+  row.className='change-request';title.className='change-request-title';meta.className='change-request-meta';actions.className='change-actions';
+  title.textContent=item.company_name;meta.textContent=`${item.actor_email} · ${item.kind==='move'?'Move':'Edit'}`;row.append(title,meta);
+  for(const [field,to] of Object.entries(item.after)){
+   const line=document.createElement('p');line.className='change-diff';const from=item.before[field]||'Empty';
+   line.textContent=item.kind==='move'?`Moving: ${from} → ${to}`:`${names[field]||field}: ${from} → ${to||'Empty'}`;row.append(line);
+  }
+  for(const [action,label] of [['approve','Approve'],['deny','Deny']]){
+   const button=document.createElement('button');button.type='button';button.dataset.action=action;button.textContent=label;
+   button.addEventListener('click',async()=>{
+    for(const control of actions.querySelectorAll('button'))control.disabled=true;accessError('change-error','');
+    try{await accessJson('/api/review/changes',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:item.id,action})});changeRequests=changeRequests.filter(r=>r.id!==item.id);renderChangeRequests();if(action==='approve')window.refreshDirectory?.();}
+    catch(error){accessError('change-error',error.message);for(const control of actions.querySelectorAll('button'))control.disabled=false;}
+   });actions.append(button);
+  }
+  row.append(actions);list.append(row);
+ }
+}
+async function loadChangeRequests(){
+ try{const data=await accessJson('/api/review/changes');changeRequests=data.items;accessError('change-error','');renderChangeRequests();}
+ catch(error){accessError('change-error',error.message);}
+}
+function renderCoadmins(){
+ const list=accessEl('coadmin-list');list.replaceChildren();
+ if(!coadmins.length){const empty=document.createElement('p');empty.textContent='No Coadmins yet.';list.append(empty);return;}
+ for(const user of coadmins){
+  const row=document.createElement('div'),email=document.createElement('strong'),actions=document.createElement('div'),button=document.createElement('button');
+  row.className='access-user';email.textContent=user.email;actions.className='access-user-actions';button.textContent='Remove Coadmin';button.type='button';
+  button.addEventListener('click',async()=>{button.disabled=true;accessError('coadmin-error','');
+   try{await accessJson('/api/coadmins',{method:'DELETE',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:user.email})});coadmins=coadmins.filter(u=>u.email!==user.email);renderCoadmins();}
+   catch(error){accessError('coadmin-error',error.message);button.disabled=false;}
+  });actions.append(button);row.append(email,actions);list.append(row);
+ }
+}
+async function loadCoadmins(){
+ if(accessSession.role!=='admin')return;
+ try{const data=await accessJson('/api/coadmins');coadmins=data.items;accessError('coadmin-error','');renderCoadmins();}
+ catch(error){accessError('coadmin-error',error.message);}
+}
+function loadAdminData(){loadAccessUsers();loadChangeRequests();loadCoadmins();}
+accessEl('coadmin-form').addEventListener('submit',async event=>{
+ event.preventDefault();const submit=accessEl('coadmin-form').querySelector('[type=submit]');submit.disabled=true;accessError('coadmin-error','');
+ try{const result=await accessJson('/api/coadmins',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:accessEl('coadmin-email').value.trim()})});coadmins.unshift(result);accessEl('coadmin-email').value='';renderCoadmins();loadAccessUsers();}
+ catch(error){accessError('coadmin-error',error.message);}finally{submit.disabled=false;}
+});
 for(const button of document.querySelectorAll('[data-access-tab]'))button.addEventListener('click',()=>{accessTab=button.dataset.accessTab;renderAccessUsers();});
 accessEl('access-form').addEventListener('submit',async event=>{
  event.preventDefault();const submit=accessEl('access-form').querySelector('[type=submit]');submit.disabled=true;accessEl('access-login').disabled=true;accessError('access-error','');
@@ -79,7 +134,7 @@ accessEl('user-logout').addEventListener('click',async()=>{
  catch(error){const status=accessEl('save-status');status.textContent=error.message;status.hidden=false;button.disabled=false;}
 });
 accessEl('admin-open').addEventListener('click',async()=>{
- if(accessSession.role==='admin'){
+ if(managesAccess()){
   try{await accessJson('/api/logout',{method:'POST'});location.reload();}catch(error){accessError('admin-access-error',error.message);}
   return;
  }
@@ -91,5 +146,5 @@ accessEl('admin-form').addEventListener('submit',async event=>{
  try{accessSession=await accessJson('/api/admin/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:accessEl('admin-email').value.trim()})});accessEl('admin-dialog').close();showAccessState();}
  catch(error){accessError('admin-error',error.message);}finally{submit.disabled=false;}
 });
-showAccessState();checkAccess();setInterval(()=>{checkAccess();if(accessSession.role==='admin')loadAccessUsers();},10000);
+showAccessState();checkAccess();setInterval(()=>{checkAccess();if(managesAccess())loadAdminData();},10000);
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)checkAccess();});

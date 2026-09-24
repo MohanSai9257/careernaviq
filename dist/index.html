@@ -30,8 +30,10 @@
     </div>
   </div>
   <main id="directory-app" class="wrap" hidden>
-    <section id="admin-dashboard" class="admin-dashboard" hidden>
-      <h2>Access management</h2>
+    <details id="admin-dashboard" class="admin-dashboard" hidden>
+      <summary>Access management</summary>
+      <div class="admin-dashboard-content">
+      <h2>User access</h2>
       <div class="access-tabs" aria-label="User access">
         <button type="button" data-access-tab="pending" class="active">Requests <span id="access-count-pending">0</span></button>
         <button type="button" data-access-tab="approved">Existing Users <span id="access-count-approved">0</span></button>
@@ -39,7 +41,19 @@
       </div>
       <p id="admin-access-error" role="alert" hidden></p>
       <div id="access-users" class="access-users"></div>
-    </section>
+      <div class="admin-subsection">
+        <h2>Company change requests <span id="change-count" class="badge">0</span></h2>
+        <p id="change-error" role="alert" hidden></p>
+        <div id="change-requests" class="change-requests"></div>
+      </div>
+      <div id="coadmin-section" class="admin-subsection" hidden>
+        <h2>Coadmin access</h2>
+        <form id="coadmin-form" class="coadmin-form"><label for="coadmin-email">Gmail</label><input id="coadmin-email" type="email" autocomplete="off" required><button type="submit" class="primary">Grant Coadmin access</button></form>
+        <p id="coadmin-error" role="alert" hidden></p>
+        <div id="coadmin-list" class="access-users"></div>
+      </div>
+      </div>
+    </details>
     <div class="intro"><div><p class="eyebrow">U.S. TECHNOLOGY EMPLOYERS</p><h1>Find your next company.</h1><p class="description">Company profiles and careers pages, in one place.</p></div><div class="total"><strong id="total">23,957</strong><span>companies</span></div></div>
     <nav class="category-tabs" role="tablist" aria-label="Company categories">
       <button type="button" role="tab" id="tab-client" data-category="client" aria-selected="true" aria-controls="directory-panel"><span aria-hidden="true">▦</span> Client <span class="badge" id="count-client">0</span></button>
@@ -73,7 +87,7 @@
   <dialog id="edit-dialog" aria-labelledby="edit-title">
     <form id="edit-form">
       <h2 id="edit-title">Edit company</h2>
-      <p class="edit-scope">Changes are visible to everyone.</p>
+      <p class="edit-scope">User edits need Admin approval before they appear for everyone.</p>
       <label for="edit-name">Company name</label><input id="edit-name" name="company" required maxlength="250">
       <label for="edit-linkedin">LinkedIn link</label><input id="edit-linkedin" name="linkedin" type="url" placeholder="https://www.linkedin.com/company/…">
       <label for="edit-careers">Careers portal link</label><input id="edit-careers" name="careers" type="url" placeholder="https://company.com/careers">
