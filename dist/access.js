@@ -17,6 +17,7 @@ function showAccessState(){
  accessEl('role-label').textContent=accessSession.role==='admin'?'Admin':'User';
  accessEl('admin-open').textContent=accessSession.role==='admin'?'Logout':'Admin';
  accessEl('admin-open').classList.toggle('is-admin',accessSession.role==='admin');
+ accessEl('user-logout').hidden=!(active&&accessSession.role==='user');
  if(active){
   if(!appLoaded){appLoaded=true;const script=document.createElement('script');script.src='app.js';script.onerror=()=>accessError('admin-access-error','Could not load the directory. Refresh the page.');document.body.append(script);}
   else window.updateDirectoryRole?.();
@@ -71,6 +72,11 @@ accessEl('access-login').addEventListener('click',async()=>{
 accessEl('access-change').addEventListener('click',async()=>{
  try{await accessJson('/api/logout',{method:'POST'});accessSession={role:'guest',status:'none'};accessEl('access-email').value='';showAccessState();accessEl('access-email').focus();}
  catch(error){accessError('access-error',error.message);}
+});
+accessEl('user-logout').addEventListener('click',async()=>{
+ const button=accessEl('user-logout');button.disabled=true;
+ try{await accessJson('/api/logout',{method:'POST'});location.reload();}
+ catch(error){const status=accessEl('save-status');status.textContent=error.message;status.hidden=false;button.disabled=false;}
 });
 accessEl('admin-open').addEventListener('click',async()=>{
  if(accessSession.role==='admin'){
