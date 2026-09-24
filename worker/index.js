@@ -7,6 +7,8 @@ function bucket(env){if(!env.BUCKET)throw Error('Document storage unavailable');
 function link(value){if(typeof value!=='string'||value.length>2048)return false;if(!value)return true;try{const u=new URL(value);return ['http:','https:'].includes(u.protocol)&&!u.username&&!u.password;}catch{return false;}}
 function normalizedName(value){return value.trim().replace(/\s+/g,' ').toLocaleLowerCase();}
 const sectionNames=new Set(['recruiter-directory','latest-posted-jobs','study-materials','interview-prep','interview-support']);
+const tabNames=new Map([['employer-directory','Employer Directory'],['recruiter-directory','Recruiter Directory'],['latest-posted-jobs','Latest Posted Jobs'],['study-materials','Study Materials'],['interview-prep','Interview Prep'],['interview-support','Interview Support']]);
+const restrictedMessage='Access restricted temporarily by the Admin.';
 const sectionCategories=new Set(['java','data','devops','validation']);
 const adminEmail='chatgpt3577@gmail.com';
 const cookieName='directory_session';
@@ -25,6 +27,7 @@ async function sessionFor(request,env){
  return {...session,role:coadmin?'coadmin':'user',status};
 }
 function canManage(session){return session?.status==='approved'&&['admin','coadmin'].includes(session.role);}
+async function tabAllowed(env,tab){const row=await db(env).prepare('SELECT allowed FROM tab_access WHERE tab = ?').bind(tab).first();return row?.allowed!==0;}
 async function currentCompany(database,id,old){
  const base=known.get(id);
  const row=base?{name:base[0],linkedin:base[1],careers:base[2],category:base[3]}:await database.prepare('SELECT name,linkedin,careers,category FROM added_companies WHERE id = ?').bind(id).first();
@@ -87,6 +90,21 @@ export default {async fetch(request,env){
    return Response.json({ok:true},{headers:{'Set-Cookie':clearSessionCookie(),'Cache-Control':'no-store'}});
   }
   const session=await sessionFor(request,env);
+  if(url.pathname==='/api/tab-access'&&request.method==='GET'){
+   if(!canManage(session))return json({error:'Admin access required.'},403);
+   const {results}=await db(env).prepare('SELECT tab,allowed,updated_at,updated_by FROM tab_access').all();
+   const settings=new Map(results.map(row=>[row.tab,row]));
+   return json({items:[...tabNames].map(([tab,name])=>({tab,name,allowed:settings.get(tab)?.allowed!==0,updatedAt:settings.get(tab)?.updated_at||'',updatedBy:settings.get(tab)?.updated_by||''}))});
+  }
+  if(url.pathname==='/api/tab-access'&&request.method==='PUT'){
+   if(!canManage(session))return json({error:'Admin access required.'},403);
+   if(!sameOrigin(request,url))return json({error:'Use Data access to change tab access.'},403);
+   let input;try{input=await jsonInput(request);}catch{return json({error:'Invalid tab access change.'},400);}
+   if(!tabNames.has(input?.tab)||typeof input?.allowed!=='boolean')return json({error:'Choose a valid tab and access setting.'},400);
+   const allowed=input.allowed?1:0,now=new Date().toISOString();
+   await db(env).prepare('INSERT INTO tab_access (tab,allowed,updated_at,updated_by) VALUES (?,?,?,?) ON CONFLICT(tab) DO UPDATE SET allowed = excluded.allowed,updated_at = excluded.updated_at,updated_by = excluded.updated_by').bind(input.tab,allowed,now,session.email).run();
+   return json({tab:input.tab,name:tabNames.get(input.tab),allowed:input.allowed,updatedAt:now,updatedBy:session.email});
+  }
   if(url.pathname==='/api/access/users'&&request.method==='GET'){
    if(!canManage(session))return json({error:'Admin access required.'},403);
    const {results}=await db(env).prepare('SELECT email,status,requested_at,updated_at FROM access_users ORDER BY requested_at DESC').all();
@@ -224,6 +242,7 @@ export default {async fetch(request,env){
    return json(reviewed);
   }
   if((url.pathname==='/companies.json'||url.pathname.startsWith('/api/'))&&session?.status!=='approved')return json({error:'Access approval required.'},403);
+  if(['/companies.json','/api/changes','/api/companies','/api/company'].includes(url.pathname)&&!canManage(session)&&!await tabAllowed(env,'employer-directory'))return json({error:restrictedMessage},403);
   if(url.pathname==='/api/profile'&&request.method==='GET'){
    const profile=await db(env).prepare('SELECT first_name,last_name,mobile,visa_status FROM user_profiles WHERE email = ?').bind(session.email).first();
    return json({email:session.email,profile:profile||null});
@@ -239,6 +258,7 @@ export default {async fetch(request,env){
   if(url.pathname==='/api/section-items'&&request.method==='GET'){
    const section=url.searchParams.get('section'),category=url.searchParams.get('category');
    if(!sectionNames.has(section)||!sectionCategories.has(category))return json({error:'Invalid section or category.'},400);
+   if(!canManage(session)&&!await tabAllowed(env,section))return json({error:restrictedMessage},403);
    const search=(url.searchParams.get('search')||'').trim().slice(0,100).replace(/[\\%_]/g,'\\$&');
    const windowName=url.searchParams.get('window')||'all';
    if(!['all','day','week','month'].includes(windowName))return json({error:'Invalid date filter.'},400);
@@ -249,8 +269,9 @@ export default {async fetch(request,env){
   }
   if(url.pathname.startsWith('/api/section-file/')&&request.method==='GET'){
    const id=url.pathname.slice('/api/section-file/'.length);
-   const item=await db(env).prepare('SELECT file_key,file_name,file_type,status,actor_email FROM section_items WHERE id = ?').bind(id).first();
+   const item=await db(env).prepare('SELECT section,file_key,file_name,file_type,status,actor_email FROM section_items WHERE id = ?').bind(id).first();
    if(!item?.file_key)return json({error:'Document not found.'},404);
+   if(!canManage(session)&&!await tabAllowed(env,item.section))return json({error:restrictedMessage},403);
    if(item.status!=='approved'&&!canManage(session)&&item.actor_email!==session.email)return json({error:'Document is awaiting approval.'},403);
    const file=await bucket(env).get(item.file_key);if(!file)return json({error:'Document unavailable.'},404);
    return new Response(file.body,{headers:{'Content-Type':item.file_type,'Content-Disposition':`attachment; filename*=UTF-8''${encodeURIComponent(item.file_name)}`,'Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'}});
@@ -273,6 +294,7 @@ export default {async fetch(request,env){
    if(!id||!Number.isSafeInteger(version)||version<1||!['edit','move','delete'].includes(kind))return json({error:'Invalid change request.'},400);
    const database=db(env),current=await database.prepare("SELECT id,version,section,category,title,organization,url,details,email,phone,extension,posted_at,file_key,file_name,file_type FROM section_items WHERE id = ? AND status = 'approved'").bind(id).first();
    if(!current)return json({error:'Entry not found.'},404);
+   if(!canManage(session)&&!await tabAllowed(env,current.section))return json({error:restrictedMessage},403);
    if(current.version!==version)return json({error:'This entry changed. Refresh and try again.'},409);
    if(!canManage(session)&&await database.prepare("SELECT id FROM section_change_requests WHERE item_id = ? AND status = 'pending' LIMIT 1").bind(id).first())return json({error:'A change for this entry is already awaiting approval.'},409);
    const before={section:current.section,category:current.category,title:current.title,organization:current.organization,url:current.url,details:current.details,email:current.email,phone:current.phone,extension:current.extension,posted_at:current.posted_at,file_name:current.file_name};
@@ -332,6 +354,7 @@ export default {async fetch(request,env){
    const title=String(input?.title||'').trim(),organization=String(input?.organization||'').trim(),itemUrl=String(input?.url||'').trim(),details=String(input?.details||'').trim();
    const email=String(input?.email||'').trim(),phone=String(input?.phone||'').trim(),extension=String(input?.extension||'').trim();
    if(!sectionNames.has(section)||!sectionCategories.has(category)||title.length>200||organization.length>200||details.length>2000||email.length>254||email&&!emailPattern.test(email)||phone.length>40||extension.length>20||!link(itemUrl))return json({error:'Check the required fields and link.'},400);
+   if(!canManage(session)&&!await tabAllowed(env,section))return json({error:restrictedMessage},403);
    if(![title,organization,itemUrl,details,email,phone,extension,input?.postedAt].some(Boolean)&&!file)return json({error:'Add at least one detail or a file to create an entry.'},400);
    const documentSection=section==='study-materials'||section==='interview-prep';
    if(file&&!documentSection)return json({error:'Uploads are available only for materials and interview prep.'},400);
@@ -439,7 +462,9 @@ export default {async fetch(request,env){
   if((url.pathname==='/admin'||url.pathname==='/admin/')&&!canManage(await sessionFor(request,env)))return Response.redirect(url.origin+'/',302);
   const sections=['recruiter-directory','latest-posted-jobs','study-materials','interview-prep','interview-support'];
   const section=sections.find(name=>url.pathname===`/${name}`||url.pathname===`/${name}/`);
-  const path=url.pathname==='/'||url.pathname==='/admin'||url.pathname==='/admin/'?'/index.html':section?'/recruiter-directory.html':url.pathname==='/profile'||url.pathname==='/profile/'?'/profile.html':url.pathname;
+  const requestedTab=url.pathname==='/'||url.pathname==='/index.html'?'employer-directory':section;
+  const restricted=requestedTab&&session?.status==='approved'&&!canManage(session)&&!await tabAllowed(env,requestedTab);
+  const path=restricted?'/restricted.html':url.pathname==='/'||url.pathname==='/admin'||url.pathname==='/admin/'?'/index.html':section?'/recruiter-directory.html':url.pathname==='/profile'||url.pathname==='/profile/'?'/profile.html':url.pathname;
   if(!Object.hasOwn(ASSETS,path))return new Response('Not found',{status:404});
   const type=path.endsWith('.html')?'text/html':path.endsWith('.css')?'text/css':path.endsWith('.js')?'text/javascript':path.endsWith('.svg')?'image/svg+xml':'application/json';
   return new Response(request.method==='HEAD'?null:ASSETS[path],{headers:{'Content-Type':type+'; charset=utf-8','Cache-Control':'no-cache','X-Content-Type-Options':'nosniff'}});

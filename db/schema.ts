@@ -92,3 +92,9 @@ export const userProfiles=sqliteTable('user_profiles',{
  visaStatus:text('visa_status').notNull(),
  updatedAt:text('updated_at').notNull(),
 });
+export const tabAccess=sqliteTable('tab_access',{
+ tab:text('tab').primaryKey(),
+ allowed:integer('allowed').notNull().default(1),
+ updatedAt:text('updated_at').notNull(),
+ updatedBy:text('updated_by').notNull(),
+});

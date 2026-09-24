@@ -3,6 +3,7 @@ let accessSession={role:'guest',status:'none'},accessUsers=[],appLoaded=false,ch
 let changeRequests=[],coadmins=[];
 let sectionSubmissions=[];
 let sectionChanges=[];
+let tabAccessItems=[];
 let deletingUserEmail='';
 window.directoryRole='guest';
 const managesAccess=()=>['admin','coadmin'].includes(accessSession.role)&&accessSession.status==='approved';
@@ -25,7 +26,8 @@ function showAccessState(){
  accessEl('directory-app').hidden=!active;
  accessEl('employer-content').hidden=adminPage;
  accessEl('admin-dashboard').hidden=!adminPage||!managesAccess();
- accessEl('admin-dashboard').open=adminPage&&managesAccess();
+ accessEl('data-dashboard').hidden=!adminPage||!managesAccess();
+ if(!adminPage||!managesAccess()){accessEl('admin-dashboard').open=false;accessEl('data-dashboard').open=false;}
  accessEl('coadmin-section').hidden=accessSession.role!=='admin';
  accessEl('role-label').textContent=accessSession.role==='admin'?'Admin':accessSession.role==='coadmin'?'Coadmin':'User';
  accessEl('admin-open').textContent=managesAccess()?'Logout':'Admin';
@@ -166,7 +168,28 @@ function renderSectionChanges(){
  }
 }
 async function loadSectionChanges(){try{const data=await accessJson('/api/review/section-changes');sectionChanges=data.items;accessError('section-change-error','');renderSectionChanges();}catch(error){accessError('section-change-error',error.message);}}
-function loadAdminData(){loadAccessUsers();loadChangeRequests();loadSectionSubmissions();loadSectionChanges();loadCoadmins();}
+function renderTabAccess(){
+ const list=accessEl('tab-access-list');list.replaceChildren();
+ accessEl('tab-access-count').textContent=`${tabAccessItems.filter(item=>item.allowed).length} open`;
+ for(const item of tabAccessItems){
+  const row=document.createElement('div');row.className='tab-access-row';
+  const info=document.createElement('div'),name=document.createElement('strong'),state=document.createElement('span');
+  name.textContent=item.name;state.className=`tab-access-state ${item.allowed?'is-open':'is-restricted'}`;state.textContent=item.allowed?'Open':'Restricted';info.append(name,state);
+  const button=document.createElement('button');button.type='button';button.className=item.allowed?'tab-restrict':'primary';button.textContent=item.allowed?'Restrict access':'Allow access';
+  button.setAttribute('aria-label',`${item.allowed?'Restrict':'Allow'} ${item.name}`);
+  button.addEventListener('click',async()=>{
+   button.disabled=true;accessError('tab-access-error','');
+   try{const updated=await accessJson('/api/tab-access',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({tab:item.tab,allowed:!item.allowed})});Object.assign(item,updated);renderTabAccess();window.showAppNotice?.(`${item.name} is now ${item.allowed?'open':'restricted'} for users.`);}
+   catch(error){accessError('tab-access-error',error.message);button.disabled=false;}
+  });
+  row.append(info,button);list.append(row);
+ }
+}
+async function loadTabAccess(){
+ try{const data=await accessJson('/api/tab-access');tabAccessItems=data.items;accessError('tab-access-error','');renderTabAccess();}
+ catch(error){accessError('tab-access-error',error.message);}
+}
+function loadAdminData(){loadAccessUsers();loadChangeRequests();loadSectionSubmissions();loadSectionChanges();loadCoadmins();loadTabAccess();}
 accessEl('coadmin-form').addEventListener('submit',async event=>{
  event.preventDefault();const submit=accessEl('coadmin-form').querySelector('[type=submit]');submit.disabled=true;accessError('coadmin-error','');
  try{const result=await accessJson('/api/coadmins',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:accessEl('coadmin-email').value.trim()})});coadmins.unshift(result);accessEl('coadmin-email').value='';renderCoadmins();loadAccessUsers();}
