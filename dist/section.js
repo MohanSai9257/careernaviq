@@ -24,11 +24,44 @@ byId('section-details-wrap').hidden=!isContact;byId('section-details').required=
 byId('section-file-wrap').hidden=!isDocument;
 byId('section-search').placeholder=`Search ${config.title.toLowerCase()}`;
 byId('date-filter-wrap').hidden=sectionKey!=='latest-posted-jobs';
+byId('job-company-filter-wrap').hidden=sectionKey!=='latest-posted-jobs';
+byId('job-page-filter-wrap').hidden=sectionKey!=='latest-posted-jobs';
 byId('section-posted-wrap').hidden=sectionKey!=='latest-posted-jobs';
 byId('section-posted').required=false;
 function status(message){byId('section-status').textContent=message;}
 function sectionNotice(message){status(message);window.showAppNotice?.(message);}
 async function api(url,options){const response=await fetch(url,{cache:'no-store',...options});const result=await response.json();if(!response.ok)throw Error(result.error||'Please try again.');return result;}
+const jobPageSize=100,jobSavedKey='employer-directory-my-list-v1';
+let jobCompanies=null;
+function savedCompanyIds(){try{const value=JSON.parse(localStorage.getItem(jobSavedKey)||'[]');return new Set(Array.isArray(value)?value:[]);}catch{return new Set();}}
+function jobGroupCompanies(){
+ const group=byId('job-company-filter').value,saved=savedCompanyIds();
+ return (jobCompanies||[]).filter(company=>group==='mylist'?saved.has(company.id):company.category===group);
+}
+function updateJobPages(){
+ const select=byId('job-page-filter'),previous=select.value,companies=jobGroupCompanies();
+ select.replaceChildren();
+ for(let page=0;page<Math.max(1,Math.ceil(companies.length/jobPageSize));page++){
+  const option=document.createElement('option');option.value=String(page);
+  const start=page*jobPageSize+1,end=Math.min((page+1)*jobPageSize,companies.length);
+  option.textContent=`Page ${page+1}${companies.length?` (${start}–${end})`:''}`;select.append(option);
+ }
+ select.value=[...select.options].some(option=>option.value===previous)?previous:'0';
+ select.disabled=!companies.length;
+}
+async function loadJobCompanies(){
+ const response=await fetch('/companies.json',{cache:'no-store'});if(!response.ok)throw Error('Could not load Employer Directory companies.');
+ const base=await response.json(),added=[];let cursor=0;
+ do{const data=await api('/api/companies'+(cursor?'?after='+cursor:''));added.push(...data.items);cursor=data.next;}while(cursor);
+ const overrides=new Map();let after='';
+ do{const data=await api('/api/changes'+(after?'?after='+encodeURIComponent(after):''));for(const item of data.items)overrides.set(item.id,item);after=data.next;}while(after);
+ jobCompanies=[...base.map(row=>({id:row[0],name:row[0],category:row[3]})),...added.map(item=>({id:item.id,name:item.name,category:item.category}))]
+  .filter(company=>!overrides.get(company.id)?.deleted)
+  .map(company=>{const edit=overrides.get(company.id);return {...company,name:edit?.name||company.name,category:edit?.category||company.category};});
+ updateJobPages();
+}
+function selectedJobCompanies(){const page=Number(byId('job-page-filter').value)||0;return jobGroupCompanies().slice(page*jobPageSize,(page+1)*jobPageSize);}
+function jobCompanyKey(name){return String(name||'').normalize('NFKC').toLocaleLowerCase().replace(/[^\p{L}\p{N}]+/gu,' ').trim();}
 let sectionMenuTrigger=null;
 function actionButton(item){const button=document.createElement('button');button.type='button';button.className='more-button section-more';button.textContent='⋮';button.setAttribute('aria-label',`Actions for ${item.title||'entry'}`);button.setAttribute('aria-haspopup','menu');button.setAttribute('aria-expanded','false');button.addEventListener('click',()=>{if(sectionMenuTrigger===button&&!byId('section-actions-menu').hidden){closeActions(true);return;}openActions(item,button);});return button;}
 function closeActions(restore=false){byId('section-actions-menu').hidden=true;byId('section-move-targets').hidden=true;byId('section-action-move').setAttribute('aria-expanded','false');sectionMenuTrigger?.setAttribute('aria-expanded','false');if(restore&&sectionMenuTrigger?.isConnected)sectionMenuTrigger.focus();}
@@ -100,13 +133,25 @@ function render(items){
 async function loadItems(){
  const current=++requestNumber,params=new URLSearchParams({section:sectionKey,category,search:byId('section-search').value.trim(),window:byId('date-filter').value});
  status('Loading…');
- try{const data=await api(`/api/section-items?${params}`);if(current!==requestNumber)return;render(data.items);status(`${data.items.length} ${data.items.length===1?'entry':'entries'}`);}
+ try{
+  if(sectionKey==='latest-posted-jobs'&&!jobCompanies)await loadJobCompanies();
+  if(current!==requestNumber)return;
+  const data=await api(`/api/section-items?${params}`);if(current!==requestNumber)return;
+  const companies=sectionKey==='latest-posted-jobs'?selectedJobCompanies():null;
+  const names=companies?new Set(companies.map(company=>jobCompanyKey(company.name))):null;
+  const items=names?data.items.filter(item=>names.has(jobCompanyKey(item.organization))):data.items;
+  render(items);
+  status(`${items.length} ${items.length===1?'entry':'entries'}${companies?` from ${companies.length} companies on this Employer Directory page`:''}`);
+ }
  catch(error){if(current===requestNumber)status(error.message);}
 }
 function selectTab(tab){category=tab.id.slice(4);for(const item of tabs){const selected=item===tab;item.setAttribute('aria-selected',String(selected));item.tabIndex=selected?0:-1;}byId('section-panel').setAttribute('aria-labelledby',tab.id);byId('section-search').value='';byId('date-filter').value='all';loadItems();}
 for(const tab of tabs){tab.addEventListener('click',()=>selectTab(tab));tab.addEventListener('keydown',event=>{if(event.key!=='ArrowRight'&&event.key!=='ArrowLeft')return;event.preventDefault();const next=tabs[(tabs.indexOf(tab)+(event.key==='ArrowRight'?1:-1)+tabs.length)%tabs.length];selectTab(next);next.focus();});}
 byId('section-search').addEventListener('input',()=>{clearTimeout(searchTimer);searchTimer=setTimeout(loadItems,250);});
 byId('date-filter').addEventListener('change',loadItems);
+byId('job-company-filter').addEventListener('change',()=>{byId('job-page-filter').value='0';updateJobPages();loadItems();});
+byId('job-page-filter').addEventListener('change',loadItems);
+window.addEventListener('storage',event=>{if(sectionKey==='latest-posted-jobs'&&(event.key===jobSavedKey||event.key===null)){updateJobPages();loadItems();}});
 function openForm(item=null){
  editingItem=item;byId('section-form').reset();byId('section-form-error').hidden=true;
  byId('section-dialog-title').textContent=item?`Edit ${item.title||'entry'}`:config.action;

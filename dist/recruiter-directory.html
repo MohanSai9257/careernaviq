@@ -24,6 +24,8 @@
     <section id="section-panel" class="section-panel" role="tabpanel" aria-labelledby="tab-java">
       <div class="toolbar section-toolbar">
         <label class="search"><span class="sr-only">Search this category</span><input id="section-search" type="search" placeholder="Search" autocomplete="off"></label>
+        <label id="job-company-filter-wrap" class="date-filter job-scope-filter" hidden><span class="sr-only">Employer Directory group</span><select id="job-company-filter" aria-label="Employer Directory group"><option value="implementation">Implementation</option><option value="vendor">Vendor</option><option value="client">Client</option><option value="mylist">My List</option></select></label>
+        <label id="job-page-filter-wrap" class="date-filter job-scope-filter" hidden><span class="sr-only">Employer Directory page</span><select id="job-page-filter" aria-label="Employer Directory page"><option value="0">Page 1</option></select></label>
         <label id="date-filter-wrap" class="date-filter" hidden><span class="sr-only">Posted within</span><select id="date-filter"><option value="all">Any time</option><option value="day">Past 24 hours</option><option value="week">Past week</option><option value="month">Past month</option></select></label>
         <button id="section-add" type="button" class="primary">Add recruiter</button>
       </div>
