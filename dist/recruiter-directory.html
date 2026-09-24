@@ -11,12 +11,13 @@
   </header>
   <main id="recruiter-page" class="wrap" hidden>
     <h1 class="recruiter-heading" id="section-title">Recruiter Directory</h1>
-    <div class="section-columns" aria-label="Job categories">
-      <section class="section-column"><h2>Java</h2></section>
-      <section class="section-column"><h2>Data</h2></section>
-      <section class="section-column"><h2>DevOps</h2></section>
-      <section class="section-column"><h2>Validation</h2></section>
-    </div>
+    <nav class="category-tabs section-tabs" role="tablist" aria-label="Job categories">
+      <button type="button" role="tab" id="tab-java" aria-selected="true" aria-controls="section-panel">Java</button>
+      <button type="button" role="tab" id="tab-data" aria-selected="false" aria-controls="section-panel" tabindex="-1">Data</button>
+      <button type="button" role="tab" id="tab-devops" aria-selected="false" aria-controls="section-panel" tabindex="-1">DevOps</button>
+      <button type="button" role="tab" id="tab-validation" aria-selected="false" aria-controls="section-panel" tabindex="-1">Validation</button>
+    </nav>
+    <section id="section-panel" class="section-panel" role="tabpanel" aria-labelledby="tab-java"></section>
   </main>
   <script src="/sidebar.js" defer></script>
   <script>
@@ -25,6 +26,9 @@
       else location.replace('/');
     }).catch(()=>location.replace('/'));
     document.getElementById('section-logout').addEventListener('click',()=>fetch('/api/logout',{method:'POST'}).then(()=>location.replace('/')));
+    const tabs=[...document.querySelectorAll('.section-tabs [role="tab"]')];
+    function selectTab(tab){for(const item of tabs){const selected=item===tab;item.setAttribute('aria-selected',String(selected));item.tabIndex=selected?0:-1;}document.getElementById('section-panel').setAttribute('aria-labelledby',tab.id);}
+    for(const tab of tabs){tab.addEventListener('click',()=>selectTab(tab));tab.addEventListener('keydown',event=>{if(event.key!=='ArrowRight'&&event.key!=='ArrowLeft')return;event.preventDefault();const offset=event.key==='ArrowRight'?1:-1;const next=tabs[(tabs.indexOf(tab)+offset+tabs.length)%tabs.length];selectTab(next);next.focus();});}
   </script>
 </body>
 </html>
