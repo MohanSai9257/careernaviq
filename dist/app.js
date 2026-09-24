@@ -7,6 +7,14 @@ try{const value=JSON.parse(localStorage.getItem(storageKey)||'[]');if(Array.isAr
 let currentEmail='';
 try{currentEmail=localStorage.getItem(adminStorageKey)||'';}catch{}
 function isAdmin(){return currentEmail.trim().toLowerCase()===adminEmail;}
+function syncAdminRole(){
+ let email=currentEmail;try{email=localStorage.getItem(adminStorageKey)||'';}catch{}
+ if(email===currentEmail)return;
+ currentEmail=email;updateRole();render();
+}
+window.addEventListener('storage',event=>{if(event.key===adminStorageKey||event.key===null)syncAdminRole();});
+window.addEventListener('focus',syncAdminRole);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)syncAdminRole();});
 function authHeaders(){return isAdmin()?{'X-Admin-Email':currentEmail.trim().toLowerCase()}:{ };}
 function updateRole(){
  const admin=isAdmin();
