@@ -12,6 +12,7 @@ async function accessJson(url,options){
 function accessError(id,message){const el=accessEl(id);el.textContent=message;el.hidden=!message;}
 function showAccessState(){
  const active=accessSession.status==='approved';
+ document.body.classList.toggle('has-access',active);
  window.directoryRole=active?accessSession.role:'guest';
  accessEl('access-gate').hidden=active;
  accessEl('directory-app').hidden=!active;

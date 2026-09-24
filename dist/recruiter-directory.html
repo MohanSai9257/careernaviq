@@ -7,17 +7,18 @@
 </head>
 <body>
   <header class="masthead">
-    <div class="wrap brand"><span class="mark" aria-hidden="true">E</span><span>EMPLOYER DIRECTORY</span></div>
+    <div class="wrap brand"><span class="mark" aria-hidden="true">E</span><span>EMPLOYER DIRECTORY</span><div class="role-control"><span id="section-role" class="public-label">User</span><button id="section-logout" type="button">Logout</button></div></div>
   </header>
   <main id="recruiter-page" class="wrap" hidden>
-    <nav class="page-nav" aria-label="Directories"><a href="/">Employer Directory</a><a href="/recruiter-directory" aria-current="page">Recruiter Directory</a></nav>
-    <h1 class="recruiter-heading">Recruiter Directory</h1>
+    <h1 class="recruiter-heading" id="section-title">Recruiter Directory</h1>
   </main>
+  <script src="/sidebar.js" defer></script>
   <script>
     fetch('/api/session',{cache:'no-store'}).then(response=>response.json()).then(session=>{
-      if(session.status==='approved') document.getElementById('recruiter-page').hidden=false;
+      if(session.status==='approved') { document.body.classList.add('has-access'); document.getElementById('recruiter-page').hidden=false; document.getElementById('section-role').textContent=session.role==='admin'?'Admin':session.role==='coadmin'?'Coadmin':'User'; }
       else location.replace('/');
     }).catch(()=>location.replace('/'));
+    document.getElementById('section-logout').addEventListener('click',()=>fetch('/api/logout',{method:'POST'}).then(()=>location.replace('/')));
   </script>
 </body>
 </html>
