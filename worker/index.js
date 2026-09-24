@@ -236,7 +236,7 @@ export default {async fetch(request,env){
   }
   if(url.pathname.startsWith('/api/'))return json({error:'Not found.'},404);
   if(!['GET','HEAD'].includes(request.method))return new Response('Method not allowed',{status:405});
-  const path=url.pathname==='/'?'/index.html':url.pathname;
+  const path=url.pathname==='/'?'/index.html':url.pathname==='/recruiter-directory'||url.pathname==='/recruiter-directory/'?'/recruiter-directory.html':url.pathname;
   if(!Object.hasOwn(ASSETS,path))return new Response('Not found',{status:404});
   const type=path.endsWith('.html')?'text/html':path.endsWith('.css')?'text/css':path.endsWith('.js')?'text/javascript':'application/json';
   return new Response(request.method==='HEAD'?null:ASSETS[path],{headers:{'Content-Type':type+'; charset=utf-8','Cache-Control':'no-cache','X-Content-Type-Options':'nosniff'}});

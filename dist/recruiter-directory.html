@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Recruiter Directory</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header class="masthead">
+    <div class="wrap brand"><span class="mark" aria-hidden="true">E</span><span>EMPLOYER DIRECTORY</span></div>
+  </header>
+  <main id="recruiter-page" class="wrap" hidden>
+    <nav class="page-nav" aria-label="Directories"><a href="/">Employer Directory</a><a href="/recruiter-directory" aria-current="page">Recruiter Directory</a></nav>
+    <h1 class="recruiter-heading">Recruiter Directory</h1>
+  </main>
+  <script>
+    fetch('/api/session',{cache:'no-store'}).then(response=>response.json()).then(session=>{
+      if(session.status==='approved') document.getElementById('recruiter-page').hidden=false;
+      else location.replace('/');
+    }).catch(()=>location.replace('/'));
+  </script>
+</body>
+</html>
