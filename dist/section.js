@@ -134,12 +134,32 @@ function render(items){
   list.append(card);
  }
 }
+function renderJobs(items){
+ const list=byId('section-items');list.replaceChildren();list.classList.add('section-records','job-records');
+ const table=document.createElement('table'),head=document.createElement('thead'),row=document.createElement('tr'),body=document.createElement('tbody');
+ for(const label of ['Job title','Company','Posted date','Apply']){const cell=document.createElement('th');cell.scope='col';cell.textContent=label;row.append(cell);}head.append(row);
+ if(!items.length){const empty=document.createElement('tr'),cell=document.createElement('td');cell.colSpan=4;cell.className='section-table-empty';cell.textContent='No matching jobs found yet.';empty.append(cell);body.append(empty);}
+ for(const item of items){
+  const tr=document.createElement('tr'),title=document.createElement('td'),company=document.createElement('td'),date=document.createElement('td'),apply=document.createElement('td');
+  title.textContent=item.title;company.textContent=item.company_name;
+  if(item.posted_at){const time=document.createElement('time');time.dateTime=item.posted_at;time.textContent=new Date(item.posted_at).toLocaleDateString();date.append(time);}else date.textContent='Date unavailable';
+  const link=document.createElement('a');link.href=item.apply_url;link.target='_blank';link.rel='noopener noreferrer';link.textContent='Apply ↗';apply.append(link);
+  tr.append(title,company,date,apply);body.append(tr);
+ }
+ table.append(head,body);list.append(table);
+}
 async function loadItems(){
  const current=++requestNumber,params=new URLSearchParams({section:sectionKey,category,search:byId('section-search').value.trim(),window:byId('date-filter').value});
  status('Loading…');
  try{
   if(sectionKey==='latest-posted-jobs'&&!jobCompanies)await loadJobCompanies();
   if(current!==requestNumber)return;
+  if(sectionKey==='latest-posted-jobs'){
+   const companies=selectedJobCompanies(),min=byId('job-min-years').value,max=byId('job-max-years').value;
+   if(!byId('job-min-years').checkValidity()||!byId('job-max-years').checkValidity()||(min!==''&&max!==''&&Number(min)>Number(max))){status('Check the experience range.');return;}
+   const data=await api('/api/jobs/query',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({companyIds:companies.map(company=>company.id),category,window:byId('date-filter').value,search:byId('section-search').value.trim(),minYears:min===''?null:Number(min),maxYears:max===''?null:Number(max)})});
+   if(current!==requestNumber)return;renderJobs(data.items);status(`${data.items.length} ${data.items.length===1?'job':'jobs'} from ${companies.length} companies on this Employer Directory page`);return;
+  }
   const data=await api(`/api/section-items?${params}`);if(current!==requestNumber)return;
   const companies=sectionKey==='latest-posted-jobs'?selectedJobCompanies():null;
   const names=companies?new Set(companies.map(company=>jobCompanyKey(company.name))):null;
@@ -155,14 +175,33 @@ byId('section-search').addEventListener('input',()=>{clearTimeout(searchTimer);s
 byId('date-filter').addEventListener('change',loadItems);
 byId('job-company-filter').addEventListener('change',()=>{byId('job-page-filter').value='0';updateJobPages();loadItems();});
 byId('job-page-filter').addEventListener('change',loadItems);
-byId('job-generate').addEventListener('click',()=>{
+for(const id of ['job-min-years','job-max-years'])byId(id).addEventListener('change',loadItems);
+byId('job-generate').addEventListener('click',async()=>{
  const minInput=byId('job-min-years'),maxInput=byId('job-max-years');
  if(!minInput.checkValidity()||!maxInput.checkValidity()){status('Enter whole years between 0 and 60.');return;}
  const min=minInput.value===''?null:Number(minInput.value),max=maxInput.value===''?null:Number(maxInput.value);
  if(min!==null&&max!==null&&min>max){status('Minimum Years cannot be greater than Maximum Years.');maxInput.focus();return;}
  if(!jobCompanies){status('Company list is still loading. Please try again in a moment.');return;}
- const count=selectedJobCompanies().length;
- status(count?`Selected ${count} companies. Automatic job collection is not connected yet; the results below show jobs already saved in the directory.`:'No companies are on this page. Choose another group or page.');
+ const companies=selectedJobCompanies(),button=byId('job-generate');
+ if(!companies.length){status('No companies are on this page. Choose another group or page.');return;}
+ button.disabled=true;let checked=0,unsupported=0,failed=0,found=0;
+ const report=byId('job-source-report'),issues=byId('job-source-list');issues.replaceChildren();report.hidden=true;report.open=false;
+ try{
+  for(let index=0;index<companies.length;index+=3){
+   const batch=companies.slice(index,index+3);
+   const results=await Promise.all(batch.map(async company=>{try{return await api('/api/jobs/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({companyId:company.id})});}catch(error){return {status:'error',message:error.message};}}));
+   for(let offset=0;offset<results.length;offset++){
+    const result=results[offset];if(result.status==='checked'){checked++;found+=result.jobsFound||0;continue;}
+    if(result.status==='unsupported')unsupported++;else failed++;
+    const item=document.createElement('li');item.textContent=`${batch[offset].name}: ${result.message||'Career source unavailable.'}`;issues.append(item);
+   }
+   status(`Checking companies ${Math.min(index+batch.length,companies.length)} of ${companies.length}… ${found} matching jobs found so far.`);
+   if(index%12===0)await loadItems();
+  }
+  await loadItems();
+  report.hidden=!issues.childElementCount;
+  status(`${byId('section-status').textContent}. Scan complete: ${checked} checked, ${unsupported} without a supported feed, ${failed} unavailable. ${found} matching jobs found across the four job tabs.`);
+ }finally{button.disabled=false;}
 });
 window.addEventListener('storage',event=>{if(sectionKey==='latest-posted-jobs'&&(event.key===jobSavedKey||event.key===null)){updateJobPages();loadItems();}});
 function openForm(item=null){

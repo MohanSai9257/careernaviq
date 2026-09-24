@@ -1,0 +1,1 @@
+ALTER TABLE `imported_jobs` ADD `is_open` integer DEFAULT 1 NOT NULL;

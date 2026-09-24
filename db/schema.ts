@@ -1,4 +1,4 @@
-import {integer,sqliteTable,text,uniqueIndex} from 'drizzle-orm/sqlite-core';
+import {index,integer,sqliteTable,text,uniqueIndex} from 'drizzle-orm/sqlite-core';
 export const companyEdits=sqliteTable('company_edits',{
  id:text('id').primaryKey(),
  payload:text('payload').notNull(),
@@ -97,4 +97,26 @@ export const tabAccess=sqliteTable('tab_access',{
  allowed:integer('allowed').notNull().default(1),
  updatedAt:text('updated_at').notNull(),
  updatedBy:text('updated_by').notNull(),
+});
+export const importedJobs=sqliteTable('imported_jobs',{
+ id:text('id').primaryKey(),
+ companyId:text('company_id').notNull(),
+ companyName:text('company_name').notNull(),
+ category:text('category').notNull(),
+ title:text('title').notNull(),
+ applyUrl:text('apply_url').notNull(),
+ sourceId:text('source_id').notNull(),
+ postedAt:text('posted_at').notNull().default(''),
+ discoveredAt:text('discovered_at').notNull(),
+ lastSeenAt:text('last_seen_at').notNull(),
+ isOpen:integer('is_open').notNull().default(1),
+ minYears:integer('min_years'),
+ maxYears:integer('max_years'),
+},table=>({source:uniqueIndex('imported_jobs_company_source').on(table.companyId,table.sourceId),listing:index('imported_jobs_company_category_open_date').on(table.companyId,table.category,table.isOpen,table.postedAt)}));
+export const jobSourceChecks=sqliteTable('job_source_checks',{
+ companyId:text('company_id').primaryKey(),
+ checkedAt:text('checked_at').notNull(),
+ status:text('status').notNull(),
+ message:text('message').notNull().default(''),
+ jobsFound:integer('jobs_found').notNull().default(0),
 });
