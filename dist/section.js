@@ -26,6 +26,7 @@ byId('section-search').placeholder=`Search ${config.title.toLowerCase()}`;
 byId('date-filter-wrap').hidden=sectionKey!=='latest-posted-jobs';
 byId('job-company-filter-wrap').hidden=sectionKey!=='latest-posted-jobs';
 byId('job-page-filter-wrap').hidden=sectionKey!=='latest-posted-jobs';
+byId('job-generate').hidden=sectionKey!=='latest-posted-jobs';
 byId('section-posted-wrap').hidden=sectionKey!=='latest-posted-jobs';
 byId('section-posted').required=false;
 function status(message){byId('section-status').textContent=message;}
@@ -151,6 +152,11 @@ byId('section-search').addEventListener('input',()=>{clearTimeout(searchTimer);s
 byId('date-filter').addEventListener('change',loadItems);
 byId('job-company-filter').addEventListener('change',()=>{byId('job-page-filter').value='0';updateJobPages();loadItems();});
 byId('job-page-filter').addEventListener('change',loadItems);
+byId('job-generate').addEventListener('click',()=>{
+ const count=selectedJobCompanies().length;
+ if(!jobCompanies){status('Company list is still loading. Please try again in a moment.');return;}
+ status(count?`Selected ${count} companies. Automatic job collection is not connected yet; the results below show jobs already saved in the directory.`:'No companies are on this page. Choose another group or page.');
+});
 window.addEventListener('storage',event=>{if(sectionKey==='latest-posted-jobs'&&(event.key===jobSavedKey||event.key===null)){updateJobPages();loadItems();}});
 function openForm(item=null){
  editingItem=item;byId('section-form').reset();byId('section-form-error').hidden=true;
