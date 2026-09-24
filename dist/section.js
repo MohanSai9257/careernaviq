@@ -39,7 +39,7 @@ function openActions(item,trigger){
  for(const target of ['java','data','devops','validation']){
   if(target===item.category)continue;
   const button=document.createElement('button');button.type='button';button.setAttribute('role','menuitem');button.textContent=target==='devops'?'DevOps':target.charAt(0).toUpperCase()+target.slice(1);
-  button.addEventListener('click',async()=>{button.disabled=true;try{await api('/api/section-changes',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:item.id,version:item.version,kind:'move',category:target})});closeActions(true);sectionNotice('Move request sent for approval. An Admin or Coadmin will review it.');}catch(error){closeActions(true);sectionNotice(error.message);button.disabled=false;}});
+  button.addEventListener('click',async()=>{button.disabled=true;try{const result=await api('/api/section-changes',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:item.id,version:item.version,kind:'move',category:target})});closeActions(true);sectionNotice(result.status==='approved'?'Entry moved successfully.':'Move request sent for approval. An Admin or Coadmin will review it.');if(result.status==='approved')loadItems();}catch(error){closeActions(true);sectionNotice(error.message);button.disabled=false;}});
   targets.append(button);
  }
  byId('section-actions-menu').hidden=false;positionActions();byId('section-action-edit').focus({preventScroll:true});
@@ -110,7 +110,7 @@ byId('date-filter').addEventListener('change',loadItems);
 function openForm(item=null){
  editingItem=item;byId('section-form').reset();byId('section-form-error').hidden=true;
  byId('section-dialog-title').textContent=item?`Edit ${item.title||'entry'}`:config.action;
- byId('section-form-note').hidden=!item&&accessRole!=='user';
+ byId('section-form-note').hidden=accessRole!=='user';
  byId('section-form-note').textContent=item?'Edits require Admin approval before they appear for everyone.':'Your submission will appear after Admin approval.';
  byId('section-existing-file').hidden=!item?.file_name;
  byId('section-existing-file').textContent=item?.file_name?`Current file: ${item.file_name}. Upload a new file to replace it after approval.`:'';
@@ -128,7 +128,7 @@ byId('section-action-delete').addEventListener('click',()=>{deletingItem=actionI
 byId('section-delete-cancel').addEventListener('click',()=>byId('section-delete-dialog').close());
 byId('section-delete-form').addEventListener('submit',async event=>{
  event.preventDefault();const button=event.currentTarget.querySelector('[type="submit"]');button.disabled=true;byId('section-delete-error').hidden=true;
- try{await api('/api/section-changes',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:deletingItem.id,version:deletingItem.version,kind:'delete'})});byId('section-delete-dialog').close();sectionNotice('Deletion request sent for approval. An Admin or Coadmin will review it.');}
+ try{const result=await api('/api/section-changes',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:deletingItem.id,version:deletingItem.version,kind:'delete'})});byId('section-delete-dialog').close();sectionNotice(result.status==='approved'?'Entry deleted successfully.':'Deletion request sent for approval. An Admin or Coadmin will review it.');if(result.status==='approved')loadItems();}
  catch(error){byId('section-delete-error').textContent=error.message;byId('section-delete-error').hidden=false;}finally{button.disabled=false;}
 });
 byId('section-cancel').addEventListener('click',()=>byId('section-dialog').close());
@@ -142,7 +142,7 @@ byId('section-form').addEventListener('submit',async event=>{
  if(changing)Object.assign(input,{id:editingItem.id,version:editingItem.version,kind:'edit'});
  let options={method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(input)};
  if(file){const formData=new FormData();for(const [key,value] of Object.entries(input))formData.append(key,value);formData.append('file',file);options={method:'POST',body:formData};}
- try{const result=await api(url,options);byId('section-dialog').close();sectionNotice(changing||result.status==='pending'?'Sent for approval. An Admin or Coadmin will review your changes.':'Added successfully.');if(!changing&&result.status==='approved')loadItems();editingItem=null;}
+ try{const result=await api(url,options);byId('section-dialog').close();sectionNotice(result.pending||result.status==='pending'?'Sent for approval. An Admin or Coadmin will review your changes.':changing?'Entry updated successfully.':'Added successfully.');if(result.status==='approved')loadItems();editingItem=null;}
  catch(error){byId('section-form-error').textContent=error.message;byId('section-form-error').hidden=false;}finally{button.disabled=false;}
 });
 byId('section-logout').addEventListener('click',async()=>{try{await api('/api/logout',{method:'POST'});location.replace('/');}catch(error){status(error.message);}});

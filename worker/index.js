@@ -274,7 +274,7 @@ export default {async fetch(request,env){
    const database=db(env),current=await database.prepare("SELECT id,version,section,category,title,organization,url,details,email,phone,extension,posted_at,file_key,file_name,file_type FROM section_items WHERE id = ? AND status = 'approved'").bind(id).first();
    if(!current)return json({error:'Entry not found.'},404);
    if(current.version!==version)return json({error:'This entry changed. Refresh and try again.'},409);
-   if(await database.prepare("SELECT id FROM section_change_requests WHERE item_id = ? AND status = 'pending' LIMIT 1").bind(id).first())return json({error:'A change for this entry is already awaiting approval.'},409);
+   if(!canManage(session)&&await database.prepare("SELECT id FROM section_change_requests WHERE item_id = ? AND status = 'pending' LIMIT 1").bind(id).first())return json({error:'A change for this entry is already awaiting approval.'},409);
    const before={section:current.section,category:current.category,title:current.title,organization:current.organization,url:current.url,details:current.details,email:current.email,phone:current.phone,extension:current.extension,posted_at:current.posted_at,file_name:current.file_name};
    let after={},pendingFileKey='',fileBytes=null;
    if(kind==='move'){
@@ -301,6 +301,19 @@ export default {async fetch(request,env){
     }
     if(!file&&Object.entries(after).every(([key,value])=>value===current[key]))return json({error:'No changes to submit.'},400);
    }else if(file)return json({error:'This action does not accept a file.'},400);
+   if(canManage(session)){
+    let newFileKey='';
+    if(fileBytes){newFileKey=`section-items/${id}/${crypto.randomUUID()}`;after.file_key=newFileKey;await bucket(env).put(newFileKey,fileBytes,{httpMetadata:{contentType:after.file_type}});}
+    let result;
+    try{
+     if(kind==='move')result=await database.prepare("UPDATE section_items SET category = ?,version = version + 1 WHERE id = ? AND version = ? AND status = 'approved' RETURNING id,version").bind(after.category,id,version).first();
+     else if(kind==='delete')result=await database.prepare("DELETE FROM section_items WHERE id = ? AND version = ? AND status = 'approved' RETURNING id").bind(id,version).first();
+     else result=await database.prepare("UPDATE section_items SET title = ?,organization = ?,url = ?,details = ?,email = ?,phone = ?,extension = ?,posted_at = ?,file_key = ?,file_name = ?,file_type = ?,version = version + 1 WHERE id = ? AND version = ? AND status = 'approved' RETURNING id,version").bind(after.title,after.organization,after.url,after.details,after.email,after.phone,after.extension,after.posted_at,after.file_key,after.file_name,after.file_type,id,version).first();
+    }catch(error){if(newFileKey)await bucket(env).delete(newFileKey);throw error;}
+    if(!result){if(newFileKey)await bucket(env).delete(newFileKey);return json({error:'This entry changed. Refresh and try again.'},409);}
+    if((kind==='delete'||newFileKey)&&current.file_key)try{await bucket(env).delete(current.file_key);}catch(error){console.error('Could not remove replaced document',error);}
+    return json({status:'approved',id,version:result.version||null,kind});
+   }
    const requestId=crypto.randomUUID();
    if(fileBytes){pendingFileKey=`section-changes/${requestId}`;after.file_key=pendingFileKey;await bucket(env).put(pendingFileKey,fileBytes,{httpMetadata:{contentType:after.file_type}});}
    try{await database.prepare("INSERT INTO section_change_requests (id,item_id,actor_email,kind,before_payload,after_payload,base_version,pending_file_key,status,created_at) VALUES (?,?,?,?,?,?,?,?,'pending',?)").bind(requestId,id,session.email,kind,JSON.stringify(before),JSON.stringify(after),version,pendingFileKey,new Date().toISOString()).run();}
