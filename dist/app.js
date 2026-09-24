@@ -91,16 +91,15 @@ async function loadChanges(){
  do{const response=await fetch('/api/changes'+(after?'?after='+encodeURIComponent(after):''),{cache:'no-store'});if(!response.ok)throw Error('Could not load shared changes. Please refresh and try again.');const data=await response.json();for(const item of data.items){const {id,version,...fields}=item;next[id]=fields;nextVersions[id]=version;}after=data.next;}while(after);
  addedData=additions;overrides=next;versions=nextVersions;rebuildCompanies();sharedReady=true;updateCounts();applyFilter();
 }
-function updateCoverage(){const careerCount=companies.filter(r=>r[2]).length,linkedinCount=companies.filter(r=>r[1]).length;$('coverage').textContent=`${careerCount} careers links · ${linkedinCount} LinkedIn links. Initial links reviewed September 23, 2026; visitor-added links are not verified.`;}
 function rebuildCompanies(){
  companies=[...baseData.map(r=>[...r.slice(0,4),r[0],false]),...addedData.map(r=>[r.name,r.linkedin,r.careers,r.category,r.id,true])];
  companies=companies.filter(r=>!overrides[r[4]]?.deleted);
- applyOverrides();$('total').textContent=companies.length.toLocaleString();updateCoverage();
+ applyOverrides();$('total').textContent=companies.length.toLocaleString();
 }
 async function persistChange(id,change){
  if(!sharedReady)throw Error('Shared data is not ready. Refresh and try again.');
  if(saving)throw Error('Please wait for the current save to finish.');saving=true;
- try{const response=await fetch('/api/company',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({id,version:versions[id]||0,change})});const result=await response.json();if(!response.ok)throw Error(result.error||'Could not save. Try again.');const {id:companyId,version,...fields}=result;overrides[companyId]=fields;versions[companyId]=version;applyOverrides();updateCoverage();updateCounts();applyFilter();}finally{saving=false;}
+ try{const response=await fetch('/api/company',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({id,version:versions[id]||0,change})});const result=await response.json();if(!response.ok)throw Error(result.error||'Could not save. Try again.');const {id:companyId,version,...fields}=result;overrides[companyId]=fields;versions[companyId]=version;applyOverrides();updateCounts();applyFilter();}finally{saving=false;}
 }
 function notify(message){$('save-status').textContent=message;$('save-status').hidden=false;}
 function closeMenu(restore=false){$('company-menu').hidden=true;$('move-menu').hidden=true;$('menu-move').setAttribute('aria-expanded','false');if(menuTrigger){menuTrigger.setAttribute('aria-expanded','false');if(restore&&menuTrigger.isConnected)menuTrigger.focus();}}
