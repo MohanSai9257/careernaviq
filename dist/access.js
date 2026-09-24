@@ -26,7 +26,7 @@ function showAccessState(){
  const pending=accessSession.status==='pending',blocked=accessSession.status==='blocked';
  accessEl('access-form').hidden=pending||blocked;
  accessEl('access-change').hidden=!pending&&!blocked;
- accessEl('access-message').textContent=pending?`Awaiting access from Admin for ${accessSession.email}. This page will open after approval.`:blocked?`Access has been denied for ${accessSession.email}. Contact the Admin if you think this is a mistake.`:'Enter your Gmail to request access to the directory.';
+ accessEl('access-message').textContent=pending?`Awaiting access from Admin for ${accessSession.email}. This page will open after approval.`:blocked?`Access has been denied for ${accessSession.email}. Contact the Admin if you think this is a mistake.`:'Enter your Gmail to request access or log in if approved.';
 }
 async function checkAccess(){
  if(checking)return;checking=true;
@@ -58,9 +58,15 @@ async function loadAccessUsers(){
 }
 for(const button of document.querySelectorAll('[data-access-tab]'))button.addEventListener('click',()=>{accessTab=button.dataset.accessTab;renderAccessUsers();});
 accessEl('access-form').addEventListener('submit',async event=>{
- event.preventDefault();const submit=accessEl('access-form').querySelector('button');submit.disabled=true;accessError('access-error','');
+ event.preventDefault();const submit=accessEl('access-form').querySelector('[type=submit]');submit.disabled=true;accessEl('access-login').disabled=true;accessError('access-error','');
  try{accessSession=await accessJson('/api/access/request',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:accessEl('access-email').value.trim()})});showAccessState();}
- catch(error){accessError('access-error',error.message);}finally{submit.disabled=false;}
+ catch(error){accessError('access-error',error.message);}finally{submit.disabled=false;accessEl('access-login').disabled=false;}
+});
+accessEl('access-login').addEventListener('click',async()=>{
+ const email=accessEl('access-email');if(!email.reportValidity())return;
+ const button=accessEl('access-login');button.disabled=true;accessEl('access-form').querySelector('[type=submit]').disabled=true;accessError('access-error','');
+ try{accessSession=await accessJson('/api/access/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:email.value.trim()})});showAccessState();}
+ catch(error){accessError('access-error',error.message);}finally{button.disabled=false;accessEl('access-form').querySelector('[type=submit]').disabled=false;}
 });
 accessEl('access-change').addEventListener('click',async()=>{
  try{await accessJson('/api/logout',{method:'POST'});accessSession={role:'guest',status:'none'};accessEl('access-email').value='';showAccessState();accessEl('access-email').focus();}

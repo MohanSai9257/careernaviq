@@ -35,9 +35,23 @@ export default {async fetch(request,env){
    const database=db(env),now=new Date().toISOString();
    await database.prepare("INSERT INTO access_users (email,status,requested_at,updated_at) VALUES (?,'pending',?,?) ON CONFLICT(email) DO NOTHING").bind(email,now,now).run();
    const user=await database.prepare('SELECT status FROM access_users WHERE email = ?').bind(email).first();
+   if(user.status==='approved')return json({error:'Access is already approved. Use Login.'},409);
    const token=crypto.randomUUID()+crypto.randomUUID();
    await database.prepare('INSERT INTO access_sessions (token,email,role,created_at) VALUES (?,?,?,?)').bind(token,email,'user',now).run();
    return Response.json({email,role:'user',status:user.status},{headers:{'Set-Cookie':sessionCookie(token),'Cache-Control':'no-store'}});
+  }
+  if(url.pathname==='/api/access/login'&&request.method==='POST'){
+   if(!sameOrigin(request,url))return json({error:'Use the directory to log in.'},403);
+   let input;try{input=await jsonInput(request);}catch{return json({error:'Enter a valid Gmail address.'},400);}
+   const email=String(input?.email||'').trim().toLowerCase();
+   if(email.length>254||!email.endsWith('@gmail.com')||!emailPattern.test(email))return json({error:'Enter a valid Gmail address.'},400);
+   const user=await db(env).prepare('SELECT status FROM access_users WHERE email = ?').bind(email).first();
+   if(!user)return json({error:'No access request found. Use Request access first.'},404);
+   if(user.status==='pending')return json({error:'Your request is awaiting Admin approval.'},403);
+   if(user.status==='blocked')return json({error:'This Gmail is blocked. Contact the Admin.'},403);
+   const token=crypto.randomUUID()+crypto.randomUUID();
+   await db(env).prepare('INSERT INTO access_sessions (token,email,role,created_at) VALUES (?,?,?,?)').bind(token,email,'user',new Date().toISOString()).run();
+   return Response.json({email,role:'user',status:'approved'},{headers:{'Set-Cookie':sessionCookie(token),'Cache-Control':'no-store'}});
   }
   if(url.pathname==='/api/admin/login'&&request.method==='POST'){
    if(!sameOrigin(request,url))return json({error:'Use the directory to open Admin mode.'},403);
