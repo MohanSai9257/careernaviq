@@ -28,8 +28,38 @@ byId('section-posted-wrap').hidden=sectionKey!=='latest-posted-jobs';
 byId('section-posted').required=sectionKey==='latest-posted-jobs';
 function status(message){byId('section-status').textContent=message;}
 async function api(url,options){const response=await fetch(url,{cache:'no-store',...options});const result=await response.json();if(!response.ok)throw Error(result.error||'Please try again.');return result;}
+const tableColumns={
+ 'recruiter-directory':[['Name','title'],['Company','organization'],['LinkedIn','url'],['Mail','email'],['Number','phone'],['Ext','extension']],
+ 'study-materials':[['Name','title'],['Link','url'],['Upload Material','file_name']],
+ 'interview-prep':[['Name','title'],['Link','url'],['Upload Material','file_name']],
+ 'interview-support':[['Contact Name','title'],['Number','phone'],['Details','details']]
+};
+function renderTable(items){
+ const list=byId('section-items');list.replaceChildren();list.classList.add('section-records');
+ const table=document.createElement('table'),head=document.createElement('thead'),headRow=document.createElement('tr'),body=document.createElement('tbody');
+ const columns=tableColumns[sectionKey];
+ for(const [label] of columns){const cell=document.createElement('th');cell.scope='col';cell.textContent=label;headRow.append(cell);}
+ head.append(headRow);
+ if(!items.length){const row=document.createElement('tr'),cell=document.createElement('td');cell.colSpan=columns.length;cell.className='section-table-empty';cell.textContent='No entries yet.';row.append(cell);body.append(row);}
+ for(const item of items){
+  const row=document.createElement('tr');
+  for(const [,field] of columns){
+   const cell=document.createElement('td'),value=item[field]||'';
+   if(field==='url'&&value){const link=document.createElement('a');link.href=value;link.target='_blank';link.rel='noopener noreferrer';link.textContent=sectionKey==='recruiter-directory'?'LinkedIn ↗':'Open link ↗';cell.append(link);}
+   else if(field==='email'&&value){const link=document.createElement('a');link.href=`mailto:${value}`;link.textContent=value;cell.append(link);}
+   else if(field==='phone'&&value){const link=document.createElement('a');link.href=`tel:${value.replace(/[^+\d]/g,'')}`;link.textContent=value;cell.append(link);}
+   else if(field==='file_name'&&value){const link=document.createElement('a');link.href=`/api/section-file/${encodeURIComponent(item.id)}`;link.textContent=value;cell.append(link);}
+   else cell.textContent=value||'—';
+   row.append(cell);
+  }
+  body.append(row);
+ }
+ table.append(head,body);list.append(table);
+}
 function render(items){
  const list=byId('section-items');list.replaceChildren();
+ if(tableColumns[sectionKey]){renderTable(items);return;}
+ list.classList.remove('section-records');
  if(!items.length){const empty=document.createElement('p');empty.className='section-empty';empty.textContent='No entries yet.';list.append(empty);return;}
  for(const item of items){
   const card=document.createElement('article');card.className='section-item';
