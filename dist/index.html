@@ -23,11 +23,28 @@
     <p id="save-status" class="save-status" role="status" aria-live="polite" hidden></p>
     <section id="directory-panel" role="tabpanel" aria-labelledby="tab-client">
       <div class="toolbar"><label class="search"><svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"></circle><path d="m16 16 5 5"></path></svg><span class="sr-only">Search companies</span><input id="search" type="search" placeholder="Search by company name" autocomplete="off"></label><span id="results" role="status" aria-live="polite">Loading companies…</span></div>
-      <div class="table-wrap"><table><thead><tr><th scope="col">Company name</th><th scope="col">LinkedIn</th><th scope="col">Careers portal</th></tr></thead><tbody id="companies"></tbody></table><p id="empty" hidden>No companies found. Try another name.</p></div>
+      <div class="table-wrap"><table><thead><tr><th scope="col">Company name</th><th scope="col">LinkedIn</th><th scope="col">Careers portal</th><th scope="col" class="actions-heading"><span class="sr-only">Company actions</span></th></tr></thead><tbody id="companies"></tbody></table><p id="empty" hidden>No companies found. Try another name.</p></div>
       <div class="pagination"><span id="range"></span><div><button id="previous" type="button" disabled>Previous</button><span id="page">Page 1</span><button id="next" type="button" disabled>Next</button></div></div>
       <noscript><p>Enable JavaScript to view and search the company directory.</p></noscript>
     </section>
     <footer><p>Company names: <a href="https://www.dol.gov/agencies/eta/foreign-labor/performance" target="_blank" rel="noopener noreferrer">U.S. Department of Labor disclosure data</a>, FY2025–FY2026 Q3. Separate legal employers may share a parent company’s links.</p><p id="coverage">Links checked September 23, 2026. External links open in a new tab.</p></footer>
   </main>
+  <div id="company-menu" class="company-menu" role="menu" aria-label="Company actions" hidden>
+    <button id="menu-edit" type="button" role="menuitem">Edit</button>
+    <button id="menu-move" type="button" role="menuitem" aria-haspopup="menu" aria-expanded="false" aria-controls="move-menu">Move to <span aria-hidden="true">›</span></button>
+    <div id="move-menu" role="menu" aria-label="Move company to" hidden></div>
+  </div>
+  <dialog id="edit-dialog" aria-labelledby="edit-title">
+    <form id="edit-form">
+      <h2 id="edit-title">Edit company</h2>
+      <p class="edit-scope">Anyone can edit. Your saved changes will be visible to everyone.</p>
+      <label for="edit-name">Company name</label><input id="edit-name" name="company" required maxlength="250">
+      <label for="edit-linkedin">LinkedIn link</label><input id="edit-linkedin" name="linkedin" type="url" placeholder="https://www.linkedin.com/company/…">
+      <label for="edit-careers">Careers portal link</label><input id="edit-careers" name="careers" type="url" placeholder="https://company.com/careers">
+      <p class="form-hint">Leave a link blank if it is not available.</p>
+      <p id="edit-error" role="alert" hidden></p>
+      <div class="dialog-actions"><button type="button" id="edit-cancel">Cancel</button><button type="submit" class="primary">Save changes</button></div>
+    </form>
+  </dialog>
 </body>
 </html>
