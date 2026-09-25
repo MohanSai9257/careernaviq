@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Access restricted — CareerNaviq</title>
+  <link rel="icon" type="image/svg+xml" href="/logo.svg">
+  <link rel="stylesheet" href="/style.css">
+  <script src="/sidebar.js" defer></script>
+  <script src="/restricted.js" defer></script>
+  <script src="/profile.js" defer></script>
+</head>
+<body>
+  <header class="masthead"><div class="wrap brand"><img class="brand-logo" src="/logo.svg" alt=""><span>CareerNaviq</span><div id="profile-greeting" class="profile-greeting" hidden></div><div class="role-control"><span id="restricted-role" class="public-label">User</span><button id="restricted-logout" type="button">Logout</button></div></div></header>
+  <main id="restricted-page" class="wrap" hidden>
+    <section class="restricted-card" aria-labelledby="restricted-title">
+      <span class="restricted-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3M12 14v3"/></svg></span>
+      <p class="eyebrow" id="restricted-section"></p>
+      <h1 id="restricted-title">Access restricted temporarily by the Admin.</h1>
+      <p class="description">Please try again later or choose another tab from the sidebar.</p>
+    </section>
+  </main>
+</body>
+</html>

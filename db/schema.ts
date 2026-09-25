@@ -1,0 +1,122 @@
+import {index,integer,sqliteTable,text,uniqueIndex} from 'drizzle-orm/sqlite-core';
+export const companyEdits=sqliteTable('company_edits',{
+ id:text('id').primaryKey(),
+ payload:text('payload').notNull(),
+ version:integer('version').notNull().default(1),
+});
+export const addedCompanies=sqliteTable('added_companies',{
+ sequence:integer('sequence').primaryKey({autoIncrement:true}),
+ id:text('id').notNull().unique(),
+ normalizedName:text('normalized_name').notNull().unique(),
+ name:text('name').notNull(),
+ linkedin:text('linkedin').notNull().default(''),
+ careers:text('careers').notNull().default(''),
+ category:text('category').notNull(),
+});
+export const accessUsers=sqliteTable('access_users',{
+ email:text('email').primaryKey(),
+ status:text('status').notNull().default('pending'),
+ requestedAt:text('requested_at').notNull(),
+ updatedAt:text('updated_at').notNull(),
+});
+export const accessSessions=sqliteTable('access_sessions',{
+ token:text('token').primaryKey(),
+ email:text('email').notNull(),
+ role:text('role').notNull(),
+ createdAt:text('created_at').notNull(),
+});
+export const coadmins=sqliteTable('coadmins',{
+ email:text('email').primaryKey(),
+ grantedAt:text('granted_at').notNull(),
+});
+export const changeRequests=sqliteTable('change_requests',{
+ id:text('id').primaryKey(),
+ actorEmail:text('actor_email').notNull(),
+ companyId:text('company_id').notNull(),
+ companyName:text('company_name').notNull(),
+ kind:text('kind').notNull(),
+ beforePayload:text('before_payload').notNull(),
+ afterPayload:text('after_payload').notNull(),
+ baseVersion:integer('base_version').notNull(),
+ status:text('status').notNull().default('pending'),
+ createdAt:text('created_at').notNull(),
+ reviewedAt:text('reviewed_at'),
+ reviewedBy:text('reviewed_by'),
+});
+export const sectionItems=sqliteTable('section_items',{
+ id:text('id').primaryKey(),
+ version:integer('version').notNull().default(1),
+ section:text('section').notNull(),
+ category:text('category').notNull(),
+ title:text('title').notNull(),
+ organization:text('organization').notNull().default(''),
+ url:text('url').notNull().default(''),
+ details:text('details').notNull().default(''),
+ email:text('email').notNull().default(''),
+ phone:text('phone').notNull().default(''),
+ extension:text('extension').notNull().default(''),
+ fileKey:text('file_key').notNull().default(''),
+ fileName:text('file_name').notNull().default(''),
+ fileType:text('file_type').notNull().default(''),
+ postedAt:text('posted_at').notNull().default(''),
+ actorEmail:text('actor_email').notNull(),
+ status:text('status').notNull().default('pending'),
+ createdAt:text('created_at').notNull(),
+ reviewedAt:text('reviewed_at'),
+ reviewedBy:text('reviewed_by'),
+});
+export const sectionChangeRequests=sqliteTable('section_change_requests',{
+ id:text('id').primaryKey(),
+ itemId:text('item_id').notNull(),
+ actorEmail:text('actor_email').notNull(),
+ kind:text('kind').notNull(),
+ beforePayload:text('before_payload').notNull(),
+ afterPayload:text('after_payload').notNull(),
+ baseVersion:integer('base_version').notNull(),
+ pendingFileKey:text('pending_file_key').notNull().default(''),
+ status:text('status').notNull().default('pending'),
+ createdAt:text('created_at').notNull(),
+ reviewedAt:text('reviewed_at'),
+ reviewedBy:text('reviewed_by'),
+});
+export const deletedUsers=sqliteTable('deleted_users',{
+ email:text('email').primaryKey(),
+ deletedAt:text('deleted_at').notNull(),
+ deletedBy:text('deleted_by').notNull(),
+});
+export const userProfiles=sqliteTable('user_profiles',{
+ email:text('email').primaryKey(),
+ firstName:text('first_name').notNull(),
+ lastName:text('last_name').notNull(),
+ mobile:text('mobile').notNull(),
+ visaStatus:text('visa_status').notNull(),
+ updatedAt:text('updated_at').notNull(),
+});
+export const tabAccess=sqliteTable('tab_access',{
+ tab:text('tab').primaryKey(),
+ allowed:integer('allowed').notNull().default(1),
+ updatedAt:text('updated_at').notNull(),
+ updatedBy:text('updated_by').notNull(),
+});
+export const importedJobs=sqliteTable('imported_jobs',{
+ id:text('id').primaryKey(),
+ companyId:text('company_id').notNull(),
+ companyName:text('company_name').notNull(),
+ category:text('category').notNull(),
+ title:text('title').notNull(),
+ applyUrl:text('apply_url').notNull(),
+ sourceId:text('source_id').notNull(),
+ postedAt:text('posted_at').notNull().default(''),
+ discoveredAt:text('discovered_at').notNull(),
+ lastSeenAt:text('last_seen_at').notNull(),
+ isOpen:integer('is_open').notNull().default(1),
+ minYears:integer('min_years'),
+ maxYears:integer('max_years'),
+},table=>({source:uniqueIndex('imported_jobs_company_source').on(table.companyId,table.sourceId),listing:index('imported_jobs_company_category_open_date').on(table.companyId,table.category,table.isOpen,table.postedAt)}));
+export const jobSourceChecks=sqliteTable('job_source_checks',{
+ companyId:text('company_id').primaryKey(),
+ checkedAt:text('checked_at').notNull(),
+ status:text('status').notNull(),
+ message:text('message').notNull().default(''),
+ jobsFound:integer('jobs_found').notNull().default(0),
+});

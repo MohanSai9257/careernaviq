@@ -1,0 +1,1 @@
+CREATE INDEX `imported_jobs_company_category_open_date` ON `imported_jobs` (`company_id`,`category`,`is_open`,`posted_at`);
