@@ -20,13 +20,13 @@ async function sourceText(value){
 function plain(value){return String(value||'').replace(/<[^>]*>/g,' ').replace(/&(?:amp|nbsp|quot|lt|gt|#39);/g,c=>({'&amp;':'&','&nbsp;':' ','&quot;':'"','&lt;':'<','&gt;':'>','&#39;':"'"}[c]||c)).replace(/\s+/g,' ').trim();}
 function dateValue(value){if(!value)return '';const d=new Date(value);return Number.isFinite(d.getTime())&&d.getTime()<Date.now()+86400000?d.toISOString():'';}
 function jobCategory(title,description=''){
- const t=plain(title).toLowerCase(),d=plain(description).toLowerCase();
+ const t=plain(title).toLowerCase().replace(/[^a-z0-9]+/g,' ').trim(),d=plain(description).toLowerCase();
  if(/\b(manager|director|recruiter|sales|accountant|mechanical|electrical|manufacturing|process|hardware|product validation)\b/.test(t))return '';
  if(/\b(computer systems? validation|computerized systems? validation|csv engineer|csv consultant|csv specialist|software validation)\b/.test(t))return 'validation';
  if(/\bvalidation engineer\b/.test(t)&&/\b(computerized|computer systems|software|gxp|csv|pharmaceutical systems)\b/.test(d))return 'validation';
  if(/\b(devops|site reliability|\bsre\b|cloud platform|platform engineer|build and release|release engineer|cloud infrastructure|infrastructure engineer)\b/.test(t))return 'devops';
  if(/\b(data analyst|data engineer|big data|analytics engineer|business data analyst|bi data analyst|data platform engineer|data scientist)\b/.test(t))return 'data';
- if(/\b(software engineer|software developer|software development engineer|java developer|java engineer|java software engineer|backend developer|backend engineer|back end developer|back end engineer|full stack developer|full stack engineer|application developer|application engineer|web developer|web engineer)\b/.test(t))return 'java';
+ if(/\b(software engineer|software developer|software development engineer|java developer|java engineer|java software engineer|backend developer|backend engineer|back end developer|back end engineer|full stack developer|full stack engineer|application developer|application engineer|web developer|web engineer|java full stack|fullstack developer|fullstack engineer|frontend developer|frontend engineer|front end developer|front end engineer|python developer|net developer|mobile developer|android developer|ios developer)\b/.test(t))return 'java';
  if(/\bprogrammer analyst\b/.test(t)&&/\b(software|java|application development|coding|programming)\b/.test(d))return 'java';
  return '';
 }
@@ -34,8 +34,9 @@ function usLocation(value,sourceUrl=''){
  const location=plain(value),source=String(sourceUrl);
  if(/^US$/i.test(location))return true;
  if(/^(?:IN|MX|GB|UK|AU|DE|FR|PL|RO|SG|CA)$/i.test(location))return false;
- if(/\b(United States|U\.S\.|USA|US Remote|Remote - US|Remote, US|Remote \(US\))\b/i.test(location)||usStates.test(location))return true;
+ if(/\b(United States|USA|US)\b|U\.S\./i.test(location))return true;
  if(/\b(Canada|India|United Kingdom|Australia|Germany|Poland|Romania|France|Singapore|Mexico)\b/i.test(location))return false;
+ if(usStates.test(location))return true;
  return /\/us-en\/|\/us\/|united.states|\/usa\//i.test(source)&&(!location||/^remote$/i.test(location));
 }
 function yearsFromDescription(description){
@@ -64,11 +65,40 @@ function jsonLdJobs(html,pageUrl){
 }
 function xmlValue(item,tag){return plain(item.match(new RegExp(`<${tag}(?:\\s[^>]*)?>([\\s\\S]*?)<\\/${tag}>`,'i'))?.[1]?.replace(/^<!\[CDATA\[|\]\]>$/g,'')||'');}
 function rssJobs(xml){return [...xml.matchAll(/<item\b[^>]*>([\s\S]*?)<\/item>/gi)].map(([,item])=>{const title=xmlValue(item,'title'),trailing=title.match(/\(([^()]{2,70})\)$/);return {id:xmlValue(item,'guid')||xmlValue(item,'link'),title:trailing?title.slice(0,trailing.index).trim():title,url:xmlValue(item,'link'),postedAt:xmlValue(item,'pubDate'),description:xmlValue(item,'description'),location:xmlValue(item,'location')||trailing?.[1]||''};});}
+// Official recruiting boards verified against the employers' public career pages.
+// Keyed by stable directory IDs, never fuzzy employer names.
+const officialJobBoards={
+ 'Endava Solutions, LLC':'https://careers.smartrecruiters.com/Endava',
+ 'NAGARRO, INC':'https://careers.smartrecruiters.com/Nagarro1',
+ 'Brillio, LLC':'https://jobs.lever.co/brillio-2',
+ 'Rackspace US, Inc.':'https://jobs.lever.co/rackspace',
+ 'Egen Solutions LLC':'https://jobs.lever.co/egen',
+ 'ATOS SYNTEL INC':'https://jobs.atos.net/',
+ 'Ernst & Young U.S. LLP':'https://careers.ey.com/',
+ 'Yash Technologies, Inc':'https://careers.yash.com/',
+ 'Insight Direct USA, Inc.':'https://jobsearch.insight.com/'
+};
 async function readCompanyFeed(company){
- const career=safeJobUrl(company.careers);if(!career)return {status:'unsupported',message:'No usable official careers link.',jobs:[],complete:false};
+ const career=safeJobUrl(officialJobBoards[company.id]||company.careers);if(!career)return {status:'unsupported',message:'No usable official careers link.',jobs:[],complete:false};
  let raw=[],source='careers page',complete=false;
  const host=career.hostname.toLowerCase(),segments=career.pathname.split('/').filter(Boolean);
- if(host==='boards.greenhouse.io'||host==='job-boards.greenhouse.io'){
+ if(host==='careers.smartrecruiters.com'||host==='jobs.smartrecruiters.com'){
+  const board=segments[0];if(!board)throw Error('Recruiting board name is missing.');
+  let exhausted=false,detailFailed=false;
+  for(let offset=0;offset<500;offset+=100){
+   const data=JSON.parse((await sourceText(`https://api.smartrecruiters.com/v1/companies/${encodeURIComponent(board)}/postings?limit=100&offset=${offset}&country=us`)).text);
+   const postings=(data.content||[]).filter(job=>job.location?.country?.toLowerCase()==='us'&&job.visibility!=='INTERNAL');
+   for(let i=0;i<postings.length;i+=5)await Promise.all(postings.slice(i,i+5).map(async job=>{
+    // Details supply the real apply URL and experience requirements.
+    try{const detail=JSON.parse((await sourceText(`https://api.smartrecruiters.com/v1/companies/${encodeURIComponent(board)}/postings/${encodeURIComponent(job.id)}`)).text);
+     if(detail.active===false||detail.visibility==='INTERNAL')return;
+     raw.push({id:job.id,title:detail.name,url:detail.postingUrl||detail.applyUrl,location:'United States',postedAt:detail.releasedDate,description:Object.values(detail.jobAd?.sections||{}).map(x=>x.text||'').join(' ')});
+    }catch{detailFailed=true;}
+   }));
+   if(offset+(data.content||[]).length>=data.totalFound||(data.content||[]).length<100){exhausted=true;break;}
+  }
+  source='SmartRecruiters';complete=exhausted&&!detailFailed;
+ }else if(host==='boards.greenhouse.io'||host==='job-boards.greenhouse.io'){
   const board=segments[0]==='embed'?career.searchParams.get('for'):segments[0];if(!board)return {status:'unsupported',message:'Greenhouse board name is missing.',jobs:[],complete:false};
   const data=JSON.parse((await sourceText(`https://boards-api.greenhouse.io/v1/boards/${encodeURIComponent(board)}/jobs`)).text);
   raw=(data.jobs||[]).sort((a,b)=>String(b.updated_at||'').localeCompare(String(a.updated_at||''))).map(job=>({id:job.id,title:job.title,url:job.absolute_url,location:job.location?.name||'',description:'',postedAt:''}));
@@ -79,7 +109,7 @@ async function readCompanyFeed(company){
   const board=segments[0];if(!board)return {status:'unsupported',message:'Lever board name is missing.',jobs:[],complete:false};
   const apiHost=host==='jobs.eu.lever.co'?'api.eu.lever.co':'api.lever.co';
   const data=JSON.parse((await sourceText(`https://${apiHost}/v0/postings/${encodeURIComponent(board)}?mode=json`)).text);
-  raw=(Array.isArray(data)?data:[]).map(job=>({id:job.id,title:job.text,url:job.hostedUrl||job.applyUrl,location:job.categories?.location||'',description:job.descriptionPlain||job.description||'',postedAt:job.createdAt||''}));
+  raw=(Array.isArray(data)?data:[]).map(job=>({id:job.id,title:job.text,url:job.hostedUrl||job.applyUrl,location:job.categories?.location||'',description:[job.descriptionPlain||job.description||'',...(job.lists||[]).map(x=>x.content||'')].join(' '),postedAt:job.createdAt||''}));
   source='Lever';complete=true;
  }else if(host==='jobs.ashbyhq.com'){
   const board=segments[0];if(!board)return {status:'unsupported',message:'Ashby board name is missing.',jobs:[],complete:false};
@@ -96,10 +126,10 @@ async function readCompanyFeed(company){
    raw.push(...searches.flat());source='Careers RSS search';complete=false;
   }
   if(!raw.length){
-   const linked=page.text.match(/https:\/\/(?:boards\.greenhouse\.io|job-boards\.greenhouse\.io|jobs\.lever\.co|jobs\.eu\.lever\.co|jobs\.ashbyhq\.com)\/[a-z\d_-]+/i);
+   const linked=page.text.match(/https:\/\/(?:boards\.greenhouse\.io|job-boards\.greenhouse\.io|jobs\.lever\.co|jobs\.eu\.lever\.co|jobs\.ashbyhq\.com|careers\.smartrecruiters\.com)\/[a-z\d_-]+/i);
    if(linked&&linked[0]!==career.toString())return readCompanyFeed({...company,careers:linked[0]});
   }
-  if(!raw.length)return {status:'unsupported',message:'This careers page does not expose a supported public job feed.',jobs:[],complete:false};
+  if(!raw.length)return {status:'unsupported',message:'This careers page needs a company-specific job connector; no jobs were imported from it.',jobs:[],complete:false};
  }
  const unique=new Map();for(const item of raw){const job=cleanJob(item,company);if(job)unique.set(job.sourceId,job);}
  const jobs=[...unique.values()].sort((a,b)=>(b.postedAt||'').localeCompare(a.postedAt||'')).slice(0,300);

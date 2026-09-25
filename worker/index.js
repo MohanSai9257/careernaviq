@@ -251,7 +251,7 @@ export default {async fetch(request,env){
    const company=await currentCompany(database,id,edit);
    if(!company||company.deleted)return json({error:'Company is no longer in the directory.'},404);
    const now=new Date().toISOString();let result;
-   try{result=await readCompanyFeed(company);}catch(error){result={status:'error',message:String(error.message||'Career source unavailable.').slice(0,240),jobs:[],complete:false};}
+   try{result=await readCompanyFeed({...company,id});}catch(error){result={status:'error',message:String(error.message||'Career source unavailable.').slice(0,240),jobs:[],complete:false};}
    if(result.status==='checked'){
     for(const job of result.jobs){
      await database.prepare('INSERT INTO imported_jobs (id,company_id,company_name,category,title,apply_url,source_id,posted_at,discovered_at,last_seen_at,is_open,min_years,max_years) VALUES (?,?,?,?,?,?,?,?,?,?,1,?,?) ON CONFLICT(company_id,source_id) DO UPDATE SET company_name=excluded.company_name,category=excluded.category,title=excluded.title,apply_url=excluded.apply_url,posted_at=excluded.posted_at,last_seen_at=excluded.last_seen_at,is_open=1,min_years=excluded.min_years,max_years=excluded.max_years').bind(crypto.randomUUID(),id,company.name,job.category,job.title,job.applyUrl,job.sourceId,job.postedAt,now,now,job.minYears,job.maxYears).run();
@@ -272,11 +272,11 @@ export default {async fetch(request,env){
    if((min!==null&&(!Number.isInteger(min)||min<0||min>60))||(max!==null&&(!Number.isInteger(max)||max<0||max>60))||(min!==null&&max!==null&&min>max))return json({error:'Invalid experience range.'},400);
    const durations={day:86400000,week:604800000,month:2592000000};
    const cutoff=windowName==='all'?'':new Date(Date.now()-durations[windowName]).toISOString();
-   const search=String(input?.search||'').trim().slice(0,100).replace(/[\\%_]/g,'\\$&');
-   let sql=`SELECT id,company_id,company_name,category,title,apply_url,posted_at,min_years,max_years FROM imported_jobs WHERE is_open = 1 AND last_seen_at >= ? AND category = ? AND company_id IN (${ids.map(()=>'?').join(',')})`;
-   const values=[new Date(Date.now()-30*86400000).toISOString(),category,...ids];
+   const search=String(input?.search||'').trim().slice(0,100);
+   let sql=`SELECT id,company_id,company_name,category,title,apply_url,posted_at,min_years,max_years FROM imported_jobs WHERE is_open = 1 AND last_seen_at >= ? AND category = ? AND company_id IN (SELECT value FROM json_each(?))`;
+   const values=[new Date(Date.now()-30*86400000).toISOString(),category,JSON.stringify(ids)];
    if(cutoff){sql+=' AND posted_at >= ?';values.push(cutoff);}
-   if(search){sql+=" AND (title LIKE ? ESCAPE '\\' OR company_name LIKE ? ESCAPE '\\')";values.push(`%${search}%`,`%${search}%`);}
+   if(search){sql+=" AND (instr(lower(title),lower(?)) > 0 OR instr(lower(company_name),lower(?)) > 0)";values.push(search,search);}
    if(min!==null){sql+=' AND min_years IS NOT NULL AND (max_years IS NULL OR max_years >= ?)';values.push(min);}
    if(max!==null){sql+=' AND min_years IS NOT NULL AND min_years <= ?';values.push(max);}
    sql+=' ORDER BY CASE WHEN posted_at = \'\' THEN 1 ELSE 0 END, posted_at DESC, discovered_at DESC LIMIT 1000';
@@ -300,7 +300,7 @@ export default {async fetch(request,env){
    const section=url.searchParams.get('section'),category=url.searchParams.get('category');
    if(!sectionNames.has(section)||!sectionCategories.has(category))return json({error:'Invalid section or category.'},400);
    if(!canManage(session)&&!await tabAllowed(env,section))return json({error:restrictedMessage},403);
-   const search=(url.searchParams.get('search')||'').trim().slice(0,100).replace(/[\\%_]/g,'\\$&');
+   const search=(url.searchParams.get('search')||'').trim().slice(0,100);
    const windowName=url.searchParams.get('window')||'all';
    if(!['all','day','week','month'].includes(windowName))return json({error:'Invalid date filter.'},400);
    const durations={day:86400000,week:604800000,month:2592000000};
