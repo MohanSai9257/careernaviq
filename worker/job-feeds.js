@@ -68,6 +68,8 @@ function rssJobs(xml){return [...xml.matchAll(/<item\b[^>]*>([\s\S]*?)<\/item>/g
 // Official recruiting boards verified against the employers' public career pages.
 // Keyed by stable directory IDs, never fuzzy employer names.
 const officialJobBoards={
+ 'CAPGEMINI AMERICA INC':'https://careers.capgemini.com/',
+ 'HCL AMERICA INC':'https://careers.hcltech.com/',
  'Endava Solutions, LLC':'https://careers.smartrecruiters.com/Endava',
  'NAGARRO, INC':'https://careers.smartrecruiters.com/Nagarro1',
  'Brillio, LLC':'https://jobs.lever.co/brillio-2',

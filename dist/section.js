@@ -36,7 +36,8 @@ function status(message){byId('section-status').textContent=message;}
 function sectionNotice(message){status(message);window.showAppNotice?.(message);}
 async function api(url,options){const response=await fetch(url,{cache:'no-store',...options});const result=await response.json();if(!response.ok)throw Error(result.error||'Please try again.');return result;}
 const jobPageSize=100,jobSavedKey='employer-directory-my-list-v1';
-let jobCompanies=null;
+let jobCompanies=null,generatedJobScope='';
+function currentJobScope(){return `${byId('job-company-filter').value}:${byId('job-page-filter').value}`;}
 function savedCompanyIds(){try{const value=JSON.parse(localStorage.getItem(jobSavedKey)||'[]');return new Set(Array.isArray(value)?value:[]);}catch{return new Set();}}
 function jobGroupCompanies(){
  const group=byId('job-company-filter').value,saved=savedCompanyIds();
@@ -59,13 +60,16 @@ async function loadJobCompanies(){
  do{const data=await api('/api/companies'+(cursor?'?after='+cursor:''));added.push(...data.items);cursor=data.next;}while(cursor);
  const overrides=new Map();let after='';
  do{const data=await api('/api/changes'+(after?'?after='+encodeURIComponent(after):''));for(const item of data.items)overrides.set(item.id,item);after=data.next;}while(after);
- jobCompanies=[...base.map(row=>({id:row[0],name:row[0],category:row[3]})),...added.map(item=>({id:item.id,name:item.name,category:item.category}))]
+ jobCompanies=[...base.map(row=>({id:row[0],name:row[0],linkedin:row[1],category:row[3]})),...added.map(item=>({id:item.id,name:item.name,linkedin:item.linkedin,category:item.category}))]
   .filter(company=>!overrides.get(company.id)?.deleted)
-  .map(company=>{const edit=overrides.get(company.id);return {...company,name:edit?.name||company.name,category:edit?.category||company.category};});
+  .map(company=>{const edit=overrides.get(company.id);return {...company,name:edit?.name||company.name,linkedin:edit?.linkedin||company.linkedin,category:edit?.category||company.category};});
  updateJobPages();
 }
 function selectedJobCompanies(){const page=Number(byId('job-page-filter').value)||0;return jobGroupCompanies().slice(page*jobPageSize,(page+1)*jobPageSize);}
 function jobCompanyKey(name){return String(name||'').normalize('NFKC').toLocaleLowerCase().replace(/[^\p{L}\p{N}]+/gu,' ').trim();}
+function linkedinJobsUrl(value){
+ try{const url=new URL(value);const match=url.pathname.match(/^\/company\/([a-z\d_-]+)(?:\/|$)/i);return url.protocol==='https:'&&['linkedin.com','www.linkedin.com'].includes(url.hostname.toLowerCase())&&match?`https://www.linkedin.com/company/${match[1]}/jobs/`:'';}catch{return '';}
+}
 let sectionMenuTrigger=null;
 function actionButton(item){const button=document.createElement('button');button.type='button';button.className='more-button section-more';button.textContent='⋮';button.setAttribute('aria-label',`Actions for ${item.title||'entry'}`);button.setAttribute('aria-haspopup','menu');button.setAttribute('aria-expanded','false');button.addEventListener('click',()=>{if(sectionMenuTrigger===button&&!byId('section-actions-menu').hidden){closeActions(true);return;}openActions(item,button);});return button;}
 function closeActions(restore=false){byId('section-actions-menu').hidden=true;byId('section-move-targets').hidden=true;byId('section-action-move').setAttribute('aria-expanded','false');sectionMenuTrigger?.setAttribute('aria-expanded','false');if(restore&&sectionMenuTrigger?.isConnected)sectionMenuTrigger.focus();}
@@ -134,11 +138,11 @@ function render(items){
   list.append(card);
  }
 }
-function renderJobs(items){
+function renderJobs(items,awaitingGeneration=false){
  const list=byId('section-items');list.replaceChildren();list.classList.add('section-records','job-records');
  const table=document.createElement('table'),head=document.createElement('thead'),row=document.createElement('tr'),body=document.createElement('tbody');
  for(const label of ['Job title','Company','Posted date','Apply']){const cell=document.createElement('th');cell.scope='col';cell.textContent=label;row.append(cell);}head.append(row);
- if(!items.length){const empty=document.createElement('tr'),cell=document.createElement('td');cell.colSpan=4;cell.className='section-table-empty';cell.textContent='No matching jobs found yet.';empty.append(cell);body.append(empty);}
+ if(!items.length){const empty=document.createElement('tr'),cell=document.createElement('td');cell.colSpan=4;cell.className='section-table-empty';cell.textContent=awaitingGeneration?'Choose your filters, then click Generate to check jobs for these companies.':'No matching jobs found yet.';empty.append(cell);body.append(empty);}
  for(const item of items){
   const tr=document.createElement('tr'),title=document.createElement('td'),company=document.createElement('td'),date=document.createElement('td'),apply=document.createElement('td');
   title.textContent=item.title;company.textContent=item.company_name;
@@ -156,6 +160,7 @@ async function loadItems(){
   if(current!==requestNumber)return;
   if(sectionKey==='latest-posted-jobs'){
    const companies=selectedJobCompanies(),min=byId('job-min-years').value,max=byId('job-max-years').value;
+   if(generatedJobScope!==currentJobScope()){renderJobs([],true);status(`Ready to check ${companies.length} companies. Click Generate to fetch their jobs.`);return;}
    if(!byId('job-min-years').checkValidity()||!byId('job-max-years').checkValidity()||(min!==''&&max!==''&&Number(min)>Number(max))){status('Check the experience range.');return;}
    const data=await api('/api/jobs/query',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({companyIds:companies.map(company=>company.id),category,window:byId('date-filter').value,search:byId('section-search').value.trim(),minYears:min===''?null:Number(min),maxYears:max===''?null:Number(max)})});
    if(current!==requestNumber)return;renderJobs(data.items);status(`${data.items.length} ${data.items.length===1?'job':'jobs'} from ${companies.length} companies on this Employer Directory page`);return;
@@ -184,6 +189,7 @@ byId('job-generate').addEventListener('click',async()=>{
  if(!jobCompanies){status('Company list is still loading. Please try again in a moment.');return;}
  const companies=selectedJobCompanies(),button=byId('job-generate');
  if(!companies.length){status('No companies are on this page. Choose another group or page.');return;}
+ generatedJobScope=currentJobScope();
  button.disabled=true;let checked=0,unsupported=0,failed=0,found=0;
  const report=byId('job-source-report'),issues=byId('job-source-list');issues.replaceChildren();report.hidden=true;report.open=false;
  try{
@@ -193,7 +199,9 @@ byId('job-generate').addEventListener('click',async()=>{
    for(let offset=0;offset<results.length;offset++){
     const result=results[offset];if(result.status==='checked'){checked++;found+=result.jobsFound||0;continue;}
     if(result.status==='unsupported')unsupported++;else failed++;
-    const item=document.createElement('li');item.textContent=`${batch[offset].name}: ${result.message||'Career source unavailable.'}`;issues.append(item);
+    const item=document.createElement('li');item.textContent=`${batch[offset].name}: ${result.message||'Career source unavailable.'}`;
+    const jobsUrl=linkedinJobsUrl(batch[offset].linkedin);if(jobsUrl){const link=document.createElement('a');link.href=jobsUrl;link.target='_blank';link.rel='noopener noreferrer';link.textContent='View LinkedIn jobs ↗';item.append(' ',link);}
+    issues.append(item);
    }
    status(`Checking companies ${Math.min(index+batch.length,companies.length)} of ${companies.length}… ${found} matching jobs found so far.`);
    if(index%12===0)await loadItems();
