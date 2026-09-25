@@ -84,7 +84,17 @@ async function readCompanyFeed(company){
  const career=safeJobUrl(officialJobBoards[company.id]||company.careers);if(!career)return {status:'unsupported',message:'No usable official careers link.',jobs:[],complete:false};
  let raw=[],source='careers page',complete=false;
  const host=career.hostname.toLowerCase(),segments=career.pathname.split('/').filter(Boolean);
- if(host==='careers.smartrecruiters.com'||host==='jobs.smartrecruiters.com'){
+ if(company.id==='Amazon.com Services LLC'){
+  const pages=await Promise.all([0,100,200,300].map(async offset=>{
+   const query=new URLSearchParams({base_query:'software engineer',country:'USA',sort:'recent',result_limit:'100',offset:String(offset)});
+   return JSON.parse((await sourceText(`https://www.amazon.jobs/en/search.json?${query}`)).text);
+  }));
+  raw=pages.flatMap(page=>(page.jobs||[]).filter(job=>job.company_name==='Amazon.com Services LLC'&&job.country_code==='USA').map(job=>({
+   id:job.id_icims||job.id||job.job_path,title:job.title,url:new URL(job.job_path,'https://www.amazon.jobs').toString(),
+   location:job.location||'United States',description:job.basic_qualifications||'',postedAt:job.posted_date||''
+  })));
+  source='Amazon careers';complete=false;
+ }else if(host==='careers.smartrecruiters.com'||host==='jobs.smartrecruiters.com'){
   const board=segments[0];if(!board)throw Error('Recruiting board name is missing.');
   let exhausted=false,detailFailed=false;
   for(let offset=0;offset<500;offset+=100){

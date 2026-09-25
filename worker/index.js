@@ -253,8 +253,10 @@ export default {async fetch(request,env){
    const now=new Date().toISOString();let result;
    try{result=await readCompanyFeed({...company,id});}catch(error){result={status:'error',message:String(error.message||'Career source unavailable.').slice(0,240),jobs:[],complete:false};}
    if(result.status==='checked'){
-    for(const job of result.jobs){
-     await database.prepare('INSERT INTO imported_jobs (id,company_id,company_name,category,title,apply_url,source_id,posted_at,discovered_at,last_seen_at,is_open,min_years,max_years) VALUES (?,?,?,?,?,?,?,?,?,?,1,?,?) ON CONFLICT(company_id,source_id) DO UPDATE SET company_name=excluded.company_name,category=excluded.category,title=excluded.title,apply_url=excluded.apply_url,posted_at=excluded.posted_at,last_seen_at=excluded.last_seen_at,is_open=1,min_years=excluded.min_years,max_years=excluded.max_years').bind(crypto.randomUUID(),id,company.name,job.category,job.title,job.applyUrl,job.sourceId,job.postedAt,now,now,job.minYears,job.maxYears).run();
+    for(let index=0;index<result.jobs.length;index+=8){
+     const batch=result.jobs.slice(index,index+8),values=[];
+     const rows=batch.map(job=>{values.push(crypto.randomUUID(),id,company.name,job.category,job.title,job.applyUrl,job.sourceId,job.postedAt,now,now,job.minYears,job.maxYears);return '(?,?,?,?,?,?,?,?,?,?,1,?,?)';});
+     await database.prepare(`INSERT INTO imported_jobs (id,company_id,company_name,category,title,apply_url,source_id,posted_at,discovered_at,last_seen_at,is_open,min_years,max_years) VALUES ${rows.join(',')} ON CONFLICT(company_id,source_id) DO UPDATE SET company_name=excluded.company_name,category=excluded.category,title=excluded.title,apply_url=excluded.apply_url,posted_at=excluded.posted_at,last_seen_at=excluded.last_seen_at,is_open=1,min_years=excluded.min_years,max_years=excluded.max_years`).bind(...values).run();
     }
     if(result.complete)await database.prepare('UPDATE imported_jobs SET is_open = 0 WHERE company_id = ? AND last_seen_at < ?').bind(id,now).run();
    }
