@@ -5,7 +5,7 @@ function safeJobUrl(value){
 async function sourceText(value,options={}){
  let url=safeJobUrl(value);if(!url)throw Error('Career link is not a public HTTPS URL.');
  for(let redirects=0;redirects<3;redirects++){
-  const response=await fetch(url.toString(),{...options,redirect:'manual',signal:AbortSignal.timeout(12000),headers:{Accept:'text/html, application/json, application/rss+xml, application/xml;q=0.9',...options.headers}});
+  const response=await fetch(url.toString(),{...options,redirect:'manual',signal:AbortSignal.timeout(12000),headers:{Accept:'text/html, application/json, application/rss+xml, application/xml;q=0.9','User-Agent':'Mozilla/5.0 (compatible; CareerNaviq/1.0)',...options.headers}});
   if(response.status>=300&&response.status<400){url=safeJobUrl(new URL(response.headers.get('location')||'',url).toString());if(!url)throw Error('Career site redirected to an unsupported address.');continue;}
   if(!response.ok)throw Error(`Career site returned ${response.status}.`);
   if(Number(response.headers.get('content-length')||0)>6000000)throw Error('Career feed is too large.');
@@ -24,9 +24,9 @@ function jobCategory(title,description=''){
  if(/\b(manager|director|recruiter|sales|accountant|mechanical|electrical|manufacturing|process|hardware|product validation)\b/.test(t))return '';
  if(/\b(computer systems? validation|computerized systems? validation|csv engineer|csv consultant|csv specialist|software validation)\b/.test(t))return 'validation';
  if(/\bvalidation engineer\b/.test(t)&&/\b(computerized|computer systems|software|gxp|csv|pharmaceutical systems)\b/.test(d))return 'validation';
- if(/\b(devops|site reliability|\bsre\b|cloud platform|platform engineer|build and release|release engineer|cloud infrastructure|infrastructure engineer)\b/.test(t))return 'devops';
- if(/\b(data analyst|data engineer|big data|analytics engineer|business data analyst|bi data analyst|data platform engineer|data scientist)\b/.test(t))return 'data';
- if(/\b(software engineer|software developer|software development engineer|java developer|java engineer|java software engineer|backend developer|backend engineer|back end developer|back end engineer|full stack developer|full stack engineer|application developer|application engineer|web developer|web engineer|java full stack|fullstack developer|fullstack engineer|frontend developer|frontend engineer|front end developer|front end engineer|python developer|net developer|mobile developer|android developer|ios developer)\b/.test(t)||/\bjava\b.*\b(developer|engineer)\b/.test(t))return 'java';
+ if(/\b(devops|site reliability|\bsre\b|cloud platform|platform engineer|build and release|release engineer|cloud infrastructure|infrastructure engineer|cloud architect)\b/.test(t))return 'devops';
+ if(/\b(data analyst|data engineer|big data|analytics engineer|business data analyst|bi data analyst|data platform engineer|data scientist|data architect|data management|data platform)\b/.test(t))return 'data';
+ if(/\b(software engineer|software developer|software development engineer|java developer|java engineer|java software engineer|backend developer|backend engineer|back end developer|back end engineer|full stack developer|full stack engineer|application developer|application engineer|web developer|web engineer|java full stack|fullstack developer|fullstack engineer|frontend developer|frontend engineer|front end developer|front end engineer|python developer|net developer|mobile developer|android developer|ios developer|salesforce developer)\b/.test(t)||/\bjava\b.*\b(developer|engineer)\b/.test(t))return 'java';
  if(/\bprogrammer analyst\b/.test(t)&&/\b(software|java|application development|coding|programming)\b/.test(d))return 'java';
  return '';
 }
@@ -236,6 +236,28 @@ async function readCompanyFeed(company,depth=0){
 }
 
 const eliteSourceId='source:elite-technical';
+const aggregateJobSourceId='source:career-vendors';
+const jobSourceIds=[eliteSourceId,'source:vaco','source:apex-systems','source:motion-recruitment','source:inspyr-solutions'];
+function vendorCategory(title,description=''){
+ const category=jobCategory(title,description);if(category)return category;
+ if(/\banalyst\b/i.test(title)&&!/\b(?:quality assurance|qa|financial|finance|accounting|budget|credit|risk|security operations|soc analyst)\b/i.test(title))return 'data';
+ if(/\b(?:business systems?|systems?|compensation|operations|reporting|process|support|application|product|data|business intelligence|bi)\s+analyst\b/i.test(title))return 'data';
+ if(/\b(?:data engineering|data warehouse|etl|reporting|business intelligence|analytics)\b/i.test(title))return 'data';
+ if(/\bsoftware engineering\b/i.test(title)&&! /manager|director/i.test(title))return 'java';
+ if(/\b(?:servicenow|as400|bmc helix|ai\/ml|application|web|software|full stack|backend|frontend|front end|back end|java)\s+(?:developer|engineer)\b/i.test(title))return 'java';
+ return '';
+}
+function cleanVendorJob(raw,source){
+ const title=plain(raw.title).slice(0,200),category=vendorCategory(title,raw.description);
+ const apply=safeJobUrl(raw.url);if(!title||!category||!apply)return null;
+ const years=yearsFromDescription(raw.description||'');
+ return {sourceId:String(raw.id||apply.toString()).slice(0,500),companyName:source.name,title,category,applyUrl:apply.toString(),postedAt:dateValue(raw.postedAt).slice(0,10),minYears:years.min,maxYears:years.max};
+}
+function uniqueJobs(raw,source){
+ const unique=new Map();
+ for(const item of raw){const job=cleanVendorJob(item,source);if(job)unique.set(job.sourceId,job);}
+ return [...unique.values()].sort((a,b)=>(b.postedAt||'').localeCompare(a.postedAt||'')).slice(0,300);
+}
 function eliteRows(html){
  const rows=new Map();
  for(const match of html.matchAll(/<div class="jobbox">([\s\S]*?)<div class="jobbody">([\s\S]*?)<\/div>/gi)){
@@ -249,41 +271,90 @@ function eliteRows(html){
  return [...rows.values()];
 }
 function eliteCategory(title,description){
- const category=jobCategory(title,description);if(category)return category;
- if(/\banalyst\b/i.test(title)&&!/\b(?:quality assurance|qa|financial|finance|accounting|budget|credit|risk|security operations|soc analyst)\b/i.test(title))return 'data';
- if(/\b(?:business systems?|systems?|compensation|operations|reporting|process|support|application|product|data|business intelligence|bi)\s+analyst\b/i.test(title))return 'data';
- if(/\b(?:data engineering|data warehouse|etl|reporting|business intelligence|analytics)\b/i.test(title))return 'data';
- if(/\bsoftware engineering\b/i.test(title)&&! /manager|director/i.test(title))return 'java';
- if(/\b(?:servicenow|as400|bmc helix|ai\/ml|application|web|software|full stack|backend|frontend|front end|back end|java)\s+(?:developer|engineer)\b/i.test(title))return 'java';
- return '';
+ return vendorCategory(title,description);
 }
 async function readEliteFeed(){
  const {text}=await sourceText('https://www.elitetechnicaljobs.com/?jobtext=&jobstate=');
  const rows=eliteRows(text),candidates=rows.filter(row=>eliteCategory(row.title,row.description));
- const jobs=[];
+ const source={id:eliteSourceId,name:'Elite Technical'};
+ const enriched=[];
  for(let offset=0;offset<candidates.length;offset+=5){
-  const batch=await Promise.all(candidates.slice(offset,offset+5).map(async row=>{
-   // The listing itself supplies title/date/URL. Failed enrichment never fabricates experience.
-   let description='';
-   try{const detail=await sourceText(row.applyUrl);const data=jsonLdJobs(detail.text,row.applyUrl);description=data[0]?.description||'';}catch{}
-   const years=yearsFromDescription(description);
-   return {...row,category:eliteCategory(row.title,row.description),minYears:years.min,maxYears:years.max};
-  }));jobs.push(...batch);
+  enriched.push(...await Promise.all(candidates.slice(offset,offset+5).map(async row=>{
+   let description=row.description;
+   try{const detail=await sourceText(row.applyUrl);const data=jsonLdJobs(detail.text,row.applyUrl);description=data[0]?.description||description;}catch{}
+   return {id:row.sourceId,title:row.title,url:row.applyUrl,postedAt:row.postedAt,description};
+  })));
  }
- return {status:'checked',message:`Checked ${rows.length} Elite Technical listings; ${jobs.length} match the technology tabs.`,jobs,complete:true};
+ const jobs=uniqueJobs(enriched,source);
+ return {...source,status:'checked',message:`Checked ${rows.length} Elite Technical listings; ${jobs.length} match the technology tabs.`,jobs,complete:true};
+}
+function tableRows(html,baseUrl,source,options={}){
+ const rows=[];
+ for(const match of html.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/gi)){
+  const row=match[1],link=row.match(/<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/i);
+  if(!link)continue;
+  const cells=[...row.matchAll(/<td\b[^>]*>([\s\S]*?)<\/td>/gi)].map(cell=>plain(cell[1]));
+  const posted=(row.match(/(\d{1,2}\/\d{1,2}\/\d{4})/)||[])[1]||'';
+  rows.push({id:new URL(decodeLink(link[1]),baseUrl).toString(),title:plain(link[2]),url:new URL(decodeLink(link[1]),baseUrl).toString(),postedAt:posted,description:cells.join(' ')});
+ }
+ return uniqueJobs(rows,source);
+}
+async function readVacoFeed(){
+ const source={id:'source:vaco',name:'Vaco'},raw=[];
+ for(let page=1;page<=3;page++){
+  const url=`https://jobs.vaco.com/api/requisitions/search${page>1?`?page=${page}`:''}`;
+  raw.push(...tableRows((await sourceText(url)).text,'https://jobs.vaco.com',source));
+ }
+ return {...source,status:'checked',message:`Checked Vaco jobs.`,jobs:raw,complete:false};
+}
+async function readApexFeed(){
+ const source={id:'source:apex-systems',name:'Apex Systems'};
+ const url='https://www.apexsystems.com/search-results-crp?catalogcode=CRP&address=&radius=50&page=1&rows=100&query=%2A&remote=&sort=lastposteddesc';
+ const jobs=tableRows((await sourceText(url)).text,'https://www.apexsystems.com',source);
+ return {...source,status:'checked',message:`Checked Apex Systems jobs.`,jobs,complete:false};
+}
+function linkJobs(html,baseUrl,source,pattern){
+ const raw=[];
+ for(const match of html.matchAll(/<a\b([^>]*)>([\s\S]*?)<\/a>/gi)){
+  const href=match[1].match(/href=["']([^"']+)["']/i)?.[1];if(!href)continue;
+  const url=new URL(decodeLink(href),baseUrl).toString();if(!pattern.test(new URL(url).pathname))continue;
+  const title=plain(match[2]);if(!title||title.length<4)continue;
+  raw.push({id:url,title,url,postedAt:'',description:title});
+ }
+ return uniqueJobs(raw,source);
+}
+async function readMotionFeed(){
+ const source={id:'source:motion-recruitment',name:'Motion Recruitment'};
+ const jobs=linkJobs((await sourceText('https://motionrecruitment.com/tech-jobs')).text,'https://motionrecruitment.com',source,/^\/tech-jobs\/[^/]+\/(?:contract|direct-hire)\//);
+ return {...source,status:'checked',message:`Checked Motion Recruitment jobs.`,jobs,complete:false};
+}
+async function readInspyrFeed(){
+ const source={id:'source:inspyr-solutions',name:'INSPYR Solutions'};
+ const jobs=linkJobs((await sourceText('https://www.inspyrsolutions.com/job-search/')).text,'https://www.inspyrsolutions.com',source,/^\/job\/\d{2}-/);
+ return {...source,status:'checked',message:`Checked INSPYR Solutions jobs.`,jobs,complete:false};
+}
+async function readVendorFeeds(){
+ const readers=[readEliteFeed,readVacoFeed,readApexFeed,readMotionFeed,readInspyrFeed],results=[];
+ for(const reader of readers){
+  try{results.push(await reader());}
+  catch(error){results.push({id:'source:error-'+results.length,name:'Job source',status:'error',message:String(error.message).slice(0,160),jobs:[]});}
+ }
+ return results;
 }
 async function refreshElite(env){
  const database=db(env),now=new Date().toISOString(),lockCutoff=new Date(Date.now()-180000).toISOString();
- const lock=await database.prepare("INSERT INTO job_source_checks (company_id,checked_at,status,message,jobs_found) VALUES (?,?,'refreshing','Refreshing Elite Technical',0) ON CONFLICT(company_id) DO UPDATE SET checked_at=excluded.checked_at,status='refreshing' WHERE job_source_checks.checked_at < ? RETURNING company_id").bind(eliteSourceId,now,lockCutoff).first();
- if(!lock)return {status:'cached',message:'Using the latest saved jobs; a refresh ran recently or is in progress.'};
+ const lock=await database.prepare("INSERT INTO job_source_checks (company_id,checked_at,status,message,jobs_found) VALUES (?,?,'refreshing','Loading...',0) ON CONFLICT(company_id) DO UPDATE SET checked_at=excluded.checked_at,status='refreshing',message='Loading...' WHERE job_source_checks.checked_at < ? RETURNING company_id").bind(aggregateJobSourceId,now,lockCutoff).first();
+ if(!lock)return {status:'cached',message:'Loading...'};
  try{
-  const result=await readEliteFeed();
-  for(let i=0;i<result.jobs.length;i+=8){
-   const values=[],rows=result.jobs.slice(i,i+8).map(job=>{values.push(crypto.randomUUID(),eliteSourceId,'Elite Technical',job.category,job.title,job.applyUrl,job.sourceId,job.postedAt,now,now,job.minYears,job.maxYears);return '(?,?,?,?,?,?,?,?,?,?,1,?,?)';});
-   await database.prepare(`INSERT INTO imported_jobs (id,company_id,company_name,category,title,apply_url,source_id,posted_at,discovered_at,last_seen_at,is_open,min_years,max_years) VALUES ${rows.join(',')} ON CONFLICT(company_id,source_id) DO UPDATE SET category=excluded.category,title=excluded.title,apply_url=excluded.apply_url,posted_at=excluded.posted_at,last_seen_at=excluded.last_seen_at,is_open=1,min_years=excluded.min_years,max_years=excluded.max_years`).bind(...values).run();
+  const sources=await readVendorFeeds(),successful=sources.filter(source=>source.status==='checked'),jobs=successful.flatMap(source=>source.jobs.map(job=>({...job,sourceId:job.sourceId,sourceKey:source.id,companyName:source.name})));
+  if(!successful.length)throw Error(sources.map(source=>source.message).filter(Boolean).join('; ')||'No job sources were available.');
+  for(let i=0;i<jobs.length;i+=8){
+   const values=[],rows=jobs.slice(i,i+8).map(job=>{values.push(crypto.randomUUID(),job.sourceKey,job.companyName,job.category,job.title,job.applyUrl,job.sourceId,job.postedAt,now,now,job.minYears,job.maxYears);return '(?,?,?,?,?,?,?,?,?,?,1,?,?)';});
+   await database.prepare(`INSERT INTO imported_jobs (id,company_id,company_name,category,title,apply_url,source_id,posted_at,discovered_at,last_seen_at,is_open,min_years,max_years) VALUES ${rows.join(',')} ON CONFLICT(company_id,source_id) DO UPDATE SET company_name=excluded.company_name,category=excluded.category,title=excluded.title,apply_url=excluded.apply_url,posted_at=excluded.posted_at,last_seen_at=excluded.last_seen_at,is_open=1,min_years=excluded.min_years,max_years=excluded.max_years`).bind(...values).run();
   }
-  await database.prepare('UPDATE imported_jobs SET is_open=0 WHERE company_id=? AND last_seen_at < ?').bind(eliteSourceId,now).run();
-  await database.prepare("UPDATE job_source_checks SET status='checked',message=?,jobs_found=? WHERE company_id=?").bind(result.message,result.jobs.length,eliteSourceId).run();
-  return {status:'checked',message:result.message,jobsFound:result.jobs.length,checkedAt:now};
- }catch(error){await database.prepare("UPDATE job_source_checks SET status='error',message=? WHERE company_id=?").bind(String(error.message).slice(0,240),eliteSourceId).run();throw error;}
+  for(const source of successful)await database.prepare('UPDATE imported_jobs SET is_open=0 WHERE company_id=? AND last_seen_at < ?').bind(source.id,now).run();
+  const message=`Loaded ${jobs.length} jobs from ${successful.length} sources.`;
+  await database.prepare("UPDATE job_source_checks SET status='checked',message=?,jobs_found=? WHERE company_id=?").bind(message,jobs.length,aggregateJobSourceId).run();
+  return {status:'checked',message,jobsFound:jobs.length,checkedAt:now,sources:sources.map(source=>({name:source.name,status:source.status,jobsFound:source.jobs.length,message:source.message}))};
+ }catch(error){await database.prepare("UPDATE job_source_checks SET status='error',message=? WHERE company_id=?").bind(String(error.message).slice(0,240),aggregateJobSourceId).run();throw error;}
 }

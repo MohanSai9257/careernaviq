@@ -42,13 +42,13 @@ export default {async fetch(request,env){
    const call=await request.json(),reply=result=>json({jsonrpc:'2.0',id:call.id,result});
    if(call.method==='initialize')return reply({protocolVersion:'2024-11-05',capabilities:{tools:{}},serverInfo:{name:'CareerNaviq jobs',version:'1.0.0'}});
    if(call.method==='notifications/initialized')return new Response(null,{status:202});
-   if(call.method==='tools/list')return reply({tools:[{name:'refresh_elite_jobs',description:'Import current Elite Technical technology jobs and return the saved source status. Administrator only.',inputSchema:{type:'object',properties:{},additionalProperties:false}},{name:'elite_jobs_status',description:'Read Elite Technical import status and saved job counts. Administrator only.',inputSchema:{type:'object',properties:{},additionalProperties:false}}]});
+   if(call.method==='tools/list')return reply({tools:[{name:'refresh_elite_jobs',description:'Import current technology jobs and return the saved source status. Administrator only.',inputSchema:{type:'object',properties:{},additionalProperties:false}},{name:'elite_jobs_status',description:'Read job import status and saved job counts. Administrator only.',inputSchema:{type:'object',properties:{},additionalProperties:false}}]});
    const email=(request.headers.get('oai-authenticated-user-email')||'').toLowerCase();
    if(!request.headers.get('oai-authenticated-user-id')||!(email===adminEmail||await db(env).prepare('SELECT email FROM coadmins WHERE email=?').bind(email).first()))return json({error:'Verified administrator identity required.'},403);
    if(call.method==='tools/call'){
     let result;
     if(call.params?.name==='refresh_elite_jobs')result=await refreshElite(env);
-    else if(call.params?.name==='elite_jobs_status')result={source:await db(env).prepare('SELECT * FROM job_source_checks WHERE company_id=?').bind(eliteSourceId).first(),counts:(await db(env).prepare('SELECT category,count(*) AS count FROM imported_jobs WHERE company_id=? AND is_open=1 GROUP BY category').bind(eliteSourceId).all()).results};
+    else if(call.params?.name==='elite_jobs_status')result={source:await db(env).prepare('SELECT * FROM job_source_checks WHERE company_id=?').bind(aggregateJobSourceId).first(),counts:(await db(env).prepare('SELECT category,count(*) AS count FROM imported_jobs WHERE company_id IN (SELECT value FROM json_each(?)) AND is_open=1 GROUP BY category').bind(JSON.stringify(jobSourceIds)).all()).results};
     else return json({jsonrpc:'2.0',id:call.id,error:{code:-32601,message:'Unknown tool'}});
     return reply({content:[{type:'text',text:JSON.stringify(result)}]});
    }
@@ -268,7 +268,7 @@ export default {async fetch(request,env){
    if(!sameOrigin(request,url))return json({error:'Use the jobs page to view results.'},403);
    if(!canManage(session)&&!await tabAllowed(env,'latest-posted-jobs'))return json({error:restrictedMessage},403);
    let input;try{input=await jsonInput(request);}catch{return json({error:'Invalid job filters.'},400);}
-   const ids=[eliteSourceId],category=String(input?.category||''),windowName=String(input?.window||'all');
+   const ids=jobSourceIds,category=String(input?.category||''),windowName=String(input?.window||'all');
    if(!Array.isArray(ids)||ids.length>100||ids.some(id=>typeof id!=='string'||id.length>250)||!sectionCategories.has(category)||!['all','day','week','month'].includes(windowName))return json({error:'Invalid job filters.'},400);
    if(!ids.length)return json({items:[]});
    const min=input?.minYears==null?null:Number(input.minYears),max=input?.maxYears==null?null:Number(input.maxYears);
@@ -284,7 +284,7 @@ export default {async fetch(request,env){
    if(max!==null){sql+=' AND min_years IS NOT NULL AND min_years <= ?';values.push(max);}
    sql+=' ORDER BY CASE WHEN posted_at = \'\' THEN 1 ELSE 0 END, posted_at DESC, discovered_at DESC LIMIT 1000';
    const {results}=await db(env).prepare(sql).bind(...values).all();
-   const source=await db(env).prepare('SELECT checked_at,status,message FROM job_source_checks WHERE company_id=?').bind(eliteSourceId).first();
+   const source=await db(env).prepare('SELECT checked_at,status,message FROM job_source_checks WHERE company_id=?').bind(aggregateJobSourceId).first();
    return json({items:results,source});
   }
   if(['/companies.json','/api/changes','/api/companies','/api/company'].includes(url.pathname)&&!canManage(session)&&!await tabAllowed(env,'employer-directory'))return json({error:restrictedMessage},403);
