@@ -24,13 +24,13 @@ byId('section-ext-wrap').hidden=!isRecruiter;
 byId('section-details-wrap').hidden=!isContact;byId('section-details').required=false;
 byId('section-file-wrap').hidden=!isDocument;
 byId('section-search').placeholder=`Search ${config.title.toLowerCase()}`;
-byId('date-filter-wrap').hidden=sectionKey!=='latest-posted-jobs';
+byId('date-filter-wrap').hidden=true;
 byId('job-company-filter-wrap').hidden=true;
 byId('job-page-filter-wrap').hidden=true;
-byId('job-min-years-wrap').hidden=sectionKey!=='latest-posted-jobs';
-byId('job-max-years-wrap').hidden=sectionKey!=='latest-posted-jobs';
-byId('job-generate').hidden=sectionKey!=='latest-posted-jobs';
-document.querySelector('.section-toolbar').classList.toggle('job-toolbar',sectionKey==='latest-posted-jobs');
+byId('job-min-years-wrap').hidden=true;
+byId('job-max-years-wrap').hidden=true;
+byId('job-generate').hidden=true;
+document.querySelector('.section-toolbar').hidden=sectionKey==='latest-posted-jobs';
 byId('section-posted-wrap').hidden=sectionKey!=='latest-posted-jobs';
 byId('section-posted').required=false;
 function status(message){byId('section-status').textContent=message;}
@@ -108,7 +108,7 @@ function renderJobs(items,awaitingGeneration=false){
  const list=byId('section-items');list.replaceChildren();list.classList.add('section-records','job-records');
  const table=document.createElement('table'),head=document.createElement('thead'),row=document.createElement('tr'),body=document.createElement('tbody');
  for(const label of ['Job title','Company','Posted date','Apply']){const cell=document.createElement('th');cell.scope='col';cell.textContent=label;row.append(cell);}head.append(row);
- if(!items.length){const empty=document.createElement('tr'),cell=document.createElement('td');cell.colSpan=4;cell.className='section-table-empty';cell.textContent=awaitingGeneration?'Choose your filters, then click Generate to check jobs for these companies.':'No matching jobs found yet.';empty.append(cell);body.append(empty);}
+ if(!items.length){const empty=document.createElement('tr'),cell=document.createElement('td');cell.colSpan=4;cell.className='section-table-empty';cell.textContent=awaitingGeneration?'Refreshing Elite Technical jobs for this category...':'No matching jobs found yet.';empty.append(cell);body.append(empty);}
  for(const item of items){
   const tr=document.createElement('tr'),title=document.createElement('td'),company=document.createElement('td'),date=document.createElement('td'),apply=document.createElement('td');
   title.textContent=item.title;company.textContent=item.company_name;
@@ -119,31 +119,30 @@ function renderJobs(items,awaitingGeneration=false){
  table.append(head,body);list.append(table);
 }
 async function loadItems(){
- const current=++requestNumber,params=new URLSearchParams({section:sectionKey,category,search:byId('section-search').value.trim(),window:byId('date-filter').value});
+ const current=++requestNumber,params=new URLSearchParams({section:sectionKey,category,search:byId('section-search').value.trim(),window:'all'});
  status('Loading…');
  try{
   if(current!==requestNumber)return;
   if(sectionKey==='latest-posted-jobs'){
-   const min=byId('job-min-years').value,max=byId('job-max-years').value;
-   if(!byId('job-min-years').checkValidity()||!byId('job-max-years').checkValidity()||(min!==''&&max!==''&&Number(min)>Number(max))){status('Check the experience range.');return;}
-   const data=await api('/api/jobs/query',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({category,window:byId('date-filter').value,search:byId('section-search').value.trim(),minYears:min===''?null:Number(min),maxYears:max===''?null:Number(max)})});
-   if(current!==requestNumber)return;renderJobs(data.items);if(!automaticRefreshAttempted&&(!data.source?.checked_at||Date.now()-Date.parse(data.source.checked_at)>14400000)){automaticRefreshAttempted=true;setTimeout(refreshJobs,0);}status(`${data.items.length} matching jobs · Elite Technical${data.source?.checked_at?' · Last checked '+new Date(data.source.checked_at).toLocaleString():''}. Posted dates are date-only; the 24-hour filter includes yesterday and today.${data.source?.status==='error'?' Refresh failed; showing saved jobs.':''}`);return data.items.length;
+   const data=await api('/api/jobs/query',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({category,window:'all',search:'',minYears:null,maxYears:null})});
+   if(current!==requestNumber)return;renderJobs(data.items);if(!automaticRefreshAttempted&&!data.source?.checked_at){automaticRefreshAttempted=true;setTimeout(()=>refreshJobs(category),0);}status(`${data.items.length} ${category==='devops'?'DevOps':category.charAt(0).toUpperCase()+category.slice(1)} jobs · Elite Technical${data.source?.checked_at?' · Last refreshed '+new Date(data.source.checked_at).toLocaleString():''}.${data.source?.status==='error'?' Refresh failed; showing saved jobs.':''}`);return data.items.length;
   }
   const data=await api(`/api/section-items?${params}`);if(current!==requestNumber)return;
   render(data.items);status(`${data.items.length} entries`);
  }
  catch(error){if(current===requestNumber)status(error.message);}
 }
-function selectTab(tab){category=tab.id.slice(4);for(const item of tabs){const selected=item===tab;item.setAttribute('aria-selected',String(selected));item.tabIndex=selected?0:-1;}byId('section-panel').setAttribute('aria-labelledby',tab.id);byId('section-search').value='';byId('date-filter').value='all';loadItems();}
+function selectTab(tab){category=tab.id.slice(4);for(const item of tabs){const selected=item===tab;item.setAttribute('aria-selected',String(selected));item.tabIndex=selected?0:-1;item.disabled=sectionKey==='latest-posted-jobs'&&selected;}byId('section-panel').setAttribute('aria-labelledby',tab.id);byId('section-search').value='';byId('date-filter').value='all';if(sectionKey==='latest-posted-jobs')refreshJobs(category);else loadItems();}
 for(const tab of tabs){tab.addEventListener('click',()=>selectTab(tab));tab.addEventListener('keydown',event=>{if(event.key!=='ArrowRight'&&event.key!=='ArrowLeft')return;event.preventDefault();const next=tabs[(tabs.indexOf(tab)+(event.key==='ArrowRight'?1:-1)+tabs.length)%tabs.length];selectTab(next);next.focus();});}
 byId('section-search').addEventListener('input',()=>{clearTimeout(searchTimer);searchTimer=setTimeout(loadItems,250);});
 byId('date-filter').addEventListener('change',loadItems);
 for(const id of ['job-min-years','job-max-years'])byId(id).addEventListener('change',loadItems);
-async function refreshJobs(){
- const button=byId('job-generate');button.disabled=true;button.textContent='Refreshing…';status('Fetching Elite Technical jobs…');
+async function refreshJobs(targetCategory=category){
+ const activeTab=byId(`tab-${targetCategory}`);for(const tab of tabs)tab.disabled=sectionKey==='latest-posted-jobs';
+ renderJobs([],true);status(`Refreshing Elite Technical ${targetCategory==='devops'?'DevOps':targetCategory.charAt(0).toUpperCase()+targetCategory.slice(1)} jobs…`);
  try{const result=await api('/api/jobs/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});await loadItems();window.showAppNotice?.(result.message);}
  catch(error){await loadItems();status(`Refresh failed: ${error.message} Saved jobs remain available.`);}
- finally{button.disabled=false;button.textContent='Generate';}
+ finally{for(const tab of tabs)tab.disabled=false;activeTab?.setAttribute('aria-selected','true');}
 }
 byId('job-generate').addEventListener('click',refreshJobs);
 if(sectionKey==='latest-posted-jobs')setInterval(()=>{if(!document.hidden)loadItems();},240000);

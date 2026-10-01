@@ -250,8 +250,11 @@ function eliteRows(html){
 }
 function eliteCategory(title,description){
  const category=jobCategory(title,description);if(category)return category;
+ if(/\banalyst\b/i.test(title)&&!/\b(?:quality assurance|qa|financial|finance|accounting|budget|credit|risk|security operations|soc analyst)\b/i.test(title))return 'data';
+ if(/\b(?:business systems?|systems?|compensation|operations|reporting|process|support|application|product|data|business intelligence|bi)\s+analyst\b/i.test(title))return 'data';
+ if(/\b(?:data engineering|data warehouse|etl|reporting|business intelligence|analytics)\b/i.test(title))return 'data';
  if(/\bsoftware engineering\b/i.test(title)&&! /manager|director/i.test(title))return 'java';
- if(/\b(?:servicenow|as400|bmc helix|ai\/ml) developer\b/i.test(title))return 'java';
+ if(/\b(?:servicenow|as400|bmc helix|ai\/ml|application|web|software|full stack|backend|frontend|front end|back end|java)\s+(?:developer|engineer)\b/i.test(title))return 'java';
  return '';
 }
 async function readEliteFeed(){
