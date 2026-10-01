@@ -38,6 +38,23 @@ async function jsonInput(request){if(!request.headers.get('Content-Type')?.inclu
 export default {async fetch(request,env){
  const url=new URL(request.url);
  try{
+  if(url.pathname==='/mcp'&&request.method==='POST'){
+   const call=await request.json(),reply=result=>json({jsonrpc:'2.0',id:call.id,result});
+   if(call.method==='initialize')return reply({protocolVersion:'2024-11-05',capabilities:{tools:{}},serverInfo:{name:'CareerNaviq jobs',version:'1.0.0'}});
+   if(call.method==='notifications/initialized')return new Response(null,{status:202});
+   if(call.method==='tools/list')return reply({tools:[{name:'refresh_elite_jobs',description:'Import current Elite Technical technology jobs and return the saved source status. Administrator only.',inputSchema:{type:'object',properties:{},additionalProperties:false}},{name:'elite_jobs_status',description:'Read Elite Technical import status and saved job counts. Administrator only.',inputSchema:{type:'object',properties:{},additionalProperties:false}}]});
+   const email=(request.headers.get('oai-authenticated-user-email')||'').toLowerCase();
+   if(!request.headers.get('oai-authenticated-user-id')||!(email===adminEmail||await db(env).prepare('SELECT email FROM coadmins WHERE email=?').bind(email).first()))return json({error:'Verified administrator identity required.'},403);
+   if(call.method==='tools/call'){
+    let result;
+    if(call.params?.name==='refresh_elite_jobs')result=await refreshElite(env);
+    else if(call.params?.name==='elite_jobs_status')result={source:await db(env).prepare('SELECT * FROM job_source_checks WHERE company_id=?').bind(eliteSourceId).first(),counts:(await db(env).prepare('SELECT category,count(*) AS count FROM imported_jobs WHERE company_id=? AND is_open=1 GROUP BY category').bind(eliteSourceId).all()).results};
+    else return json({jsonrpc:'2.0',id:call.id,error:{code:-32601,message:'Unknown tool'}});
+    return reply({content:[{type:'text',text:JSON.stringify(result)}]});
+   }
+   return json({jsonrpc:'2.0',id:call.id,error:{code:-32601,message:'Unknown method'}});
+  }
+
   if(url.pathname==='/api/session'&&request.method==='GET'){
    const session=await sessionFor(request,env);return json(session?{email:session.email,role:session.role,status:session.status}:{role:'guest',status:'none'});
   }
@@ -245,35 +262,19 @@ export default {async fetch(request,env){
   if(url.pathname==='/api/jobs/generate'&&request.method==='POST'){
    if(!sameOrigin(request,url))return json({error:'Use the jobs page to generate results.'},403);
    if(!canManage(session)&&!await tabAllowed(env,'latest-posted-jobs'))return json({error:restrictedMessage},403);
-   let input;try{input=await jsonInput(request);}catch{return json({error:'Choose a company to check.'},400);}
-   const id=String(input?.companyId||'');if(!id||id.length>250)return json({error:'Invalid company.'},400);
-   const database=db(env),edit=await database.prepare('SELECT payload FROM company_edits WHERE id = ?').bind(id).first();
-   const company=await currentCompany(database,id,edit);
-   if(!company||company.deleted)return json({error:'Company is no longer in the directory.'},404);
-   const now=new Date().toISOString();let result;
-   try{result=await readCompanyFeed({...company,id});}catch(error){result={status:'error',message:String(error.message||'Career source unavailable.').slice(0,240),jobs:[],complete:false};}
-   if(result.status==='checked'){
-    for(let index=0;index<result.jobs.length;index+=8){
-     const batch=result.jobs.slice(index,index+8),values=[];
-     const rows=batch.map(job=>{values.push(crypto.randomUUID(),id,company.name,job.category,job.title,job.applyUrl,job.sourceId,job.postedAt,now,now,job.minYears,job.maxYears);return '(?,?,?,?,?,?,?,?,?,?,1,?,?)';});
-     await database.prepare(`INSERT INTO imported_jobs (id,company_id,company_name,category,title,apply_url,source_id,posted_at,discovered_at,last_seen_at,is_open,min_years,max_years) VALUES ${rows.join(',')} ON CONFLICT(company_id,source_id) DO UPDATE SET company_name=excluded.company_name,category=excluded.category,title=excluded.title,apply_url=excluded.apply_url,posted_at=excluded.posted_at,last_seen_at=excluded.last_seen_at,is_open=1,min_years=excluded.min_years,max_years=excluded.max_years`).bind(...values).run();
-    }
-    if(result.complete)await database.prepare('UPDATE imported_jobs SET is_open = 0 WHERE company_id = ? AND last_seen_at < ?').bind(id,now).run();
-   }
-   await database.prepare('INSERT INTO job_source_checks (company_id,checked_at,status,message,jobs_found) VALUES (?,?,?,?,?) ON CONFLICT(company_id) DO UPDATE SET checked_at=excluded.checked_at,status=excluded.status,message=excluded.message,jobs_found=excluded.jobs_found').bind(id,now,result.status,result.message,result.jobs.length).run();
-   return json({companyId:id,company:company.name,status:result.status,message:result.message,jobsFound:result.jobs.length});
+   return json(await refreshElite(env));
   }
   if(url.pathname==='/api/jobs/query'&&request.method==='POST'){
    if(!sameOrigin(request,url))return json({error:'Use the jobs page to view results.'},403);
    if(!canManage(session)&&!await tabAllowed(env,'latest-posted-jobs'))return json({error:restrictedMessage},403);
    let input;try{input=await jsonInput(request);}catch{return json({error:'Invalid job filters.'},400);}
-   const ids=input?.companyIds,category=String(input?.category||''),windowName=String(input?.window||'all');
+   const ids=[eliteSourceId],category=String(input?.category||''),windowName=String(input?.window||'all');
    if(!Array.isArray(ids)||ids.length>100||ids.some(id=>typeof id!=='string'||id.length>250)||!sectionCategories.has(category)||!['all','day','week','month'].includes(windowName))return json({error:'Invalid job filters.'},400);
    if(!ids.length)return json({items:[]});
    const min=input?.minYears==null?null:Number(input.minYears),max=input?.maxYears==null?null:Number(input.maxYears);
    if((min!==null&&(!Number.isInteger(min)||min<0||min>60))||(max!==null&&(!Number.isInteger(max)||max<0||max>60))||(min!==null&&max!==null&&min>max))return json({error:'Invalid experience range.'},400);
    const durations={day:86400000,week:604800000,month:2592000000};
-   const cutoff=windowName==='all'?'':new Date(Date.now()-durations[windowName]).toISOString();
+   const cutoff=windowName==='all'?'':new Date(Date.now()-durations[windowName]).toISOString().slice(0,10);
    const search=String(input?.search||'').trim().slice(0,100);
    let sql=`SELECT id,company_id,company_name,category,title,apply_url,posted_at,min_years,max_years FROM imported_jobs WHERE is_open = 1 AND last_seen_at >= ? AND category = ? AND company_id IN (SELECT value FROM json_each(?))`;
    const values=[new Date(Date.now()-30*86400000).toISOString(),category,JSON.stringify(ids)];
@@ -283,7 +284,8 @@ export default {async fetch(request,env){
    if(max!==null){sql+=' AND min_years IS NOT NULL AND min_years <= ?';values.push(max);}
    sql+=' ORDER BY CASE WHEN posted_at = \'\' THEN 1 ELSE 0 END, posted_at DESC, discovered_at DESC LIMIT 1000';
    const {results}=await db(env).prepare(sql).bind(...values).all();
-   return json({items:results});
+   const source=await db(env).prepare('SELECT checked_at,status,message FROM job_source_checks WHERE company_id=?').bind(eliteSourceId).first();
+   return json({items:results,source});
   }
   if(['/companies.json','/api/changes','/api/companies','/api/company'].includes(url.pathname)&&!canManage(session)&&!await tabAllowed(env,'employer-directory'))return json({error:restrictedMessage},403);
   if(url.pathname==='/api/profile'&&request.method==='GET'){

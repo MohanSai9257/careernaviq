@@ -11,7 +11,7 @@ const original=globalThis.fetch;
 const date=new Date().toISOString();
 globalThis.fetch=async input=>{
  const url=String(input);
- if(url.includes('/postings?'))return Response.json({totalFound:2,content:[{id:'1',location:{country:'us'}},{id:'2',location:{country:'in'}}]});
+ if(url.includes('/postings?'))return Response.json({totalFound:2,content:[{id:'1',name:'Senior Java Developer',location:{country:'us'}},{id:'2',name:'Software Engineer',location:{country:'in'}}]});
  if(url.endsWith('/postings/1'))return Response.json({id:'1',name:'Senior Java Developer',active:true,visibility:'PUBLIC',postingUrl:'https://jobs.smartrecruiters.com/Endava/1',releasedDate:date,jobAd:{sections:{qualifications:{text:'At least 5 years of experience'}}}});
  throw Error('Unexpected request '+url);
 };
