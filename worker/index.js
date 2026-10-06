@@ -67,10 +67,10 @@ export default {async fetch(request,env){
    const email=String(input?.email||'').trim().toLowerCase();
    if(email.length>254||!email.endsWith('@gmail.com')||!emailPattern.test(email)||email===adminEmail)return json({error:'Enter a valid Gmail address.'},400);
    const database=db(env),now=new Date().toISOString();
-   if(await database.prepare('SELECT email FROM deleted_users WHERE email = ?').bind(email).first())return json({error:'Access for this Gmail has been permanently removed.'},403);
    const autoApprove=await autoApproveAccess(database),initialStatus=autoApprove?'approved':'pending';
    await database.prepare('INSERT INTO access_users (email,status,requested_at,updated_at) VALUES (?,?,?,?) ON CONFLICT(email) DO NOTHING').bind(email,initialStatus,now,now).run();
    const user=await database.prepare('SELECT status FROM access_users WHERE email = ?').bind(email).first();
+   if(user.status==='blocked')return json({error:'This Gmail is blocked. Contact the Admin.'},403);
    const token=crypto.randomUUID()+crypto.randomUUID();
    await database.prepare('INSERT INTO access_sessions (token,email,role,created_at) VALUES (?,?,?,?)').bind(token,email,'user',now).run();
    return Response.json({email,role:'user',status:user.status},{headers:{'Set-Cookie':sessionCookie(token),'Cache-Control':'no-store'}});
@@ -165,7 +165,6 @@ export default {async fetch(request,env){
    const database=db(env),existing=await database.prepare('SELECT email FROM access_users WHERE email = ?').bind(email).first();
    if(!existing)return json({error:'User not found. Refresh the list.'},404);
    await database.batch([
-    database.prepare('INSERT INTO deleted_users (email,deleted_at,deleted_by) VALUES (?,?,?) ON CONFLICT(email) DO NOTHING').bind(email,new Date().toISOString(),session.email),
     database.prepare('DELETE FROM access_sessions WHERE email = ?').bind(email),
     database.prepare('DELETE FROM user_profiles WHERE email = ?').bind(email),
     database.prepare('DELETE FROM coadmins WHERE email = ?').bind(email),
