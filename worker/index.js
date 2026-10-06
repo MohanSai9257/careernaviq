@@ -27,6 +27,7 @@ async function sessionFor(request,env){
  return {...session,role:coadmin?'coadmin':'user',status};
 }
 function canManage(session){return session?.status==='approved'&&['admin','coadmin'].includes(session.role);}
+async function ensureSectionFavorites(database){await database.prepare("CREATE TABLE IF NOT EXISTS section_favorites (user_email text NOT NULL, item_id text NOT NULL, created_at text NOT NULL, PRIMARY KEY (user_email,item_id))").run();}
 async function tabAllowed(env,tab){const row=await db(env).prepare('SELECT allowed FROM tab_access WHERE tab = ?').bind(tab).first();return row?.allowed!==0;}
 async function currentCompany(database,id,old){
  const base=known.get(id);
@@ -302,7 +303,7 @@ export default {async fetch(request,env){
   }
   if(url.pathname==='/api/section-items'&&request.method==='GET'){
    const section=url.searchParams.get('section'),category=url.searchParams.get('category');
-   if(!sectionNames.has(section)||!sectionCategories.has(category))return json({error:'Invalid section or category.'},400);
+   if(!sectionNames.has(section)||(!sectionCategories.has(category)&&!(section==='recruiter-directory'&&category==='mylist')))return json({error:'Invalid section or category.'},400);
    if(!canManage(session)&&!await tabAllowed(env,section))return json({error:restrictedMessage},403);
    const search=(url.searchParams.get('search')||'').trim().slice(0,100);
    const windowName=url.searchParams.get('window')||'all';
@@ -312,8 +313,26 @@ export default {async fetch(request,env){
    const sectionItemOrder=section==='recruiter-directory'
     ? "ORDER BY CASE WHEN organization IS NULL OR organization = '' THEN 1 ELSE 0 END, lower(coalesce(organization,'')), lower(title), created_at DESC"
     : "ORDER BY created_at DESC";
-   const {results}=await db(env).prepare(`SELECT id,version,category,title,organization,url,details,email,phone,extension,file_name,posted_at,created_at FROM section_items WHERE section = ? AND category = ? AND status = 'approved' AND (? = '' OR title LIKE ? ESCAPE '\\' OR organization LIKE ? ESCAPE '\\' OR details LIKE ? ESCAPE '\\' OR email LIKE ? ESCAPE '\\' OR phone LIKE ? ESCAPE '\\') AND (? = '' OR posted_at >= ?) ${sectionItemOrder} LIMIT 500`).bind(section,category,search,`%${search}%`,`%${search}%`,`%${search}%`,`%${search}%`,`%${search}%`,cutoff,cutoff).all();
+   const recruiterJoinOrder="ORDER BY CASE WHEN item.organization IS NULL OR item.organization = '' THEN 1 ELSE 0 END, lower(coalesce(item.organization,'')), lower(item.title), item.created_at DESC";
+   let results;
+   if(section==='recruiter-directory'){
+    const database=db(env);await ensureSectionFavorites(database);
+    if(category==='mylist')({results}=await database.prepare(`SELECT item.id,item.version,item.category,item.title,item.organization,item.url,item.details,item.email,item.phone,item.extension,item.file_name,item.posted_at,item.created_at,1 AS is_favorite FROM section_items item JOIN section_favorites favorite ON favorite.item_id = item.id AND favorite.user_email = ? WHERE item.section = ? AND item.status = 'approved' AND (? = '' OR item.title LIKE ? ESCAPE '\' OR item.organization LIKE ? ESCAPE '\' OR item.details LIKE ? ESCAPE '\' OR item.email LIKE ? ESCAPE '\' OR item.phone LIKE ? ESCAPE '\') AND (? = '' OR item.posted_at >= ?) ${recruiterJoinOrder} LIMIT 500`).bind(session.email,section,search,`%${search}%`,`%${search}%`,`%${search}%`,`%${search}%`,`%${search}%`,cutoff,cutoff).all());
+    else ({results}=await database.prepare(`SELECT id,version,category,title,organization,url,details,email,phone,extension,file_name,posted_at,created_at,EXISTS(SELECT 1 FROM section_favorites favorite WHERE favorite.user_email = ? AND favorite.item_id = section_items.id) AS is_favorite FROM section_items WHERE section = ? AND category = ? AND status = 'approved' AND (? = '' OR title LIKE ? ESCAPE '\' OR organization LIKE ? ESCAPE '\' OR details LIKE ? ESCAPE '\' OR email LIKE ? ESCAPE '\' OR phone LIKE ? ESCAPE '\') AND (? = '' OR posted_at >= ?) ${sectionItemOrder} LIMIT 500`).bind(session.email,section,category,search,`%${search}%`,`%${search}%`,`%${search}%`,`%${search}%`,`%${search}%`,cutoff,cutoff).all());
+   }else ({results}=await db(env).prepare(`SELECT id,version,category,title,organization,url,details,email,phone,extension,file_name,posted_at,created_at FROM section_items WHERE section = ? AND category = ? AND status = 'approved' AND (? = '' OR title LIKE ? ESCAPE '\' OR organization LIKE ? ESCAPE '\' OR details LIKE ? ESCAPE '\' OR email LIKE ? ESCAPE '\' OR phone LIKE ? ESCAPE '\') AND (? = '' OR posted_at >= ?) ${sectionItemOrder} LIMIT 500`).bind(section,category,search,`%${search}%`,`%${search}%`,`%${search}%`,`%${search}%`,`%${search}%`,cutoff,cutoff).all());
    return json({items:results});
+  }
+  if(url.pathname==='/api/section-favorites'&&request.method==='PUT'){
+   if(!sameOrigin(request,url))return json({error:'Use the directory to save recruiters.'},403);
+   let input;try{input=await jsonInput(request);}catch{return json({error:'Invalid favorite request.'},400);}
+   const id=String(input?.id||''),saved=Boolean(input?.saved);
+   if(!id)return json({error:'Choose a recruiter.'},400);
+   const database=db(env);await ensureSectionFavorites(database);
+   const item=await database.prepare("SELECT id FROM section_items WHERE id = ? AND section = 'recruiter-directory' AND status = 'approved'").bind(id).first();
+   if(!item)return json({error:'Recruiter not found.'},404);
+   if(saved)await database.prepare('INSERT OR IGNORE INTO section_favorites (user_email,item_id,created_at) VALUES (?,?,?)').bind(session.email,id,new Date().toISOString()).run();
+   else await database.prepare('DELETE FROM section_favorites WHERE user_email = ? AND item_id = ?').bind(session.email,id).run();
+   return json({ok:true,saved});
   }
   if(url.pathname.startsWith('/api/section-file/')&&request.method==='GET'){
    const id=url.pathname.slice('/api/section-file/'.length);

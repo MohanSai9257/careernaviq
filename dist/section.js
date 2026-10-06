@@ -8,7 +8,7 @@ const sectionConfig={
 const sectionKey=location.pathname.split('/').filter(Boolean)[0]||'recruiter-directory';
 const config=sectionConfig[sectionKey];
 const byId=id=>document.getElementById(id);
-const tabs=[...document.querySelectorAll('.section-tabs [role="tab"]')];
+let tabs=[...document.querySelectorAll('.section-tabs [role="tab"]')];
 let automaticRefreshAttempted=false;
 let category='java',requestNumber=0,searchTimer,editingItem=null,deletingItem=null,actionItem=null,accessRole='user';
 byId('section-title').textContent=config.title;document.title=`${config.title} — CareerNaviq`;
@@ -16,6 +16,7 @@ byId('section-add').textContent=config.action;byId('section-dialog-title').textC
 byId('section-add').hidden=!config.action;
 byId('section-title-label').textContent=config.name;byId('section-organization-label').textContent=config.organization;byId('section-url-label').textContent=config.url;
 const isRecruiter=sectionKey==='recruiter-directory',isDocument=sectionKey==='study-materials'||sectionKey==='interview-prep',isContact=sectionKey==='interview-support';
+if(byId('tab-mylist')){byId('tab-mylist').hidden=!isRecruiter;if(!isRecruiter)tabs=tabs.filter(tab=>tab.id!=='tab-mylist');}
 byId('section-organization-wrap').hidden=!config.organization;byId('section-organization').required=false;
 byId('section-url-wrap').hidden=!config.url;
 byId('section-email-wrap').hidden=!isRecruiter;
@@ -38,6 +39,7 @@ function sectionNotice(message){status(message);window.showAppNotice?.(message);
 async function api(url,options){const response=await fetch(url,{cache:'no-store',...options});const result=await response.json();if(!response.ok)throw Error(result.error||'Please try again.');return result;}
 let sectionMenuTrigger=null;
 function actionButton(item){const button=document.createElement('button');button.type='button';button.className='more-button section-more';button.textContent='⋮';button.setAttribute('aria-label',`Actions for ${item.title||'entry'}`);button.setAttribute('aria-haspopup','menu');button.setAttribute('aria-expanded','false');button.addEventListener('click',()=>{if(sectionMenuTrigger===button&&!byId('section-actions-menu').hidden){closeActions(true);return;}openActions(item,button);});return button;}
+function favoriteButton(item){const button=document.createElement('button');button.type='button';button.className='save-company section-favorite';const update=saved=>{button.textContent=saved?'★':'☆';button.setAttribute('aria-pressed',String(saved));button.setAttribute('aria-label',`${saved?'Remove':'Save'} ${item.title||'recruiter'} ${saved?'from':'to'} My List`);button.title=saved?'Remove from My List':'Save to My List';};update(Boolean(item.is_favorite));button.addEventListener('click',async()=>{const saved=button.getAttribute('aria-pressed')!=='true';button.disabled=true;try{const result=await api('/api/section-favorites',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:item.id,saved})});item.is_favorite=result.saved?1:0;update(result.saved);sectionNotice(result.saved?'Recruiter saved to My List.':'Recruiter removed from My List.');if(category==='mylist'&&!result.saved)loadItems();}catch(error){sectionNotice(error.message);}finally{button.disabled=false;}});return button;}
 function closeActions(restore=false){byId('section-actions-menu').hidden=true;byId('section-move-targets').hidden=true;byId('section-action-move').setAttribute('aria-expanded','false');sectionMenuTrigger?.setAttribute('aria-expanded','false');if(restore&&sectionMenuTrigger?.isConnected)sectionMenuTrigger.focus();}
 function positionActions(){if(!sectionMenuTrigger)return;const bounds=sectionMenuTrigger.getBoundingClientRect(),menu=byId('section-actions-menu');menu.style.left=Math.max(8,Math.min(bounds.right-menu.offsetWidth,innerWidth-menu.offsetWidth-8))+'px';menu.style.top=Math.max(8,Math.min(bounds.bottom+5,innerHeight-menu.offsetHeight-8))+'px';}
 function openActions(item,trigger){
@@ -65,12 +67,14 @@ function renderTable(items){
  const list=byId('section-items');list.replaceChildren();list.classList.add('section-records');
  const table=document.createElement('table'),head=document.createElement('thead'),headRow=document.createElement('tr'),body=document.createElement('tbody');
  const columns=tableColumns[sectionKey];
+ if(isRecruiter){const favoriteHeading=document.createElement('th');favoriteHeading.scope='col';favoriteHeading.className='section-favorite-heading';favoriteHeading.textContent='My List';headRow.append(favoriteHeading);}
  for(const [label] of columns){const cell=document.createElement('th');cell.scope='col';cell.textContent=label;headRow.append(cell);}
  const actionHeading=document.createElement('th');actionHeading.scope='col';actionHeading.className='section-action-heading';actionHeading.textContent='Actions';headRow.append(actionHeading);
  head.append(headRow);
- if(!items.length){const row=document.createElement('tr'),cell=document.createElement('td');cell.colSpan=columns.length+1;cell.className='section-table-empty';cell.textContent='No entries yet.';row.append(cell);body.append(row);}
+ if(!items.length){const row=document.createElement('tr'),cell=document.createElement('td');cell.colSpan=columns.length+1+(isRecruiter?1:0);cell.className='section-table-empty';cell.textContent=category==='mylist'?'Your recruiter list is empty. Select the star beside any recruiter to save it here.':'No entries yet.';row.append(cell);body.append(row);}
  for(const item of items){
   const row=document.createElement('tr');
+  if(isRecruiter){const favoriteCell=document.createElement('td');favoriteCell.className='section-favorite-cell';favoriteCell.append(favoriteButton(item));row.append(favoriteCell);}
   for(const [,field] of columns){
    const cell=document.createElement('td'),value=item[field]||'';
    if(field==='url'&&value){const link=document.createElement('a');link.href=value;link.target='_blank';link.rel='noopener noreferrer';link.textContent=sectionKey==='recruiter-directory'?'LinkedIn ↗':'Open link ↗';cell.append(link);}
