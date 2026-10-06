@@ -47,7 +47,7 @@ function openActions(item,trigger){
  const targets=byId('section-move-targets');targets.replaceChildren();
  for(const target of (isRecruiter?['java','data','devops','validation','all']:['java','data','devops','validation'])){
   if(target===item.category)continue;
-  const button=document.createElement('button');button.type='button';button.setAttribute('role','menuitem');button.textContent=target==='devops'?'DevOps':target.charAt(0).toUpperCase()+target.slice(1);
+  const button=document.createElement('button');button.type='button';button.setAttribute('role','menuitem');button.textContent=target==='devops'?'DevOps':target==='all'?'Multi-Role':target.charAt(0).toUpperCase()+target.slice(1);
   button.addEventListener('click',async()=>{button.disabled=true;try{const result=await api('/api/section-changes',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:item.id,version:item.version,kind:'move',category:target})});closeActions(true);sectionNotice(result.status==='approved'?'Entry moved successfully.':'Move request sent for approval. An Admin or Coadmin will review it.');if(result.status==='approved')loadItems();}catch(error){closeActions(true);sectionNotice(error.message);button.disabled=false;}});
   targets.append(button);
  }
