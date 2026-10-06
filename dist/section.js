@@ -16,7 +16,7 @@ byId('section-add').textContent=config.action;byId('section-dialog-title').textC
 byId('section-add').hidden=!config.action;
 byId('section-title-label').textContent=config.name;byId('section-organization-label').textContent=config.organization;byId('section-url-label').textContent=config.url;
 const isRecruiter=sectionKey==='recruiter-directory',isDocument=sectionKey==='study-materials'||sectionKey==='interview-prep',isContact=sectionKey==='interview-support';
-if(byId('tab-mylist')){byId('tab-mylist').hidden=!isRecruiter;if(!isRecruiter)tabs=tabs.filter(tab=>tab.id!=='tab-mylist');}
+for(const optionalTab of ['tab-all','tab-mylist']){if(byId(optionalTab)){byId(optionalTab).hidden=!isRecruiter;if(!isRecruiter)tabs=tabs.filter(tab=>tab.id!==optionalTab);}}
 byId('section-organization-wrap').hidden=!config.organization;byId('section-organization').required=false;
 byId('section-url-wrap').hidden=!config.url;
 byId('section-email-wrap').hidden=!isRecruiter;
@@ -45,7 +45,7 @@ function positionActions(){if(!sectionMenuTrigger)return;const bounds=sectionMen
 function openActions(item,trigger){
  closeActions();actionItem=item;sectionMenuTrigger=trigger;trigger.setAttribute('aria-expanded','true');
  const targets=byId('section-move-targets');targets.replaceChildren();
- for(const target of ['java','data','devops','validation']){
+ for(const target of (isRecruiter?['java','data','devops','validation','all']:['java','data','devops','validation'])){
   if(target===item.category)continue;
   const button=document.createElement('button');button.type='button';button.setAttribute('role','menuitem');button.textContent=target==='devops'?'DevOps':target.charAt(0).toUpperCase()+target.slice(1);
   button.addEventListener('click',async()=>{button.disabled=true;try{const result=await api('/api/section-changes',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:item.id,version:item.version,kind:'move',category:target})});closeActions(true);sectionNotice(result.status==='approved'?'Entry moved successfully.':'Move request sent for approval. An Admin or Coadmin will review it.');if(result.status==='approved')loadItems();}catch(error){closeActions(true);sectionNotice(error.message);button.disabled=false;}});

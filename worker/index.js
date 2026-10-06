@@ -303,7 +303,7 @@ export default {async fetch(request,env){
   }
   if(url.pathname==='/api/section-items'&&request.method==='GET'){
    const section=url.searchParams.get('section'),category=url.searchParams.get('category');
-   if(!sectionNames.has(section)||(!sectionCategories.has(category)&&!(section==='recruiter-directory'&&category==='mylist')))return json({error:'Invalid section or category.'},400);
+   if(!sectionNames.has(section)||(!sectionCategories.has(category)&&!(section==='recruiter-directory'&&['all','mylist'].includes(category))))return json({error:'Invalid section or category.'},400);
    if(!canManage(session)&&!await tabAllowed(env,section))return json({error:restrictedMessage},403);
    const search=(url.searchParams.get('search')||'').trim().slice(0,100);
    const windowName=url.searchParams.get('window')||'all';
@@ -367,7 +367,7 @@ export default {async fetch(request,env){
    const before={section:current.section,category:current.category,title:current.title,organization:current.organization,url:current.url,details:current.details,email:current.email,phone:current.phone,extension:current.extension,posted_at:current.posted_at,file_name:current.file_name};
    let after={},pendingFileKey='',fileBytes=null;
    if(kind==='move'){
-    const target=String(input?.category||'');if(!sectionCategories.has(target)||target===current.category)return json({error:'Choose a different category.'},400);
+    const target=String(input?.category||'');if((!sectionCategories.has(target)&&!(current.section==='recruiter-directory'&&target==='all'))||target===current.category)return json({error:'Choose a different category.'},400);
     after={category:target};
    }else if(kind==='edit'){
     const title=String(input?.title||'').trim(),organization=String(input?.organization||'').trim(),itemUrl=String(input?.url||'').trim(),details=String(input?.details||'').trim();
@@ -420,7 +420,7 @@ export default {async fetch(request,env){
    const section=String(input?.section||''),category=String(input?.category||'');
    const title=String(input?.title||'').trim(),organization=String(input?.organization||'').trim(),itemUrl=String(input?.url||'').trim(),details=String(input?.details||'').trim();
    const email=String(input?.email||'').trim(),phone=String(input?.phone||'').trim(),extension=String(input?.extension||'').trim();
-   if(!sectionNames.has(section)||!sectionCategories.has(category)||title.length>200||organization.length>200||details.length>2000||email.length>254||email&&!emailPattern.test(email)||phone.length>40||extension.length>20||!link(itemUrl))return json({error:'Check the required fields and link.'},400);
+   if(!sectionNames.has(section)||(!sectionCategories.has(category)&&!(section==='recruiter-directory'&&category==='all'))||title.length>200||organization.length>200||details.length>2000||email.length>254||email&&!emailPattern.test(email)||phone.length>40||extension.length>20||!link(itemUrl))return json({error:'Check the required fields and link.'},400);
    if(!canManage(session)&&!await tabAllowed(env,section))return json({error:restrictedMessage},403);
    if(![title,organization,itemUrl,details,email,phone,extension,input?.postedAt].some(Boolean)&&!file)return json({error:'Add at least one detail or a file to create an entry.'},400);
    const documentSection=section==='study-materials'||section==='interview-prep';
