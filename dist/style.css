@@ -36,3 +36,5 @@ th:first-child{width:54%}th:nth-child(2),th:nth-child(3){width:20%}th.actions-he
 .section-favorite-heading,.section-favorite-cell{width:72px!important;text-align:center!important}.section-favorite{font-size:1.5rem;min-width:34px;min-height:34px}.section-favorite[aria-pressed=true]{color:#00735a}.section-favorite-cell{vertical-align:middle!important}
 
 #access-settings-error{color:#a32626;font-size:.875rem}
+
+#admin-request-error{color:#a32626;font-size:.875rem}

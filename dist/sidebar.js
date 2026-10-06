@@ -27,7 +27,17 @@ const adminLink=document.createElement('a');adminLink.href='/admin';adminLink.ti
 if(location.pathname==='/admin'||location.pathname==='/admin/')adminLink.setAttribute('aria-current','page');
 const adminIcon=document.createElement('span');adminIcon.className='side-icon';adminIcon.setAttribute('aria-hidden','true');adminIcon.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 20 5v6c0 5-3.3 8.5-8 11-4.7-2.5-8-6-8-11V5l8-3Z"/><path d="m9 12 2 2 4-4"/></svg>';
 const adminLabel=document.createElement('span');adminLabel.className='side-label';adminLabel.textContent='ADMIN';adminLink.append(adminIcon,adminLabel);sidebar.append(adminLink);
-window.setAdminNavigation=(role,status)=>{adminLink.hidden=!(status==='approved'&&(role==='admin'||role==='coadmin'));};
+window.setAdminNavigation=(role,status)=>{adminLink.hidden=status!=='approved';adminLink.dataset.role=role||'guest';};
+adminLink.addEventListener('click',async event=>{
+ if(adminLink.dataset.role==='admin'||adminLink.dataset.role==='coadmin')return;
+ event.preventDefault();
+ try{
+  const response=await fetch('/api/admin-access-requests',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
+  const result=await response.json();
+  if(!response.ok)throw Error(result.error||'Please try again.');
+  window.showAppNotice?.(result.status==='pending'?'Admin access request sent.':'Admin access request updated.');
+ }catch(error){window.showAppNotice?.(error.message);}
+});
 fetch('/api/session',{cache:'no-store'}).then(response=>response.json()).then(session=>window.setAdminNavigation(session.role,session.status)).catch(()=>{});
 const profileLink=document.createElement('a');profileLink.href='/profile';profileLink.title='Profile';profileLink.className='side-profile';
 if(location.pathname==='/profile')profileLink.setAttribute('aria-current','page');

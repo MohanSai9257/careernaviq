@@ -5,6 +5,7 @@ let sectionSubmissions=[];
 let sectionChanges=[];
 let tabAccessItems=[];
 let accessSettings={autoApprove:false};
+let adminAccessRequests=[];
 let deletingUserEmail='';
 window.directoryRole='guest';
 const managesAccess=()=>['admin','coadmin'].includes(accessSession.role)&&accessSession.status==='approved';
@@ -94,6 +95,25 @@ function renderAccessSettings(){
 async function loadAccessSettings(){
  try{const data=await accessJson('/api/access/settings');accessSettings=data;accessError('access-settings-error','');renderAccessSettings();}
  catch(error){accessError('access-settings-error',error.message);}
+}
+function renderAdminAccessRequests(){
+ accessEl('admin-request-count').textContent=adminAccessRequests.length;
+ const list=accessEl('admin-request-list');list.replaceChildren();
+ if(!adminAccessRequests.length){const empty=document.createElement('p');empty.className='management-empty';empty.textContent='No Admin access requests.';list.append(empty);return;}
+ for(const request of adminAccessRequests){
+  const row=document.createElement('div'),email=document.createElement('strong'),actions=document.createElement('div');
+  row.className='access-user';email.textContent=request.email;actions.className='access-user-actions';
+  for(const [action,label] of [['approve','Approve'],['deny','Deny']]){const button=document.createElement('button');button.type='button';button.dataset.action=action;button.textContent=label;button.addEventListener('click',async()=>{
+   for(const control of actions.querySelectorAll('button'))control.disabled=true;accessError('admin-request-error','');
+   try{await accessJson('/api/admin-access-requests',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:request.email,action})});adminAccessRequests=adminAccessRequests.filter(item=>item.email!==request.email);renderAdminAccessRequests();if(action==='approve')loadCoadmins();}
+   catch(error){accessError('admin-request-error',error.message);for(const control of actions.querySelectorAll('button'))control.disabled=false;}
+  });actions.append(button);}
+  row.append(email,actions);list.append(row);
+ }
+}
+async function loadAdminAccessRequests(){
+ try{const data=await accessJson('/api/admin-access-requests');adminAccessRequests=data.items;accessError('admin-request-error','');renderAdminAccessRequests();}
+ catch(error){accessError('admin-request-error',error.message);}
 }
 function renderChangeRequests(){
  accessEl('change-count').textContent=changeRequests.length;
@@ -202,7 +222,7 @@ async function loadTabAccess(){
  try{const data=await accessJson('/api/tab-access');tabAccessItems=data.items;accessError('tab-access-error','');renderTabAccess();}
  catch(error){accessError('tab-access-error',error.message);}
 }
-function loadAdminData(){loadAccessUsers();loadAccessSettings();loadChangeRequests();loadSectionSubmissions();loadSectionChanges();loadCoadmins();loadTabAccess();}
+function loadAdminData(){loadAccessUsers();loadAccessSettings();loadAdminAccessRequests();loadChangeRequests();loadSectionSubmissions();loadSectionChanges();loadCoadmins();loadTabAccess();}
 accessEl('auto-approve-toggle').addEventListener('click',async()=>{
  const button=accessEl('auto-approve-toggle');button.disabled=true;accessError('access-settings-error','');
  try{accessSettings=await accessJson('/api/access/settings',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({autoApprove:!accessSettings.autoApprove})});renderAccessSettings();window.showAppNotice?.(`Auto approve new users is now ${accessSettings.autoApprove?'on':'off'}.`);}

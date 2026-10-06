@@ -29,6 +29,7 @@ async function sessionFor(request,env){
 function canManage(session){return session?.status==='approved'&&['admin','coadmin'].includes(session.role);}
 async function ensureSectionFavorites(database){await database.prepare("CREATE TABLE IF NOT EXISTS section_favorites (user_email text NOT NULL, item_id text NOT NULL, created_at text NOT NULL, PRIMARY KEY (user_email,item_id))").run();}
 async function ensureAppSettings(database){await database.prepare("CREATE TABLE IF NOT EXISTS app_settings (key text PRIMARY KEY, value text NOT NULL, updated_at text NOT NULL, updated_by text NOT NULL DEFAULT '')").run();}
+async function ensureAdminAccessRequests(database){await database.prepare("CREATE TABLE IF NOT EXISTS admin_access_requests (email text PRIMARY KEY, status text NOT NULL, requested_at text NOT NULL, reviewed_at text, reviewed_by text)").run();}
 async function autoApproveAccess(database){await ensureAppSettings(database);const row=await database.prepare("SELECT value FROM app_settings WHERE key = 'auto_approve_access'").first();return row?.value==='true';}
 async function tabAllowed(env,tab){const row=await db(env).prepare('SELECT allowed FROM tab_access WHERE tab = ?').bind(tab).first();return row?.allowed!==0;}
 async function currentCompany(database,id,old){
@@ -124,6 +125,33 @@ export default {async fetch(request,env){
    const allowed=input.allowed?1:0,now=new Date().toISOString();
    await db(env).prepare('INSERT INTO tab_access (tab,allowed,updated_at,updated_by) VALUES (?,?,?,?) ON CONFLICT(tab) DO UPDATE SET allowed = excluded.allowed,updated_at = excluded.updated_at,updated_by = excluded.updated_by').bind(input.tab,allowed,now,session.email).run();
    return json({tab:input.tab,name:tabNames.get(input.tab),allowed:input.allowed,updatedAt:now,updatedBy:session.email});
+  }
+  if(url.pathname==='/api/admin-access-requests'&&request.method==='POST'){
+   if(!sameOrigin(request,url))return json({error:'Use the app to request Admin access.'},403);
+   if(session?.status!=='approved')return json({error:'User access required.'},403);
+   if(session.role==='admin'||session.role==='coadmin')return json({status:'approved'});
+   const database=db(env),now=new Date().toISOString();await ensureAdminAccessRequests(database);
+   await database.prepare("INSERT INTO admin_access_requests (email,status,requested_at) VALUES (?,'pending',?) ON CONFLICT(email) DO UPDATE SET status='pending', requested_at=excluded.requested_at, reviewed_at=NULL, reviewed_by=NULL").bind(session.email,now).run();
+   return json({email:session.email,status:'pending'});
+  }
+  if(url.pathname==='/api/admin-access-requests'&&request.method==='GET'){
+   if(!canManage(session))return json({error:'Admin access required.'},403);
+   const database=db(env);await ensureAdminAccessRequests(database);
+   const {results}=await database.prepare("SELECT email,status,requested_at FROM admin_access_requests WHERE status='pending' ORDER BY requested_at DESC").all();
+   return json({items:results});
+  }
+  if(url.pathname==='/api/admin-access-requests'&&request.method==='PUT'){
+   if(!canManage(session))return json({error:'Admin access required.'},403);
+   if(!sameOrigin(request,url))return json({error:'Use Access Management to review Admin requests.'},403);
+   let input;try{input=await jsonInput(request);}catch{return json({error:'Invalid Admin request review.'},400);}
+   const email=String(input?.email||'').trim().toLowerCase(),action=input?.action;
+   if(!emailPattern.test(email)||email===adminEmail||!['approve','deny'].includes(action))return json({error:'Invalid Admin request.'},400);
+   const database=db(env),now=new Date().toISOString();await ensureAdminAccessRequests(database);
+   const existing=await database.prepare("SELECT email FROM admin_access_requests WHERE email = ? AND status = 'pending'").bind(email).first();
+   if(!existing)return json({error:'This Admin request changed. Refresh and try again.'},409);
+   if(action==='approve')await database.prepare('INSERT INTO coadmins (email,granted_at) VALUES (?,?) ON CONFLICT(email) DO UPDATE SET granted_at = excluded.granted_at').bind(email,now).run();
+   await database.prepare('UPDATE admin_access_requests SET status = ?, reviewed_at = ?, reviewed_by = ? WHERE email = ?').bind(action==='approve'?'approved':'denied',now,session.email,email).run();
+   return json({email,status:action==='approve'?'approved':'denied'});
   }
   if(url.pathname==='/api/access/settings'&&request.method==='GET'){
    if(!canManage(session))return json({error:'Admin access required.'},403);
