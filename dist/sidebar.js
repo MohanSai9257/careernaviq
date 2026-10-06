@@ -28,15 +28,23 @@ if(location.pathname==='/admin'||location.pathname==='/admin/')adminLink.setAttr
 const adminIcon=document.createElement('span');adminIcon.className='side-icon';adminIcon.setAttribute('aria-hidden','true');adminIcon.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 20 5v6c0 5-3.3 8.5-8 11-4.7-2.5-8-6-8-11V5l8-3Z"/><path d="m9 12 2 2 4-4"/></svg>';
 const adminLabel=document.createElement('span');adminLabel.className='side-label';adminLabel.textContent='ADMIN';adminLink.append(adminIcon,adminLabel);sidebar.append(adminLink);
 window.setAdminNavigation=(role,status)=>{adminLink.hidden=status!=='approved';adminLink.dataset.role=role||'guest';};
-adminLink.addEventListener('click',async event=>{
+function ensureAdminRequestDialog(){
+ let dialog=document.getElementById('admin-request-dialog');if(dialog)return dialog;
+ dialog=document.createElement('dialog');dialog.id='admin-request-dialog';dialog.setAttribute('aria-labelledby','admin-request-title');
+ dialog.innerHTML='<form id="admin-request-form"><h2 id="admin-request-title">Admin access required</h2><p class="edit-scope">You need Admin or Coadmin access to open this section.</p><p id="admin-request-message" role="alert" hidden></p><div class="dialog-actions"><button id="admin-request-cancel" type="button">Cancel</button><button type="submit" class="primary">Request Access</button></div></form>';
+ document.body.append(dialog);
+ document.getElementById('admin-request-cancel').addEventListener('click',()=>dialog.close());
+ document.getElementById('admin-request-form').addEventListener('submit',async event=>{
+  event.preventDefault();const button=event.currentTarget.querySelector('[type=submit]'),message=document.getElementById('admin-request-message');button.disabled=true;message.hidden=true;
+  try{const response=await fetch('/api/admin-access-requests',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});const result=await response.json();if(!response.ok)throw Error(result.error||'Please try again.');message.textContent='Admin access request sent. An Admin or Coadmin can approve it from Access management.';message.hidden=false;window.showAppNotice?.('Admin access request sent.');}
+  catch(error){message.textContent=error.message;message.hidden=false;}
+  finally{button.disabled=false;}
+ });
+ return dialog;
+}
+adminLink.addEventListener('click',event=>{
  if(adminLink.dataset.role==='admin'||adminLink.dataset.role==='coadmin')return;
- event.preventDefault();
- try{
-  const response=await fetch('/api/admin-access-requests',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
-  const result=await response.json();
-  if(!response.ok)throw Error(result.error||'Please try again.');
-  window.showAppNotice?.(result.status==='pending'?'Admin access request sent.':'Admin access request updated.');
- }catch(error){window.showAppNotice?.(error.message);}
+ event.preventDefault();const dialog=ensureAdminRequestDialog();document.getElementById('admin-request-message').hidden=true;dialog.showModal();
 });
 fetch('/api/session',{cache:'no-store'}).then(response=>response.json()).then(session=>window.setAdminNavigation(session.role,session.status)).catch(()=>{});
 const profileLink=document.createElement('a');profileLink.href='/profile';profileLink.title='Profile';profileLink.className='side-profile';

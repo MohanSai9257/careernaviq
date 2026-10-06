@@ -38,3 +38,5 @@ th:first-child{width:54%}th:nth-child(2),th:nth-child(3){width:20%}th.actions-he
 #access-settings-error{color:#a32626;font-size:.875rem}
 
 #admin-request-error{color:#a32626;font-size:.875rem}
+
+#admin-request-message{font-size:.9rem;color:#355767;margin-top:14px}
