@@ -671,7 +671,10 @@ export default {async fetch(request,env){
    if(!['all','day','week','month'].includes(windowName))return json({error:'Invalid date filter.'},400);
    const durations={day:86400000,week:604800000,month:2592000000};
    const cutoff=windowName==='all'?'':new Date(Date.now()-durations[windowName]).toISOString();
-   const {results}=await db(env).prepare("SELECT id,version,category,title,organization,url,details,email,phone,extension,file_name,posted_at,created_at FROM section_items WHERE section = ? AND category = ? AND status = 'approved' AND (? = '' OR title LIKE ? ESCAPE '\\' OR organization LIKE ? ESCAPE '\\' OR details LIKE ? ESCAPE '\\' OR email LIKE ? ESCAPE '\\' OR phone LIKE ? ESCAPE '\\') AND (? = '' OR posted_at >= ?) ORDER BY created_at DESC LIMIT 500").bind(section,category,search,`%${search}%`,`%${search}%`,`%${search}%`,`%${search}%`,`%${search}%`,cutoff,cutoff).all();
+   const sectionItemOrder=section==='recruiter-directory'
+    ? "ORDER BY CASE WHEN organization IS NULL OR organization = '' THEN 1 ELSE 0 END, lower(coalesce(organization,'')), lower(title), created_at DESC"
+    : "ORDER BY created_at DESC";
+   const {results}=await db(env).prepare(`SELECT id,version,category,title,organization,url,details,email,phone,extension,file_name,posted_at,created_at FROM section_items WHERE section = ? AND category = ? AND status = 'approved' AND (? = '' OR title LIKE ? ESCAPE '\\' OR organization LIKE ? ESCAPE '\\' OR details LIKE ? ESCAPE '\\' OR email LIKE ? ESCAPE '\\' OR phone LIKE ? ESCAPE '\\') AND (? = '' OR posted_at >= ?) ${sectionItemOrder} LIMIT 500`).bind(section,category,search,`%${search}%`,`%${search}%`,`%${search}%`,`%${search}%`,`%${search}%`,cutoff,cutoff).all();
    return json({items:results});
   }
   if(url.pathname.startsWith('/api/section-file/')&&request.method==='GET'){
