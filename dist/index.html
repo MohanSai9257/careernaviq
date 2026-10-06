@@ -37,6 +37,11 @@
       <summary>Access management</summary>
       <div class="admin-dashboard-content">
       <p id="admin-access-error" role="alert" hidden></p>
+      <details class="management-panel" id="access-settings-panel"><summary><span>Access settings</span><span id="auto-approve-state" class="management-count">Off</span></summary><div class="management-body">
+        <div class="tab-access-row"><div><strong>Auto approve new users</strong><span id="auto-approve-label" class="tab-access-state is-restricted">Off</span></div><button id="auto-approve-toggle" type="button">Turn on</button></div>
+        <p class="form-hint">When this is on, new Gmail access requests are approved immediately without Admin review.</p>
+        <p id="access-settings-error" role="alert" hidden></p>
+      </div></details>
       <details class="management-panel" id="users-pending"><summary><span>Requests</span><span id="access-count-pending" class="management-count">0</span></summary><div id="access-users-pending" class="management-body access-users"></div></details>
       <details class="management-panel" id="users-approved"><summary><span>Existing Users</span><span id="access-count-approved" class="management-count">0</span></summary><div id="access-users-approved" class="management-body access-users"></div></details>
       <details class="management-panel" id="users-blocked"><summary><span>Blocked users</span><span id="access-count-blocked" class="management-count">0</span></summary><div id="access-users-blocked" class="management-body access-users"></div></details>

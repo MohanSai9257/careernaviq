@@ -4,6 +4,7 @@ let changeRequests=[],coadmins=[];
 let sectionSubmissions=[];
 let sectionChanges=[];
 let tabAccessItems=[];
+let accessSettings={autoApprove:false};
 let deletingUserEmail='';
 window.directoryRole='guest';
 const managesAccess=()=>['admin','coadmin'].includes(accessSession.role)&&accessSession.status==='approved';
@@ -81,6 +82,18 @@ accessEl('user-delete-form').addEventListener('submit',async event=>{
 async function loadAccessUsers(){
  try{const data=await accessJson('/api/access/users');accessUsers=data.items;accessError('admin-access-error','');renderAccessUsers();}
  catch(error){accessError('admin-access-error',error.message);}
+}
+function renderAccessSettings(){
+ const enabled=Boolean(accessSettings.autoApprove);
+ accessEl('auto-approve-state').textContent=enabled?'On':'Off';
+ accessEl('auto-approve-label').textContent=enabled?'On':'Off';
+ accessEl('auto-approve-label').className=`tab-access-state ${enabled?'is-open':'is-restricted'}`;
+ accessEl('auto-approve-toggle').textContent=enabled?'Turn off':'Turn on';
+ accessEl('auto-approve-toggle').className=enabled?'tab-restrict':'primary';
+}
+async function loadAccessSettings(){
+ try{const data=await accessJson('/api/access/settings');accessSettings=data;accessError('access-settings-error','');renderAccessSettings();}
+ catch(error){accessError('access-settings-error',error.message);}
 }
 function renderChangeRequests(){
  accessEl('change-count').textContent=changeRequests.length;
@@ -189,7 +202,13 @@ async function loadTabAccess(){
  try{const data=await accessJson('/api/tab-access');tabAccessItems=data.items;accessError('tab-access-error','');renderTabAccess();}
  catch(error){accessError('tab-access-error',error.message);}
 }
-function loadAdminData(){loadAccessUsers();loadChangeRequests();loadSectionSubmissions();loadSectionChanges();loadCoadmins();loadTabAccess();}
+function loadAdminData(){loadAccessUsers();loadAccessSettings();loadChangeRequests();loadSectionSubmissions();loadSectionChanges();loadCoadmins();loadTabAccess();}
+accessEl('auto-approve-toggle').addEventListener('click',async()=>{
+ const button=accessEl('auto-approve-toggle');button.disabled=true;accessError('access-settings-error','');
+ try{accessSettings=await accessJson('/api/access/settings',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({autoApprove:!accessSettings.autoApprove})});renderAccessSettings();window.showAppNotice?.(`Auto approve new users is now ${accessSettings.autoApprove?'on':'off'}.`);}
+ catch(error){accessError('access-settings-error',error.message);}
+ finally{button.disabled=false;}
+});
 accessEl('coadmin-form').addEventListener('submit',async event=>{
  event.preventDefault();const submit=accessEl('coadmin-form').querySelector('[type=submit]');submit.disabled=true;accessError('coadmin-error','');
  try{const result=await accessJson('/api/coadmins',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:accessEl('coadmin-email').value.trim()})});coadmins.unshift(result);accessEl('coadmin-email').value='';renderCoadmins();loadAccessUsers();}

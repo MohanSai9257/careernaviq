@@ -28,6 +28,8 @@ async function sessionFor(request,env){
 }
 function canManage(session){return session?.status==='approved'&&['admin','coadmin'].includes(session.role);}
 async function ensureSectionFavorites(database){await database.prepare("CREATE TABLE IF NOT EXISTS section_favorites (user_email text NOT NULL, item_id text NOT NULL, created_at text NOT NULL, PRIMARY KEY (user_email,item_id))").run();}
+async function ensureAppSettings(database){await database.prepare("CREATE TABLE IF NOT EXISTS app_settings (key text PRIMARY KEY, value text NOT NULL, updated_at text NOT NULL, updated_by text NOT NULL DEFAULT '')").run();}
+async function autoApproveAccess(database){await ensureAppSettings(database);const row=await database.prepare("SELECT value FROM app_settings WHERE key = 'auto_approve_access'").first();return row?.value==='true';}
 async function tabAllowed(env,tab){const row=await db(env).prepare('SELECT allowed FROM tab_access WHERE tab = ?').bind(tab).first();return row?.allowed!==0;}
 async function currentCompany(database,id,old){
  const base=known.get(id);
@@ -66,9 +68,9 @@ export default {async fetch(request,env){
    if(email.length>254||!email.endsWith('@gmail.com')||!emailPattern.test(email)||email===adminEmail)return json({error:'Enter a valid Gmail address.'},400);
    const database=db(env),now=new Date().toISOString();
    if(await database.prepare('SELECT email FROM deleted_users WHERE email = ?').bind(email).first())return json({error:'Access for this Gmail has been permanently removed.'},403);
-   await database.prepare("INSERT INTO access_users (email,status,requested_at,updated_at) VALUES (?,'pending',?,?) ON CONFLICT(email) DO NOTHING").bind(email,now,now).run();
+   const autoApprove=await autoApproveAccess(database),initialStatus=autoApprove?'approved':'pending';
+   await database.prepare('INSERT INTO access_users (email,status,requested_at,updated_at) VALUES (?,?,?,?) ON CONFLICT(email) DO NOTHING').bind(email,initialStatus,now,now).run();
    const user=await database.prepare('SELECT status FROM access_users WHERE email = ?').bind(email).first();
-   if(user.status==='approved')return json({error:'Access is already approved. Use Login.'},409);
    const token=crypto.randomUUID()+crypto.randomUUID();
    await database.prepare('INSERT INTO access_sessions (token,email,role,created_at) VALUES (?,?,?,?)').bind(token,email,'user',now).run();
    return Response.json({email,role:'user',status:user.status},{headers:{'Set-Cookie':sessionCookie(token),'Cache-Control':'no-store'}});
@@ -122,6 +124,20 @@ export default {async fetch(request,env){
    const allowed=input.allowed?1:0,now=new Date().toISOString();
    await db(env).prepare('INSERT INTO tab_access (tab,allowed,updated_at,updated_by) VALUES (?,?,?,?) ON CONFLICT(tab) DO UPDATE SET allowed = excluded.allowed,updated_at = excluded.updated_at,updated_by = excluded.updated_by').bind(input.tab,allowed,now,session.email).run();
    return json({tab:input.tab,name:tabNames.get(input.tab),allowed:input.allowed,updatedAt:now,updatedBy:session.email});
+  }
+  if(url.pathname==='/api/access/settings'&&request.method==='GET'){
+   if(!canManage(session))return json({error:'Admin access required.'},403);
+   const database=db(env),enabled=await autoApproveAccess(database);
+   return json({autoApprove:enabled});
+  }
+  if(url.pathname==='/api/access/settings'&&request.method==='PUT'){
+   if(!canManage(session))return json({error:'Admin access required.'},403);
+   if(!sameOrigin(request,url))return json({error:'Use Access Management to update settings.'},403);
+   let input;try{input=await jsonInput(request);}catch{return json({error:'Invalid access setting.'},400);}
+   if(typeof input?.autoApprove!=='boolean')return json({error:'Choose whether auto approval is on or off.'},400);
+   const database=db(env),now=new Date().toISOString(),value=input.autoApprove?'true':'false';await ensureAppSettings(database);
+   await database.prepare("INSERT INTO app_settings (key,value,updated_at,updated_by) VALUES ('auto_approve_access',?,?,?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at, updated_by = excluded.updated_by").bind(value,now,session.email).run();
+   return json({autoApprove:input.autoApprove});
   }
   if(url.pathname==='/api/access/users'&&request.method==='GET'){
    if(!canManage(session))return json({error:'Admin access required.'},403);
