@@ -1,5 +1,12 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" role="img" aria-label="CareerNaviq">
-  <rect width="48" height="48" rx="12" fill="#102e3b"/>
-  <path d="M13 34V14l22 20V14" fill="none" stroke="#9cf0db" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/>
-  <circle cx="35" cy="10" r="2.5" fill="#fff"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="CareerNaviq">
+  <defs>
+    <linearGradient id="g" x1="10" y1="8" x2="54" y2="58" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#8ff5dc"/>
+      <stop offset=".55" stop-color="#28d3a1"/>
+      <stop offset="1" stop-color="#0b705c"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="18" fill="#071f2c"/>
+  <path d="M17 46V17l30 30V18" fill="none" stroke="url(#g)" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M45 13h6v6" fill="none" stroke="#f2fffb" stroke-width="4" stroke-linecap="round"/>
 </svg>

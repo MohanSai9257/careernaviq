@@ -111,6 +111,22 @@ export default {async fetch(request,env){
    return Response.json({ok:true},{headers:{'Set-Cookie':clearSessionCookie(),'Cache-Control':'no-store'}});
   }
   const session=await sessionFor(request,env);
+
+  if(url.pathname==='/api/admin/analytics'&&request.method==='GET'){
+   if(!canManage(session))return json({error:'Admin access required.'},403);
+   const database=db(env),now=new Date(),dayAgo=new Date(now.getTime()-86400000).toISOString(),weekAgo=new Date(now.getTime()-604800000).toISOString();
+   await ensureAdminAccessRequests(database);
+   const count=async(sql,...values)=>{const query=database.prepare(sql);return Number((await (values.length?query.bind(...values):query).first())?.count||0);};
+   const userRows=(await database.prepare('SELECT status,count(*) AS count FROM access_users GROUP BY status').all()).results||[];
+   const users=Object.fromEntries(userRows.map(row=>[row.status,Number(row.count||0)]));
+   const sectionRows=(await database.prepare("SELECT section,count(*) AS count FROM section_items WHERE status = 'approved' GROUP BY section").all()).results||[];
+   const sections=Object.fromEntries(sectionRows.map(row=>[row.section,Number(row.count||0)]));
+   const jobStatusRows=(await database.prepare('SELECT status,count(*) AS count FROM job_source_checks GROUP BY status').all()).results||[];
+   const sourceStatus=Object.fromEntries(jobStatusRows.map(row=>[row.status,Number(row.count||0)]));
+   const baseCompanies=baseRows.length,addedCompanies=await count('SELECT count(*) AS count FROM added_companies');
+   const pendingAccess=users.pending||0,pendingCompanyChanges=await count("SELECT count(*) AS count FROM change_requests WHERE status = 'pending'"),pendingSectionItems=await count("SELECT count(*) AS count FROM section_items WHERE status = 'pending'"),pendingSectionChanges=await count("SELECT count(*) AS count FROM section_change_requests WHERE status = 'pending'"),pendingAdminAccess=await count("SELECT count(*) AS count FROM admin_access_requests WHERE status = 'pending'");
+   return json({generatedAt:now.toISOString(),totals:{baseCompanies,addedCompanies,companies:baseCompanies+addedCompanies,recruiters:sections['recruiter-directory']||0,studyMaterials:sections['study-materials']||0,interviewPrep:sections['interview-prep']||0,interviewSupport:sections['interview-support']||0},users:{approved:users.approved||0,pending:pendingAccess,blocked:users.blocked||0,newThisWeek:await count('SELECT count(*) AS count FROM access_users WHERE requested_at >= ?',weekAgo),profiles:await count('SELECT count(*) AS count FROM user_profiles'),coadmins:await count('SELECT count(*) AS count FROM coadmins')},pending:{accessRequests:pendingAccess,adminAccess:pendingAdminAccess,companyChanges:pendingCompanyChanges,sectionItems:pendingSectionItems,sectionChanges:pendingSectionChanges,total:pendingAccess+pendingAdminAccess+pendingCompanyChanges+pendingSectionItems+pendingSectionChanges},jobs:{open:await count('SELECT count(*) AS count FROM imported_jobs WHERE is_open = 1'),lastDay:await count('SELECT count(*) AS count FROM imported_jobs WHERE discovered_at >= ?',dayAgo),lastWeek:await count('SELECT count(*) AS count FROM imported_jobs WHERE discovered_at >= ?',weekAgo),sourcesChecked:await count('SELECT count(*) AS count FROM job_source_checks'),failedSources:(sourceStatus.error||0)+(sourceStatus.failed||0)},tabs:{restricted:await count('SELECT count(*) AS count FROM tab_access WHERE allowed = 0')}});
+  }
   if(url.pathname==='/api/tab-access'&&request.method==='GET'){
    if(!canManage(session))return json({error:'Admin access required.'},403);
    const {results}=await db(env).prepare('SELECT tab,allowed,updated_at,updated_by FROM tab_access').all();

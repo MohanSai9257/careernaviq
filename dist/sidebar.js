@@ -26,7 +26,7 @@ sidebar.append(links);
 const adminLink=document.createElement('a');adminLink.href='/admin';adminLink.title='ADMIN';adminLink.className='side-admin';adminLink.hidden=true;
 if(location.pathname==='/admin'||location.pathname==='/admin/')adminLink.setAttribute('aria-current','page');
 const adminIcon=document.createElement('span');adminIcon.className='side-icon';adminIcon.setAttribute('aria-hidden','true');adminIcon.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 20 5v6c0 5-3.3 8.5-8 11-4.7-2.5-8-6-8-11V5l8-3Z"/><path d="m9 12 2 2 4-4"/></svg>';
-const adminLabel=document.createElement('span');adminLabel.className='side-label';adminLabel.textContent='ADMIN';adminLink.append(adminIcon,adminLabel);sidebar.append(adminLink);
+const adminLabel=document.createElement('span');adminLabel.className='side-label';adminLabel.textContent='ADMIN';adminLink.append(adminIcon,adminLabel);
 window.setAdminNavigation=(role,status)=>{adminLink.hidden=status!=='approved';adminLink.dataset.role=role||'guest';};
 function ensureAdminRequestDialog(){
  let dialog=document.getElementById('admin-request-dialog');if(dialog)return dialog;
@@ -47,11 +47,12 @@ adminLink.addEventListener('click',event=>{
  event.preventDefault();const dialog=ensureAdminRequestDialog();document.getElementById('admin-request-message').hidden=true;dialog.showModal();
 });
 fetch('/api/session',{cache:'no-store'}).then(response=>response.json()).then(session=>window.setAdminNavigation(session.role,session.status)).catch(()=>{});
+const navFooter=document.createElement('div');navFooter.className='side-footer';
 const profileLink=document.createElement('a');profileLink.href='/profile';profileLink.title='Profile';profileLink.className='side-profile';
 if(location.pathname==='/profile')profileLink.setAttribute('aria-current','page');
 const profileIcon=document.createElement('span');profileIcon.className='side-icon';profileIcon.setAttribute('aria-hidden','true');profileIcon.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21v-2a8 8 0 0 1 16 0v2"/></svg>';
 const profileLabel=document.createElement('span');profileLabel.className='side-label';profileLabel.textContent='Profile';profileLink.append(profileIcon,profileLabel);
-sidebar.append(profileLink);document.body.prepend(sidebar);
+navFooter.append(adminLink,profileLink);sidebar.append(navFooter);document.body.prepend(sidebar);
 function setSidebarCollapsed(collapsed){document.body.classList.toggle('sidebar-collapsed',collapsed);toggle.textContent=collapsed?'›':'‹';toggle.setAttribute('aria-expanded',String(!collapsed));}
 setSidebarCollapsed(localStorage.getItem('directory-sidebar-collapsed')==='true');
 toggle.addEventListener('click',()=>{const collapsed=!document.body.classList.contains('sidebar-collapsed');setSidebarCollapsed(collapsed);localStorage.setItem('directory-sidebar-collapsed',String(collapsed));});
