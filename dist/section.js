@@ -9,11 +9,11 @@ const sectionKey=location.pathname.split('/').filter(Boolean)[0]||'recruiter-dir
 const config=sectionConfig[sectionKey];
 const byId=id=>document.getElementById(id);
 let tabs=[...document.querySelectorAll('.section-tabs [role="tab"]')];
-let automaticRefreshAttempted=false;
 let category='java',requestNumber=0,searchTimer,editingItem=null,deletingItem=null,actionItem=null,accessRole='user';
 let jobItems=[],jobPage=0;
 const jobPageSize=25;
 byId('section-title').textContent=config.title;document.title=`${config.title} — CareerNaviq`;
+if(sectionKey==='latest-posted-jobs'){const hint=document.createElement('small');hint.className='jobs-refresh-hint';hint.textContent='Double-click Java, Data, DevOps, or Validation to load latest jobs';byId('section-title').append(' ',hint);}
 byId('section-add').textContent=config.action;byId('section-dialog-title').textContent=config.action;
 byId('section-add').hidden=!config.action;
 byId('section-title-label').textContent=config.name;byId('section-organization-label').textContent=config.organization;byId('section-url-label').textContent=config.url;
@@ -53,6 +53,12 @@ function rankSectionItems(items,query){
  return [...items].sort((a,b)=>sectionMatchRank(a,normalized)-sectionMatchRank(b,normalized)||String(a.organization||a.company_name||'').localeCompare(String(b.organization||b.company_name||''),undefined,{sensitivity:'base'})||String(a.title||'').localeCompare(String(b.title||''),undefined,{sensitivity:'base'}));
 }
 function status(message){byId('section-status').textContent=message;}
+function latestLoadedMessage(count,source){
+ const label=category==='devops'?'DevOps':category.charAt(0).toUpperCase()+category.slice(1);
+ const refreshed=source?.checked_at?`Recently loaded at ${new Date(source.checked_at).toLocaleString()}`:'Saved jobs are ready';
+ const suffix=source?.status==='error'?' Last refresh failed; showing saved jobs.':' Double-click a job category tab to refresh.';
+ return `${count} ${label} jobs · ${refreshed}.${suffix}`;
+}
 function sectionNotice(message){status(message);window.showAppNotice?.(message);}
 async function api(url,options){const response=await fetch(url,{cache:'no-store',...options});const result=await response.json();if(!response.ok)throw Error(result.error||'Please try again.');return result;}
 let sectionMenuTrigger=null;
@@ -160,15 +166,15 @@ async function loadItems(){
   if(current!==requestNumber)return;
   if(sectionKey==='latest-posted-jobs'){
    const data=await api('/api/jobs/query',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({category,window:'all',search:query,minYears:null,maxYears:null})});
-   if(current!==requestNumber)return;renderJobs(rankSectionItems(data.items,query));if(!automaticRefreshAttempted&&!data.source?.checked_at){automaticRefreshAttempted=true;setTimeout(()=>refreshJobs(category),0);}status(data.source?.status==='refreshing'?'Loading…':`${data.items.length} ${category==='devops'?'DevOps':category.charAt(0).toUpperCase()+category.slice(1)} jobs${data.source?.checked_at?' · Last refreshed '+new Date(data.source.checked_at).toLocaleString():''}.${data.source?.status==='error'?' Refresh failed; showing saved jobs.':''}`);return data.items.length;
+   if(current!==requestNumber)return;renderJobs(rankSectionItems(data.items,query));status(latestLoadedMessage(data.items.length,data.source));return data.items.length;
   }
   const data=await api(`/api/section-items?${params}`);if(current!==requestNumber)return;
   const ranked=rankSectionItems(data.items,query);render(ranked);status(`${data.items.length} entries`);
  }
  catch(error){if(current===requestNumber)status(error.message);}
 }
-function selectTab(tab){category=tab.id.slice(4);jobPage=0;for(const item of tabs){const selected=item===tab;item.setAttribute('aria-selected',String(selected));item.tabIndex=selected?0:-1;item.disabled=sectionKey==='latest-posted-jobs'&&selected;}byId('section-panel').setAttribute('aria-labelledby',tab.id);byId('section-search').value='';byId('date-filter').value='all';if(sectionKey==='latest-posted-jobs')refreshJobs(category);else loadItems();}
-for(const tab of tabs){tab.addEventListener('click',()=>selectTab(tab));tab.addEventListener('keydown',event=>{if(event.key!=='ArrowRight'&&event.key!=='ArrowLeft')return;event.preventDefault();const next=tabs[(tabs.indexOf(tab)+(event.key==='ArrowRight'?1:-1)+tabs.length)%tabs.length];selectTab(next);next.focus();});}
+function selectTab(tab){category=tab.id.slice(4);jobPage=0;for(const item of tabs){const selected=item===tab;item.setAttribute('aria-selected',String(selected));item.tabIndex=selected?0:-1;}byId('section-panel').setAttribute('aria-labelledby',tab.id);byId('section-search').value='';byId('date-filter').value='all';loadItems();}
+for(const tab of tabs){tab.addEventListener('click',()=>selectTab(tab));tab.addEventListener('dblclick',()=>{if(sectionKey==='latest-posted-jobs')refreshJobs(tab.id.slice(4));});tab.addEventListener('keydown',event=>{if(sectionKey==='latest-posted-jobs'&&(event.key==='Enter'||event.key===' ')){event.preventDefault();refreshJobs(tab.id.slice(4));return;}if(event.key!=='ArrowRight'&&event.key!=='ArrowLeft')return;event.preventDefault();const next=tabs[(tabs.indexOf(tab)+(event.key==='ArrowRight'?1:-1)+tabs.length)%tabs.length];selectTab(next);next.focus();});}
 byId('section-search').addEventListener('input',()=>{clearTimeout(searchTimer);jobPage=0;searchTimer=setTimeout(loadItems,250);});
 if(byId('job-previous'))byId('job-previous').addEventListener('click',()=>{jobPage=Math.max(0,jobPage-1);renderJobPage();byId('section-panel').scrollIntoView({behavior:'smooth',block:'start'});});
 if(byId('job-next'))byId('job-next').addEventListener('click',()=>{jobPage+=1;renderJobPage();byId('section-panel').scrollIntoView({behavior:'smooth',block:'start'});});
@@ -182,7 +188,7 @@ async function refreshJobs(targetCategory=category){
  finally{for(const tab of tabs)tab.disabled=false;activeTab?.setAttribute('aria-selected','true');}
 }
 byId('job-generate').addEventListener('click',refreshJobs);
-if(sectionKey==='latest-posted-jobs')setInterval(()=>{if(!document.hidden)loadItems();},240000);
+
 function openForm(item=null){
  editingItem=item;byId('section-form').reset();byId('section-form-error').hidden=true;
  byId('section-dialog-title').textContent=item?`Edit ${item.title||'entry'}`:config.action;

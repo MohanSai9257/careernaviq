@@ -144,3 +144,7 @@ input:focus,select:focus,textarea:focus{box-shadow:none!important;outline:2px so
 .search input:focus{border:0!important;outline:0!important;box-shadow:none!important}
 .section-toolbar .search{min-width:0!important}
 @media(max-width:650px){.search{min-height:54px!important;padding:12px 16px!important;gap:12px!important}.search input{font-size:1rem!important}}
+
+/* Latest jobs manual refresh hint */
+.jobs-refresh-hint{display:inline-flex;vertical-align:middle;margin-left:10px;padding:5px 10px;border:1px solid #c8d6de;border-radius:999px;background:#fff;color:#5c7180;font-size:.82rem;font-weight:700;letter-spacing:0;white-space:nowrap}
+@media(max-width:760px){.jobs-refresh-hint{display:flex;width:max-content;max-width:100%;margin:10px 0 0;font-size:.78rem;white-space:normal}}
