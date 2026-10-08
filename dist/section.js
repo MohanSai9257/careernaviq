@@ -13,7 +13,7 @@ let category='java',requestNumber=0,searchTimer,editingItem=null,deletingItem=nu
 let jobItems=[],jobPage=0;
 const jobPageSize=25;
 byId('section-title').textContent=config.title;document.title=`${config.title} — CareerNaviq`;
-if(sectionKey==='latest-posted-jobs'){const hint=document.createElement('small');hint.className='jobs-refresh-hint';hint.textContent='Double-click Java, Data, DevOps, or Validation to load latest jobs';byId('section-title').append(' ',hint);}
+if(sectionKey==='latest-posted-jobs'){const hint=document.createElement('small');hint.className='jobs-refresh-hint';hint.textContent='Double-click on your technology to load latest jobs';byId('section-title').append(' ',hint);}
 byId('section-add').textContent=config.action;byId('section-dialog-title').textContent=config.action;
 byId('section-add').hidden=!config.action;
 byId('section-title-label').textContent=config.name;byId('section-organization-label').textContent=config.organization;byId('section-url-label').textContent=config.url;
@@ -56,7 +56,7 @@ function status(message){byId('section-status').textContent=message;}
 function latestLoadedMessage(count,source){
  const label=category==='devops'?'DevOps':category.charAt(0).toUpperCase()+category.slice(1);
  const refreshed=source?.checked_at?`Recently loaded at ${new Date(source.checked_at).toLocaleString()}`:'Saved jobs are ready';
- const suffix=source?.status==='error'?' Last refresh failed; showing saved jobs.':' Double-click a job category tab to refresh.';
+ const suffix=source?.status==='error'?' Last refresh failed; showing saved jobs.':'';
  return `${count} ${label} jobs · ${refreshed}.${suffix}`;
 }
 function sectionNotice(message){status(message);window.showAppNotice?.(message);}
