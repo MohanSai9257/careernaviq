@@ -38,6 +38,7 @@ async function currentCompany(database,id,old){
  return row?{...row,...(old?JSON.parse(old.payload):{})}:null;
 }
 function sameOrigin(request,url){return !request.headers.get('Origin')||request.headers.get('Origin')===url.origin;}
+function escapeLike(value){return String(value||'').replace(/[\\%_]/g,'\\$&');}
 async function jsonInput(request){if(!request.headers.get('Content-Type')?.includes('application/json'))throw Error('JSON required.');const body=await request.text();if(body.length>10000)throw Error('Request too large.');return JSON.parse(body);}
 export default {async fetch(request,env){
  const url=new URL(request.url);
@@ -364,24 +365,33 @@ export default {async fetch(request,env){
    const section=url.searchParams.get('section'),category=url.searchParams.get('category');
    if(!sectionNames.has(section)||(!sectionCategories.has(category)&&!(section==='recruiter-directory'&&['all','mylist'].includes(category))))return json({error:'Invalid section or category.'},400);
    if(!canManage(session)&&!await tabAllowed(env,section))return json({error:restrictedMessage},403);
-   const search=(url.searchParams.get('search')||'').trim().slice(0,100),searchLike=`%${search.replace(/[\\%_]/g,'\\$&')}%`,searchPrefix=`${search.replace(/[\\%_]/g,'\\$&')}%`;
+   const search=(url.searchParams.get('search')||'').trim().slice(0,100),searchLike=`%${escapeLike(search)}%`;
    const windowName=url.searchParams.get('window')||'all';
    if(!['all','day','week','month'].includes(windowName))return json({error:'Invalid date filter.'},400);
    const durations={day:86400000,week:604800000,month:2592000000};
    const cutoff=windowName==='all'?'':new Date(Date.now()-durations[windowName]).toISOString();
-   const relevanceOrder=search?"CASE WHEN lower(coalesce(title,'')) = lower(?) THEN 0 WHEN lower(coalesce(title,'')) LIKE lower(?) ESCAPE '\\' THEN 1 WHEN lower(coalesce(organization,'')) = lower(?) THEN 2 WHEN lower(coalesce(organization,'')) LIKE lower(?) ESCAPE '\\' THEN 3 WHEN lower(coalesce(email,'')) LIKE lower(?) ESCAPE '\\' THEN 4 ELSE 5 END, ":'';
-   const joinRelevanceOrder=search?"CASE WHEN lower(coalesce(item.title,'')) = lower(?) THEN 0 WHEN lower(coalesce(item.title,'')) LIKE lower(?) ESCAPE '\\' THEN 1 WHEN lower(coalesce(item.organization,'')) = lower(?) THEN 2 WHEN lower(coalesce(item.organization,'')) LIKE lower(?) ESCAPE '\\' THEN 3 WHEN lower(coalesce(item.email,'')) LIKE lower(?) ESCAPE '\\' THEN 4 ELSE 5 END, ":'';
+   const searchableFields=['title','organization','url','details','email','phone','extension','file_name','category'];
+   const itemSearch=search?` AND (${searchableFields.map(field=>`lower(coalesce(${field},'')) LIKE lower(?) ESCAPE '\\'`).join(' OR ')})`:'';
+   const joinSearch=search?` AND (${searchableFields.map(field=>`lower(coalesce(item.${field},'')) LIKE lower(?) ESCAPE '\\'`).join(' OR ')})`:'';
+   const searchValues=search?searchableFields.map(()=>searchLike):[];
    const sectionItemOrder=section==='recruiter-directory'
-    ? `ORDER BY ${relevanceOrder}CASE WHEN organization IS NULL OR organization = '' THEN 1 ELSE 0 END, lower(coalesce(organization,'')), lower(title), created_at DESC`
-    : `ORDER BY ${relevanceOrder}created_at DESC`;
-   const recruiterJoinOrder=`ORDER BY ${joinRelevanceOrder}CASE WHEN item.organization IS NULL OR item.organization = '' THEN 1 ELSE 0 END, lower(coalesce(item.organization,'')), lower(item.title), item.created_at DESC`;
-   const relevanceValues=search?[search,searchPrefix,search,searchPrefix,searchLike]:[];
+    ? "ORDER BY CASE WHEN organization IS NULL OR organization = '' THEN 1 ELSE 0 END, lower(coalesce(organization,'')), lower(title), created_at DESC"
+    : "ORDER BY created_at DESC";
+   const recruiterJoinOrder="ORDER BY CASE WHEN item.organization IS NULL OR item.organization = '' THEN 1 ELSE 0 END, lower(coalesce(item.organization,'')), lower(item.title), item.created_at DESC";
    let results;
    if(section==='recruiter-directory'){
     const database=db(env);await ensureSectionFavorites(database);
-    if(category==='mylist')({results}=await database.prepare(`SELECT item.id,item.version,item.category,item.title,item.organization,item.url,item.details,item.email,item.phone,item.extension,item.file_name,item.posted_at,item.created_at,1 AS is_favorite FROM section_items item JOIN section_favorites favorite ON favorite.item_id = item.id AND favorite.user_email = ? WHERE item.section = ? AND item.status = 'approved' AND (? = '' OR lower(item.title) LIKE lower(?) ESCAPE '\' OR lower(item.organization) LIKE lower(?) ESCAPE '\' OR lower(item.details) LIKE lower(?) ESCAPE '\' OR lower(item.email) LIKE lower(?) ESCAPE '\' OR lower(item.phone) LIKE lower(?) ESCAPE '\') AND (? = '' OR item.posted_at >= ?) ${recruiterJoinOrder} LIMIT 500`).bind(...[session.email,section,search,searchLike,searchLike,searchLike,searchLike,searchLike,cutoff,cutoff,...relevanceValues]).all());
-    else ({results}=await database.prepare(`SELECT id,version,category,title,organization,url,details,email,phone,extension,file_name,posted_at,created_at,EXISTS(SELECT 1 FROM section_favorites favorite WHERE favorite.user_email = ? AND favorite.item_id = section_items.id) AS is_favorite FROM section_items WHERE section = ? AND category = ? AND status = 'approved' AND (? = '' OR lower(title) LIKE lower(?) ESCAPE '\' OR lower(organization) LIKE lower(?) ESCAPE '\' OR lower(details) LIKE lower(?) ESCAPE '\' OR lower(email) LIKE lower(?) ESCAPE '\' OR lower(phone) LIKE lower(?) ESCAPE '\') AND (? = '' OR posted_at >= ?) ${sectionItemOrder} LIMIT 500`).bind(...[session.email,section,category,search,searchLike,searchLike,searchLike,searchLike,searchLike,cutoff,cutoff,...relevanceValues]).all());
-   }else ({results}=await db(env).prepare(`SELECT id,version,category,title,organization,url,details,email,phone,extension,file_name,posted_at,created_at FROM section_items WHERE section = ? AND category = ? AND status = 'approved' AND (? = '' OR lower(title) LIKE lower(?) ESCAPE '\' OR lower(organization) LIKE lower(?) ESCAPE '\' OR lower(details) LIKE lower(?) ESCAPE '\' OR lower(email) LIKE lower(?) ESCAPE '\' OR lower(phone) LIKE lower(?) ESCAPE '\') AND (? = '' OR posted_at >= ?) ${sectionItemOrder} LIMIT 500`).bind(...[section,category,search,searchLike,searchLike,searchLike,searchLike,searchLike,cutoff,cutoff,...relevanceValues]).all());
+    if(category==='mylist')({results}=await database.prepare(`SELECT item.id,item.version,item.category,item.title,item.organization,item.url,item.details,item.email,item.phone,item.extension,item.file_name,item.posted_at,item.created_at,1 AS is_favorite FROM section_items item JOIN section_favorites favorite ON favorite.item_id = item.id AND favorite.user_email = ? WHERE item.section = ? AND item.status = 'approved'${joinSearch} AND (? = '' OR item.posted_at >= ?) ${recruiterJoinOrder} LIMIT 500`).bind(...[session.email,section,...searchValues,cutoff,cutoff]).all());
+    else {
+     const categoryClause=search?'':' AND category = ?';
+     const binds=search?[session.email,section,...searchValues,cutoff,cutoff]:[session.email,section,category,...searchValues,cutoff,cutoff];
+     ({results}=await database.prepare(`SELECT id,version,category,title,organization,url,details,email,phone,extension,file_name,posted_at,created_at,EXISTS(SELECT 1 FROM section_favorites favorite WHERE favorite.user_email = ? AND favorite.item_id = section_items.id) AS is_favorite FROM section_items WHERE section = ?${categoryClause} AND status = 'approved'${itemSearch} AND (? = '' OR posted_at >= ?) ${sectionItemOrder} LIMIT 500`).bind(...binds).all());
+    }
+   }else {
+    const categoryClause=search?'':' AND category = ?';
+    const binds=search?[section,...searchValues,cutoff,cutoff]:[section,category,...searchValues,cutoff,cutoff];
+    ({results}=await db(env).prepare(`SELECT id,version,category,title,organization,url,details,email,phone,extension,file_name,posted_at,created_at FROM section_items WHERE section = ?${categoryClause} AND status = 'approved'${itemSearch} AND (? = '' OR posted_at >= ?) ${sectionItemOrder} LIMIT 500`).bind(...binds).all());
+   }
    return json({items:results});
   }
   if(url.pathname==='/api/section-favorites'&&request.method==='PUT'){

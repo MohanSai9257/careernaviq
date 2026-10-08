@@ -40,7 +40,7 @@ byId('section-posted').required=false;
 function normalizeSearch(value){return String(value||'').toLocaleLowerCase().replace(/[^a-z0-9]+/g,' ').trim();}
 function sectionMatchRank(item,query){
  if(!query)return 0;
- const fields=[item.title,item.organization,item.company_name,item.email,item.phone,item.details].map(normalizeSearch);
+ const fields=[item.title,item.organization,item.company_name,item.email,item.phone,item.extension,item.details,item.url,item.apply_url,item.file_name,item.category].map(normalizeSearch);
  for(const value of fields)if(value===query)return 0;
  for(const value of fields)if(value.startsWith(query))return 1;
  for(const value of fields)if(value.split(' ').some(part=>part===query))return 2;
