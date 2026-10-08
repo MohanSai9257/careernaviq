@@ -95,3 +95,10 @@ dialog{border:1px solid var(--app-border);border-radius:18px;box-shadow:0 30px 9
 .profile-greeting:not([hidden]){background:linear-gradient(135deg,#e8f4ff,#e9fff8)!important;border-color:#a9d8ff!important;color:#004182!important;box-shadow:0 0 0 3px rgba(10,102,194,.08),0 12px 30px rgba(10,102,194,.12)!important}.profile-card{padding:30px}.profile-fields label{color:#213d4d}.profile-fields input[readonly]{background:#eef4f7;color:#536b7a}.access-card{border-radius:22px}.access-card h1{letter-spacing:-.05em}
 @media(max-width:900px){.intro,.hero-intro{grid-template-columns:1fr}.total{justify-self:start}.category-tabs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:650px){.has-access .masthead{height:auto}.has-access .brand{min-height:70px;padding:10px 0}.intro,.hero-intro{padding:28px 0 18px}.intro h1,.hero-intro h1{font-size:2.35rem}.category-tabs{grid-template-columns:1fr}.toolbar,.section-toolbar{padding:16px}.side-nav a:hover,.side-footer .side-admin:hover,.side-footer .side-profile:hover{transform:none}.side-nav a[aria-current=page],.side-footer .side-admin[aria-current=page],.side-footer .side-profile[aria-current=page]{box-shadow:none}.profile-card{padding:20px}.total{width:100%;min-width:0}.role-control button:hover,.primary:hover,#section-add:hover,#job-generate:hover,#profile-form>button:hover{transform:none}}
+
+/* Search refinement: calm enterprise focus state */
+.search{background:#fff!important;border-color:#c8d6de!important;box-shadow:none!important;transition:border-color .12s ease,background .12s ease!important}
+.search:focus-within{outline:0!important;border-color:#8fa8b6!important;box-shadow:none!important;background:#fff!important}
+.search input:focus{box-shadow:none!important;border-color:transparent!important;outline:0!important}
+input:focus,select:focus,textarea:focus{box-shadow:none!important;outline:2px solid #d7e3ea!important;outline-offset:1px!important;border-color:#8fa8b6!important}
+.job-pagination{border-top:1px solid var(--app-border);background:#fbfdfe}

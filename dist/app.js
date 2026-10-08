@@ -14,7 +14,6 @@ function updateRole(){
  document.body.classList.toggle('user-mode',!admin);
  if($('menu-delete'))$('menu-delete').hidden=!admin;
 }
-const notes={client:'Companies currently categorized as direct employers. Original company order is preserved.',implementation:'Companies currently categorized as implementation and technology services firms. Original company order is preserved.',vendor:'Includes known vendors and all companies not yet classified. Placement here does not verify vendor status.',mylist:'Your saved companies, in their original order. My List is stored only in this browser, not shared with other visitors.'};
 const arrow='<svg aria-hidden="true" viewBox="0 0 16 16"><path d="M5 3h8v8M13 3 3 13"/></svg>';
 function linkCell(url,label,name){
  const td=document.createElement('td');
@@ -29,17 +28,32 @@ function updateCounts(){
  for(const key of ['client','implementation','vendor'])$('count-'+key).textContent=companies.filter(r=>r[3]===key).length.toLocaleString();
  $('count-mylist').textContent=companies.filter(r=>saved.has(r[4])).length.toLocaleString();
 }
+function normalizeSearch(value){return String(value||'').toLocaleLowerCase().replace(/[^a-z0-9]+/g,' ').trim();}
+function matchRank(row,query){
+ if(!query)return 0;
+ const name=normalizeSearch(row[0]),linkedIn=normalizeSearch(row[1]),careers=normalizeSearch(row[2]);
+ if(name===query)return 0;
+ if(name.startsWith(query))return 1;
+ if(name.split(' ').some(part=>part===query))return 2;
+ if(name.includes(query))return 3;
+ if(linkedIn.includes(query)||careers.includes(query))return 4;
+ return 99;
+}
 function applyFilter(){
- const query=$('search').value.trim().toLocaleLowerCase();
- filtered=companies.filter(r=>(category==='mylist'?saved.has(r[4]):r[3]===category)&&r[0].toLocaleLowerCase().includes(query));
+ const query=normalizeSearch($('search').value);
+ filtered=companies.filter(r=>{
+  const inCategory=category==='mylist'?saved.has(r[4]):r[3]===category;
+  return inCategory&&(!query||matchRank(r,query)<99);
+ });
+ if(query)filtered.sort((a,b)=>matchRank(a,query)-matchRank(b,query)||a[0].localeCompare(b[0],undefined,{sensitivity:'base'}));
  page=Math.min(page,Math.max(0,Math.ceil(filtered.length/pageSize)-1));render();
 }
 function setCategory(value){
- if(!Object.hasOwn(notes,value))throw new Error('Unknown category');
+ if(!['client','implementation','vendor','mylist'].includes(value))throw new Error('Unknown category');
  category=value;page=0;
  for(const tab of tabs){const active=tab.dataset.category===category;tab.setAttribute('aria-selected',String(active));tab.tabIndex=active?0:-1;}
  $('directory-panel').setAttribute('aria-labelledby','tab-'+category);
- $('category-note').textContent=notes[category];applyFilter();
+ applyFilter();
 }
 function setSaved(name,shouldSave){
  if(!companies.some(r=>r[4]===name))throw new Error('Company not found');

@@ -11,6 +11,8 @@ const byId=id=>document.getElementById(id);
 let tabs=[...document.querySelectorAll('.section-tabs [role="tab"]')];
 let automaticRefreshAttempted=false;
 let category='java',requestNumber=0,searchTimer,editingItem=null,deletingItem=null,actionItem=null,accessRole='user';
+let jobItems=[],jobPage=0;
+const jobPageSize=25;
 byId('section-title').textContent=config.title;document.title=`${config.title} — CareerNaviq`;
 byId('section-add').textContent=config.action;byId('section-dialog-title').textContent=config.action;
 byId('section-add').hidden=!config.action;
@@ -109,11 +111,17 @@ function render(items){
  }
 }
 function renderJobs(items,awaitingGeneration=false){
- const list=byId('section-items');list.replaceChildren();list.classList.add('section-records','job-records');
+ jobItems=items;
+ if(jobPage*jobPageSize>=jobItems.length)jobPage=Math.max(0,Math.ceil(jobItems.length/jobPageSize)-1);
+ renderJobPage(awaitingGeneration);
+}
+function renderJobPage(awaitingGeneration=false){
+ const list=byId('section-items'),pagination=byId('job-pagination');list.replaceChildren();list.classList.add('section-records','job-records');
  const table=document.createElement('table'),head=document.createElement('thead'),row=document.createElement('tr'),body=document.createElement('tbody');
  for(const label of ['Job title','Company','Posted date','Apply']){const cell=document.createElement('th');cell.scope='col';cell.textContent=label;row.append(cell);}head.append(row);
- if(!items.length){const empty=document.createElement('tr'),cell=document.createElement('td');cell.colSpan=4;cell.className='section-table-empty';cell.textContent=awaitingGeneration?'Refreshing…':'No matching jobs found yet.';empty.append(cell);body.append(empty);}
- for(const item of items){
+ const pageItems=jobItems.slice(jobPage*jobPageSize,(jobPage+1)*jobPageSize);
+ if(!pageItems.length){const empty=document.createElement('tr'),cell=document.createElement('td');cell.colSpan=4;cell.className='section-table-empty';cell.textContent=awaitingGeneration?'Refreshing…':'No matching jobs found yet.';empty.append(cell);body.append(empty);}
+ for(const item of pageItems){
   const tr=document.createElement('tr'),title=document.createElement('td'),company=document.createElement('td'),date=document.createElement('td'),apply=document.createElement('td');
   title.textContent=item.title;company.textContent=item.company_name;
   if(item.posted_at){const time=document.createElement('time');time.dateTime=item.posted_at;time.textContent=new Date(item.posted_at+'T12:00:00').toLocaleDateString();date.append(time);}else date.textContent='Date unavailable';
@@ -121,14 +129,21 @@ function renderJobs(items,awaitingGeneration=false){
   tr.append(title,company,date,apply);body.append(tr);
  }
  table.append(head,body);list.append(table);
+ if(pagination){
+  const totalPages=Math.max(1,Math.ceil(jobItems.length/jobPageSize));
+  byId('job-range').textContent=jobItems.length?`${(jobPage*jobPageSize+1).toLocaleString()}–${Math.min((jobPage+1)*jobPageSize,jobItems.length).toLocaleString()} of ${jobItems.length.toLocaleString()} jobs`:'0 jobs';
+  byId('job-page').textContent=`Page ${jobPage+1} of ${totalPages}`;
+  byId('job-previous').disabled=jobPage===0;byId('job-next').disabled=(jobPage+1)*jobPageSize>=jobItems.length;
+  pagination.hidden=awaitingGeneration||jobItems.length<=jobPageSize;
+ }
 }
 async function loadItems(){
- const current=++requestNumber,params=new URLSearchParams({section:sectionKey,category,search:byId('section-search').value.trim(),window:'all'});
+ const current=++requestNumber,query=byId('section-search').value.trim(),params=new URLSearchParams({section:sectionKey,category,search:query,window:'all'});
  status('Loading…');
  try{
   if(current!==requestNumber)return;
   if(sectionKey==='latest-posted-jobs'){
-   const data=await api('/api/jobs/query',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({category,window:'all',search:'',minYears:null,maxYears:null})});
+   const data=await api('/api/jobs/query',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({category,window:'all',search:query,minYears:null,maxYears:null})});
    if(current!==requestNumber)return;renderJobs(data.items);if(!automaticRefreshAttempted&&!data.source?.checked_at){automaticRefreshAttempted=true;setTimeout(()=>refreshJobs(category),0);}status(data.source?.status==='refreshing'?'Loading…':`${data.items.length} ${category==='devops'?'DevOps':category.charAt(0).toUpperCase()+category.slice(1)} jobs${data.source?.checked_at?' · Last refreshed '+new Date(data.source.checked_at).toLocaleString():''}.${data.source?.status==='error'?' Refresh failed; showing saved jobs.':''}`);return data.items.length;
   }
   const data=await api(`/api/section-items?${params}`);if(current!==requestNumber)return;
@@ -136,14 +151,16 @@ async function loadItems(){
  }
  catch(error){if(current===requestNumber)status(error.message);}
 }
-function selectTab(tab){category=tab.id.slice(4);for(const item of tabs){const selected=item===tab;item.setAttribute('aria-selected',String(selected));item.tabIndex=selected?0:-1;item.disabled=sectionKey==='latest-posted-jobs'&&selected;}byId('section-panel').setAttribute('aria-labelledby',tab.id);byId('section-search').value='';byId('date-filter').value='all';if(sectionKey==='latest-posted-jobs')refreshJobs(category);else loadItems();}
+function selectTab(tab){category=tab.id.slice(4);jobPage=0;for(const item of tabs){const selected=item===tab;item.setAttribute('aria-selected',String(selected));item.tabIndex=selected?0:-1;item.disabled=sectionKey==='latest-posted-jobs'&&selected;}byId('section-panel').setAttribute('aria-labelledby',tab.id);byId('section-search').value='';byId('date-filter').value='all';if(sectionKey==='latest-posted-jobs')refreshJobs(category);else loadItems();}
 for(const tab of tabs){tab.addEventListener('click',()=>selectTab(tab));tab.addEventListener('keydown',event=>{if(event.key!=='ArrowRight'&&event.key!=='ArrowLeft')return;event.preventDefault();const next=tabs[(tabs.indexOf(tab)+(event.key==='ArrowRight'?1:-1)+tabs.length)%tabs.length];selectTab(next);next.focus();});}
-byId('section-search').addEventListener('input',()=>{clearTimeout(searchTimer);searchTimer=setTimeout(loadItems,250);});
+byId('section-search').addEventListener('input',()=>{clearTimeout(searchTimer);jobPage=0;searchTimer=setTimeout(loadItems,250);});
+if(byId('job-previous'))byId('job-previous').addEventListener('click',()=>{jobPage=Math.max(0,jobPage-1);renderJobPage();byId('section-panel').scrollIntoView({behavior:'smooth',block:'start'});});
+if(byId('job-next'))byId('job-next').addEventListener('click',()=>{jobPage+=1;renderJobPage();byId('section-panel').scrollIntoView({behavior:'smooth',block:'start'});});
 byId('date-filter').addEventListener('change',loadItems);
 for(const id of ['job-min-years','job-max-years'])byId(id).addEventListener('change',loadItems);
 async function refreshJobs(targetCategory=category){
  const activeTab=byId(`tab-${targetCategory}`);for(const tab of tabs)tab.disabled=sectionKey==='latest-posted-jobs';
- renderJobs([],true);status('Refreshing…');
+ jobPage=0;renderJobs([],true);status('Refreshing…');
  try{const result=await api('/api/jobs/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});await loadItems();window.showAppNotice?.(result.message);}
  catch(error){await loadItems();status(`Refresh failed: ${error.message} Saved jobs remain available.`);}
  finally{for(const tab of tabs)tab.disabled=false;activeTab?.setAttribute('aria-selected','true');}

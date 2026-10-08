@@ -335,14 +335,14 @@ export default {async fetch(request,env){
    if((min!==null&&(!Number.isInteger(min)||min<0||min>60))||(max!==null&&(!Number.isInteger(max)||max<0||max>60))||(min!==null&&max!==null&&min>max))return json({error:'Invalid experience range.'},400);
    const durations={day:86400000,week:604800000,month:2592000000};
    const cutoff=windowName==='all'?'':new Date(Date.now()-durations[windowName]).toISOString().slice(0,10);
-   const search=String(input?.search||'').trim().slice(0,100);
+   const search=String(input?.search||'').trim().slice(0,100),searchLike=`%${search.replace(/[\\%_]/g,'\\$&')}%`;
    let sql=`SELECT id,company_id,company_name,category,title,apply_url,posted_at,min_years,max_years FROM imported_jobs WHERE is_open = 1 AND last_seen_at >= ? AND category = ? AND company_id IN (SELECT value FROM json_each(?))`;
    const values=[new Date(Date.now()-30*86400000).toISOString(),category,JSON.stringify(ids)];
    if(cutoff){sql+=' AND posted_at >= ?';values.push(cutoff);}
-   if(search){sql+=" AND (instr(lower(title),lower(?)) > 0 OR instr(lower(company_name),lower(?)) > 0)";values.push(search,search);}
+   if(search){sql+=" AND (lower(title) LIKE lower(?) ESCAPE '\\' OR lower(company_name) LIKE lower(?) ESCAPE '\\')";values.push(searchLike,searchLike);}
    if(min!==null){sql+=' AND min_years IS NOT NULL AND (max_years IS NULL OR max_years >= ?)';values.push(min);}
    if(max!==null){sql+=' AND min_years IS NOT NULL AND min_years <= ?';values.push(max);}
-   sql+=' ORDER BY CASE WHEN posted_at = \'\' THEN 1 ELSE 0 END, posted_at DESC, discovered_at DESC LIMIT 1000';
+   sql+=(search?" ORDER BY CASE WHEN lower(title)=lower(?) THEN 0 WHEN lower(title) LIKE lower(?) ESCAPE '\\' THEN 1 WHEN lower(company_name)=lower(?) THEN 2 WHEN lower(company_name) LIKE lower(?) ESCAPE '\\' THEN 3 ELSE 4 END, ":" ORDER BY ")+"CASE WHEN posted_at = '' THEN 1 ELSE 0 END, posted_at DESC, discovered_at DESC LIMIT 1000";if(search)values.push(search,`${search.replace(/[\\%_]/g,'\\$&')}%`,search,`${search.replace(/[\\%_]/g,'\\$&')}%`);
    const {results}=await db(env).prepare(sql).bind(...values).all();
    const source=await db(env).prepare('SELECT checked_at,status,message FROM job_source_checks WHERE company_id=?').bind(aggregateJobSourceId).first();
    return json({items:results,source});
@@ -364,21 +364,24 @@ export default {async fetch(request,env){
    const section=url.searchParams.get('section'),category=url.searchParams.get('category');
    if(!sectionNames.has(section)||(!sectionCategories.has(category)&&!(section==='recruiter-directory'&&['all','mylist'].includes(category))))return json({error:'Invalid section or category.'},400);
    if(!canManage(session)&&!await tabAllowed(env,section))return json({error:restrictedMessage},403);
-   const search=(url.searchParams.get('search')||'').trim().slice(0,100);
+   const search=(url.searchParams.get('search')||'').trim().slice(0,100),searchLike=`%${search.replace(/[\\%_]/g,'\\$&')}%`,searchPrefix=`${search.replace(/[\\%_]/g,'\\$&')}%`;
    const windowName=url.searchParams.get('window')||'all';
    if(!['all','day','week','month'].includes(windowName))return json({error:'Invalid date filter.'},400);
    const durations={day:86400000,week:604800000,month:2592000000};
    const cutoff=windowName==='all'?'':new Date(Date.now()-durations[windowName]).toISOString();
+   const relevanceOrder=search?"CASE WHEN lower(coalesce(title,'')) = lower(?) THEN 0 WHEN lower(coalesce(title,'')) LIKE lower(?) ESCAPE '\\' THEN 1 WHEN lower(coalesce(organization,'')) = lower(?) THEN 2 WHEN lower(coalesce(organization,'')) LIKE lower(?) ESCAPE '\\' THEN 3 WHEN lower(coalesce(email,'')) LIKE lower(?) ESCAPE '\\' THEN 4 ELSE 5 END, ":'';
+   const joinRelevanceOrder=search?"CASE WHEN lower(coalesce(item.title,'')) = lower(?) THEN 0 WHEN lower(coalesce(item.title,'')) LIKE lower(?) ESCAPE '\\' THEN 1 WHEN lower(coalesce(item.organization,'')) = lower(?) THEN 2 WHEN lower(coalesce(item.organization,'')) LIKE lower(?) ESCAPE '\\' THEN 3 WHEN lower(coalesce(item.email,'')) LIKE lower(?) ESCAPE '\\' THEN 4 ELSE 5 END, ":'';
    const sectionItemOrder=section==='recruiter-directory'
-    ? "ORDER BY CASE WHEN organization IS NULL OR organization = '' THEN 1 ELSE 0 END, lower(coalesce(organization,'')), lower(title), created_at DESC"
-    : "ORDER BY created_at DESC";
-   const recruiterJoinOrder="ORDER BY CASE WHEN item.organization IS NULL OR item.organization = '' THEN 1 ELSE 0 END, lower(coalesce(item.organization,'')), lower(item.title), item.created_at DESC";
+    ? `ORDER BY ${relevanceOrder}CASE WHEN organization IS NULL OR organization = '' THEN 1 ELSE 0 END, lower(coalesce(organization,'')), lower(title), created_at DESC`
+    : `ORDER BY ${relevanceOrder}created_at DESC`;
+   const recruiterJoinOrder=`ORDER BY ${joinRelevanceOrder}CASE WHEN item.organization IS NULL OR item.organization = '' THEN 1 ELSE 0 END, lower(coalesce(item.organization,'')), lower(item.title), item.created_at DESC`;
+   const relevanceValues=search?[search,searchPrefix,search,searchPrefix,searchLike]:[];
    let results;
    if(section==='recruiter-directory'){
     const database=db(env);await ensureSectionFavorites(database);
-    if(category==='mylist')({results}=await database.prepare(`SELECT item.id,item.version,item.category,item.title,item.organization,item.url,item.details,item.email,item.phone,item.extension,item.file_name,item.posted_at,item.created_at,1 AS is_favorite FROM section_items item JOIN section_favorites favorite ON favorite.item_id = item.id AND favorite.user_email = ? WHERE item.section = ? AND item.status = 'approved' AND (? = '' OR item.title LIKE ? ESCAPE '\' OR item.organization LIKE ? ESCAPE '\' OR item.details LIKE ? ESCAPE '\' OR item.email LIKE ? ESCAPE '\' OR item.phone LIKE ? ESCAPE '\') AND (? = '' OR item.posted_at >= ?) ${recruiterJoinOrder} LIMIT 500`).bind(session.email,section,search,`%${search}%`,`%${search}%`,`%${search}%`,`%${search}%`,`%${search}%`,cutoff,cutoff).all());
-    else ({results}=await database.prepare(`SELECT id,version,category,title,organization,url,details,email,phone,extension,file_name,posted_at,created_at,EXISTS(SELECT 1 FROM section_favorites favorite WHERE favorite.user_email = ? AND favorite.item_id = section_items.id) AS is_favorite FROM section_items WHERE section = ? AND category = ? AND status = 'approved' AND (? = '' OR title LIKE ? ESCAPE '\' OR organization LIKE ? ESCAPE '\' OR details LIKE ? ESCAPE '\' OR email LIKE ? ESCAPE '\' OR phone LIKE ? ESCAPE '\') AND (? = '' OR posted_at >= ?) ${sectionItemOrder} LIMIT 500`).bind(session.email,section,category,search,`%${search}%`,`%${search}%`,`%${search}%`,`%${search}%`,`%${search}%`,cutoff,cutoff).all());
-   }else ({results}=await db(env).prepare(`SELECT id,version,category,title,organization,url,details,email,phone,extension,file_name,posted_at,created_at FROM section_items WHERE section = ? AND category = ? AND status = 'approved' AND (? = '' OR title LIKE ? ESCAPE '\' OR organization LIKE ? ESCAPE '\' OR details LIKE ? ESCAPE '\' OR email LIKE ? ESCAPE '\' OR phone LIKE ? ESCAPE '\') AND (? = '' OR posted_at >= ?) ${sectionItemOrder} LIMIT 500`).bind(section,category,search,`%${search}%`,`%${search}%`,`%${search}%`,`%${search}%`,`%${search}%`,cutoff,cutoff).all());
+    if(category==='mylist')({results}=await database.prepare(`SELECT item.id,item.version,item.category,item.title,item.organization,item.url,item.details,item.email,item.phone,item.extension,item.file_name,item.posted_at,item.created_at,1 AS is_favorite FROM section_items item JOIN section_favorites favorite ON favorite.item_id = item.id AND favorite.user_email = ? WHERE item.section = ? AND item.status = 'approved' AND (? = '' OR lower(item.title) LIKE lower(?) ESCAPE '\' OR lower(item.organization) LIKE lower(?) ESCAPE '\' OR lower(item.details) LIKE lower(?) ESCAPE '\' OR lower(item.email) LIKE lower(?) ESCAPE '\' OR lower(item.phone) LIKE lower(?) ESCAPE '\') AND (? = '' OR item.posted_at >= ?) ${recruiterJoinOrder} LIMIT 500`).bind(...[session.email,section,search,searchLike,searchLike,searchLike,searchLike,searchLike,cutoff,cutoff,...relevanceValues]).all());
+    else ({results}=await database.prepare(`SELECT id,version,category,title,organization,url,details,email,phone,extension,file_name,posted_at,created_at,EXISTS(SELECT 1 FROM section_favorites favorite WHERE favorite.user_email = ? AND favorite.item_id = section_items.id) AS is_favorite FROM section_items WHERE section = ? AND category = ? AND status = 'approved' AND (? = '' OR lower(title) LIKE lower(?) ESCAPE '\' OR lower(organization) LIKE lower(?) ESCAPE '\' OR lower(details) LIKE lower(?) ESCAPE '\' OR lower(email) LIKE lower(?) ESCAPE '\' OR lower(phone) LIKE lower(?) ESCAPE '\') AND (? = '' OR posted_at >= ?) ${sectionItemOrder} LIMIT 500`).bind(...[session.email,section,category,search,searchLike,searchLike,searchLike,searchLike,searchLike,cutoff,cutoff,...relevanceValues]).all());
+   }else ({results}=await db(env).prepare(`SELECT id,version,category,title,organization,url,details,email,phone,extension,file_name,posted_at,created_at FROM section_items WHERE section = ? AND category = ? AND status = 'approved' AND (? = '' OR lower(title) LIKE lower(?) ESCAPE '\' OR lower(organization) LIKE lower(?) ESCAPE '\' OR lower(details) LIKE lower(?) ESCAPE '\' OR lower(email) LIKE lower(?) ESCAPE '\' OR lower(phone) LIKE lower(?) ESCAPE '\') AND (? = '' OR posted_at >= ?) ${sectionItemOrder} LIMIT 500`).bind(...[section,category,search,searchLike,searchLike,searchLike,searchLike,searchLike,cutoff,cutoff,...relevanceValues]).all());
    return json({items:results});
   }
   if(url.pathname==='/api/section-favorites'&&request.method==='PUT'){
