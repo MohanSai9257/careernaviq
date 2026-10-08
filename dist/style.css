@@ -154,11 +154,17 @@ input:focus,select:focus,textarea:focus{box-shadow:none!important;outline:2px so
 
 /* Admin access management dashboard cards */
 #analytics-dashboard .management-panel{display:none!important}
-.access-management-grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:14px;align-items:start}
-.access-management-grid .management-panel{grid-column:span 3;margin:0;min-height:132px;border-radius:16px;background:linear-gradient(150deg,#fff,#f7fbfd);box-shadow:var(--app-shadow-soft);border-color:var(--app-border)}
+.access-management-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;align-items:start}
+.access-management-grid .management-panel{margin:0;min-height:132px;border-radius:16px;background:linear-gradient(150deg,#fff,#f7fbfd);box-shadow:var(--app-shadow-soft);border-color:var(--app-border)}
 .access-management-grid .management-panel>summary{min-height:76px;align-items:center;padding:18px 20px;font-size:1rem}
 .access-management-grid .management-panel[open]>summary{border-bottom:1px solid var(--app-border)}
 .access-management-grid .management-body{max-height:430px;overflow:auto;background:#fff}
-.access-management-grid #company-change-panel,.access-management-grid #section-item-panel,.access-management-grid #section-change-panel{grid-column:span 2;min-height:150px}
-@media(max-width:1050px){.access-management-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.access-management-grid .management-panel,.access-management-grid #company-change-panel,.access-management-grid #section-item-panel,.access-management-grid #section-change-panel{grid-column:span 1}}
+.access-management-grid #access-settings-panel{grid-column:1}
+.access-management-grid #users-pending{grid-column:2}
+.access-management-grid #admin-access-panel{grid-column:1}
+.access-management-grid #coadmin-section{grid-column:2}
+.access-management-grid #users-approved{grid-column:1}
+.access-management-grid #users-blocked{grid-column:2}
+.access-management-grid #company-change-panel,.access-management-grid #section-item-panel,.access-management-grid #section-change-panel{min-height:150px}
+@media(max-width:1050px){.access-management-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.access-management-grid .management-panel{grid-column:auto!important}}
 @media(max-width:700px){.access-management-grid{grid-template-columns:1fr}.access-management-grid .management-panel{min-height:0}}
