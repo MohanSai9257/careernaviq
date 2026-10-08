@@ -151,3 +151,14 @@ input:focus,select:focus,textarea:focus{box-shadow:none!important;outline:2px so
 
 /* Make latest jobs refresh instruction easier to notice */
 .jobs-refresh-hint{background:linear-gradient(135deg,#fff7d6,#e7fff6)!important;border-color:#f2c94c!important;color:#075b48!important;box-shadow:0 8px 22px rgba(242,201,76,.22)!important;font-weight:850!important}
+
+/* Admin access management dashboard cards */
+#analytics-dashboard .management-panel{display:none!important}
+.access-management-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;align-items:start}
+.access-management-grid .management-panel{margin:0;min-height:132px;border-radius:16px;background:linear-gradient(150deg,#fff,#f7fbfd);box-shadow:var(--app-shadow-soft);border-color:var(--app-border)}
+.access-management-grid .management-panel>summary{min-height:76px;align-items:center;padding:18px 20px;font-size:1rem}
+.access-management-grid .management-panel[open]>summary{border-bottom:1px solid var(--app-border)}
+.access-management-grid .management-body{max-height:430px;overflow:auto;background:#fff}
+.access-management-grid #company-change-panel,.access-management-grid #section-item-panel,.access-management-grid #section-change-panel{min-height:150px}
+@media(max-width:1050px){.access-management-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:700px){.access-management-grid{grid-template-columns:1fr}.access-management-grid .management-panel{min-height:0}}

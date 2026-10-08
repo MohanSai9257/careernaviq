@@ -38,15 +38,13 @@
       <div class="admin-dashboard-content">
         <p id="analytics-error" role="alert" hidden></p>
         <div id="analytics-summary" class="analytics-grid"></div>
-        <details class="management-panel" open><summary><span>Platform breakdown</span><span id="analytics-updated" class="management-count">Live</span></summary><div class="management-body">
-          <div id="analytics-breakdown" class="analytics-breakdown"></div>
-        </div></details>
       </div>
     </details>
     <details id="admin-dashboard" class="admin-dashboard" hidden>
       <summary>Access management</summary>
       <div class="admin-dashboard-content">
       <p id="admin-access-error" role="alert" hidden></p>
+      <div class="access-management-grid">
       <details class="management-panel" id="access-settings-panel"><summary><span>Access settings</span><span id="auto-approve-state" class="management-count">Off</span></summary><div class="management-body">
         <div class="tab-access-row"><div><strong>Auto approve new users</strong><span id="auto-approve-label" class="tab-access-state is-restricted">Off</span></div><button id="auto-approve-toggle" type="button">Turn on</button></div>
         <p class="form-hint">When this is on, new Gmail access requests are approved immediately without Admin review.</p>
@@ -57,8 +55,26 @@
         <p id="admin-request-error" role="alert" hidden></p>
         <div id="admin-request-list" class="access-users"></div>
       </div></details>
+      <details class="management-panel" id="admin-access-panel"><summary><span>Admin access requests</span><span id="admin-request-count" class="management-count">0</span></summary><div class="management-body">
+        <p id="admin-request-error" role="alert" hidden></p>
+        <div id="admin-request-list" class="access-users"></div>
+      </div></details>
+      <details id="coadmin-section" class="management-panel" hidden><summary><span>Coadmin access</span><span id="coadmin-count" class="management-count">0</span></summary><div class="management-body">
+        <form id="coadmin-form" class="coadmin-form"><label for="coadmin-email">Gmail</label><input id="coadmin-email" type="email" autocomplete="off" required><button type="submit" class="primary">Grant Coadmin access</button></form>
+        <p id="coadmin-error" role="alert" hidden></p>
+        <div id="coadmin-list" class="access-users"></div>
+      </div></details>
       <details class="management-panel" id="users-approved"><summary><span>Existing Users</span><span id="access-count-approved" class="management-count">0</span></summary><div id="access-users-approved" class="management-body access-users"></div></details>
       <details class="management-panel" id="users-blocked"><summary><span>Blocked users</span><span id="access-count-blocked" class="management-count">0</span></summary><div id="access-users-blocked" class="management-body access-users"></div></details>
+      <details class="management-panel" id="company-change-panel"><summary><span>Company change requests</span><span id="change-count" class="management-count">0</span></summary><div class="management-body">
+        <p id="change-error" role="alert" hidden></p>
+        <div id="change-requests" class="change-requests"></div>
+      </div></details>
+      <details class="management-panel" id="users-blocked"><summary><span>Blocked users</span><span id="access-count-blocked" class="management-count">0</span></summary><div id="access-users-blocked" class="management-body access-users"></div></details>
+      <details class="management-panel" id="company-change-panel"><summary><span>Company change requests</span><span id="change-count" class="management-count">0</span></summary><div class="management-body">
+        <p id="change-error" role="alert" hidden></p>
+        <div id="change-requests" class="change-requests"></div>
+      </div></details>
       <details class="management-panel" id="company-change-panel"><summary><span>Company change requests</span><span id="change-count" class="management-count">0</span></summary><div class="management-body">
         <p id="change-error" role="alert" hidden></p>
         <div id="change-requests" class="change-requests"></div>
@@ -71,11 +87,7 @@
         <p id="section-change-error" role="alert" hidden></p>
         <div id="section-change-list" class="change-requests"></div>
       </div></details>
-      <details id="coadmin-section" class="management-panel" hidden><summary><span>Coadmin access</span><span id="coadmin-count" class="management-count">0</span></summary><div class="management-body">
-        <form id="coadmin-form" class="coadmin-form"><label for="coadmin-email">Gmail</label><input id="coadmin-email" type="email" autocomplete="off" required><button type="submit" class="primary">Grant Coadmin access</button></form>
-        <p id="coadmin-error" role="alert" hidden></p>
-        <div id="coadmin-list" class="access-users"></div>
-      </div></details>
+      </div>
       </div>
     </details>
     <details id="data-dashboard" class="admin-dashboard" hidden>

@@ -61,7 +61,7 @@ async function checkAccess(){
 function formatAnalyticsNumber(value){return new Intl.NumberFormat().format(Number(value||0));}
 function analyticsCard(label,value,hint){const card=document.createElement('article');card.className='analytics-card';const strong=document.createElement('strong');strong.textContent=formatAnalyticsNumber(value);const span=document.createElement('span');span.textContent=label;card.append(strong,span);if(hint){const small=document.createElement('small');small.textContent=hint;card.append(small);}return card;}
 function renderAnalytics(){
- const summary=accessEl('analytics-summary'),breakdown=accessEl('analytics-breakdown');summary.replaceChildren();breakdown.replaceChildren();
+ const summary=accessEl('analytics-summary');summary.replaceChildren();
  if(!analyticsData){summary.append(analyticsCard('Loading analytics',0,''));return;}
  const totals=analyticsData.totals||{},users=analyticsData.users||{},pending=analyticsData.pending||{},jobs=analyticsData.jobs||{};
  summary.append(
@@ -72,16 +72,7 @@ function renderAnalytics(){
   analyticsCard('Recruiters',totals.recruiters,'Approved records'),
   analyticsCard('Study materials',totals.studyMaterials,'Approved records')
  );
- const sections=[
-  ['Users',`Approved: ${formatAnalyticsNumber(users.approved)} · Pending: ${formatAnalyticsNumber(users.pending)} · Blocked: ${formatAnalyticsNumber(users.blocked)} · New this week: ${formatAnalyticsNumber(users.newThisWeek)}`],
-  ['Companies',`Base list: ${formatAnalyticsNumber(totals.baseCompanies)} · Visitor-added: ${formatAnalyticsNumber(totals.addedCompanies)} · Change requests: ${formatAnalyticsNumber(pending.companyChanges)}`],
-  ['Directory records',`Recruiters: ${formatAnalyticsNumber(totals.recruiters)} · Jobs saved: ${formatAnalyticsNumber(jobs.open)} · Materials: ${formatAnalyticsNumber(totals.studyMaterials)} · Interview prep: ${formatAnalyticsNumber(totals.interviewPrep)} · Support contacts: ${formatAnalyticsNumber(totals.interviewSupport)}`],
-  ['Approvals',`Access requests: ${formatAnalyticsNumber(pending.accessRequests)} · Admin access: ${formatAnalyticsNumber(pending.adminAccess)} · New submissions: ${formatAnalyticsNumber(pending.sectionItems)} · Edits/moves/deletes: ${formatAnalyticsNumber(pending.sectionChanges)}`],
-  ['Job refresh',`Jobs added in 24 hours: ${formatAnalyticsNumber(jobs.lastDay)} · Last 7 days: ${formatAnalyticsNumber(jobs.lastWeek)} · Sources checked: ${formatAnalyticsNumber(jobs.sourcesChecked)} · Failed sources: ${formatAnalyticsNumber(jobs.failedSources)}`],
-  ['Controls',`Restricted tabs: ${formatAnalyticsNumber((analyticsData.tabs||{}).restricted)} · Coadmins: ${formatAnalyticsNumber(users.coadmins)} · Profiles completed: ${formatAnalyticsNumber(users.profiles)}`]
- ];
- for(const [label,text] of sections){const row=document.createElement('div');row.className='analytics-row';const name=document.createElement('strong');name.textContent=label;const detail=document.createElement('span');detail.textContent=text;row.append(name,detail);breakdown.append(row);}
- accessEl('analytics-updated').textContent=analyticsData.generatedAt?new Date(analyticsData.generatedAt).toLocaleTimeString([], {hour:'numeric',minute:'2-digit'}):'Live';
+
 }
 async function loadAnalytics(){
  try{analyticsData=await accessJson('/api/admin/analytics');accessError('analytics-error','');renderAnalytics();}
