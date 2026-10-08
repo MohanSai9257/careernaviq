@@ -112,7 +112,7 @@ function renderJobs(items,awaitingGeneration=false){
  const list=byId('section-items');list.replaceChildren();list.classList.add('section-records','job-records');
  const table=document.createElement('table'),head=document.createElement('thead'),row=document.createElement('tr'),body=document.createElement('tbody');
  for(const label of ['Job title','Company','Posted date','Apply']){const cell=document.createElement('th');cell.scope='col';cell.textContent=label;row.append(cell);}head.append(row);
- if(!items.length){const empty=document.createElement('tr'),cell=document.createElement('td');cell.colSpan=4;cell.className='section-table-empty';cell.textContent=awaitingGeneration?'Refreshing...':'No matching jobs found yet.';empty.append(cell);body.append(empty);}
+ if(!items.length){const empty=document.createElement('tr'),cell=document.createElement('td');cell.colSpan=4;cell.className='section-table-empty';cell.textContent=awaitingGeneration?'Refreshing…':'No matching jobs found yet.';empty.append(cell);body.append(empty);}
  for(const item of items){
   const tr=document.createElement('tr'),title=document.createElement('td'),company=document.createElement('td'),date=document.createElement('td'),apply=document.createElement('td');
   title.textContent=item.title;company.textContent=item.company_name;
@@ -129,7 +129,7 @@ async function loadItems(){
   if(current!==requestNumber)return;
   if(sectionKey==='latest-posted-jobs'){
    const data=await api('/api/jobs/query',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({category,window:'all',search:'',minYears:null,maxYears:null})});
-   if(current!==requestNumber)return;renderJobs(data.items);if(!automaticRefreshAttempted&&!data.source?.checked_at){automaticRefreshAttempted=true;setTimeout(()=>refreshJobs(category),0);}status(data.source?.status==='refreshing'?'Loading...':`${data.items.length} ${category==='devops'?'DevOps':category.charAt(0).toUpperCase()+category.slice(1)} jobs${data.source?.checked_at?' · Last refreshed '+new Date(data.source.checked_at).toLocaleString():''}.${data.source?.status==='error'?' Refresh failed; showing saved jobs.':''}`);return data.items.length;
+   if(current!==requestNumber)return;renderJobs(data.items);if(!automaticRefreshAttempted&&!data.source?.checked_at){automaticRefreshAttempted=true;setTimeout(()=>refreshJobs(category),0);}status(data.source?.status==='refreshing'?'Loading…':`${data.items.length} ${category==='devops'?'DevOps':category.charAt(0).toUpperCase()+category.slice(1)} jobs${data.source?.checked_at?' · Last refreshed '+new Date(data.source.checked_at).toLocaleString():''}.${data.source?.status==='error'?' Refresh failed; showing saved jobs.':''}`);return data.items.length;
   }
   const data=await api(`/api/section-items?${params}`);if(current!==requestNumber)return;
   render(data.items);status(`${data.items.length} entries`);
@@ -143,7 +143,7 @@ byId('date-filter').addEventListener('change',loadItems);
 for(const id of ['job-min-years','job-max-years'])byId(id).addEventListener('change',loadItems);
 async function refreshJobs(targetCategory=category){
  const activeTab=byId(`tab-${targetCategory}`);for(const tab of tabs)tab.disabled=sectionKey==='latest-posted-jobs';
- renderJobs([],true);status('Refreshing...');
+ renderJobs([],true);status('Refreshing…');
  try{const result=await api('/api/jobs/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});await loadItems();window.showAppNotice?.(result.message);}
  catch(error){await loadItems();status(`Refresh failed: ${error.message} Saved jobs remain available.`);}
  finally{for(const tab of tabs)tab.disabled=false;activeTab?.setAttribute('aria-selected','true');}

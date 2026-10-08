@@ -413,8 +413,8 @@ async function readVendorFeeds(){
 }
 async function refreshElite(env){
  const database=db(env),now=new Date().toISOString(),lockCutoff=new Date(Date.now()-180000).toISOString();
- const lock=await database.prepare("INSERT INTO job_source_checks (company_id,checked_at,status,message,jobs_found) VALUES (?,?,'refreshing','Loading...',0) ON CONFLICT(company_id) DO UPDATE SET checked_at=excluded.checked_at,status='refreshing',message='Loading...' WHERE job_source_checks.checked_at < ? RETURNING company_id").bind(aggregateJobSourceId,now,lockCutoff).first();
- if(!lock)return {status:'cached',message:'Loading...'};
+ const lock=await database.prepare("INSERT INTO job_source_checks (company_id,checked_at,status,message,jobs_found) VALUES (?,?,'refreshing','Refreshing…',0) ON CONFLICT(company_id) DO UPDATE SET checked_at=excluded.checked_at,status='refreshing',message='Refreshing…' WHERE job_source_checks.checked_at < ? RETURNING company_id").bind(aggregateJobSourceId,now,lockCutoff).first();
+ if(!lock)return {status:'cached',message:'Refreshing…'};
  try{
   const sources=await readVendorFeeds(),successful=sources.filter(source=>source.status==='checked'),jobs=successful.flatMap(source=>source.jobs.map(job=>({...job,sourceId:job.sourceId,sourceKey:source.id,companyName:job.companyName||source.name})));
   if(!successful.length)throw Error(sources.map(source=>source.message).filter(Boolean).join('; ')||'No job sources were available.');
