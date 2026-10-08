@@ -33,7 +33,7 @@ byId('job-page-filter-wrap').hidden=true;
 byId('job-min-years-wrap').hidden=true;
 byId('job-max-years-wrap').hidden=true;
 byId('job-generate').hidden=true;
-document.querySelector('.section-toolbar').hidden=sectionKey==='latest-posted-jobs';
+document.querySelector('.section-toolbar').hidden=false;
 byId('section-posted-wrap').hidden=sectionKey!=='latest-posted-jobs';
 byId('section-posted').required=false;
 
