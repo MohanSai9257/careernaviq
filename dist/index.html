@@ -45,12 +45,12 @@
       <div class="admin-dashboard-content">
       <p id="admin-access-error" role="alert" hidden></p>
       <div class="access-management-grid">
-      <details class="management-panel" id="access-settings-panel"><summary><span>Access settings</span><span id="auto-approve-state" class="management-count">Off</span></summary><div class="management-body">
+      <details class="management-panel" id="access-settings-panel"><summary><span>Auto Access</span><span id="auto-approve-state" class="management-count">Off</span></summary><div class="management-body">
         <div class="tab-access-row"><div><strong>Auto approve new users</strong><span id="auto-approve-label" class="tab-access-state is-restricted">Off</span></div><button id="auto-approve-toggle" type="button">Turn on</button></div>
         <p class="form-hint">When this is on, new Gmail access requests are approved immediately without Admin review.</p>
         <p id="access-settings-error" role="alert" hidden></p>
       </div></details>
-      <details class="management-panel" id="users-pending"><summary><span>Requests</span><span id="access-count-pending" class="management-count">0</span></summary><div id="access-users-pending" class="management-body access-users"></div></details>
+      <details class="management-panel" id="users-pending"><summary><span>Access Requests</span><span id="access-count-pending" class="management-count">0</span></summary><div id="access-users-pending" class="management-body access-users"></div></details>
       <details class="management-panel" id="admin-access-panel"><summary><span>Admin access requests</span><span id="admin-request-count" class="management-count">0</span></summary><div class="management-body">
         <p id="admin-request-error" role="alert" hidden></p>
         <div id="admin-request-list" class="access-users"></div>
@@ -70,7 +70,7 @@
         <p id="section-review-error" role="alert" hidden></p>
         <div id="section-review-list" class="change-requests"></div>
       </div></details>
-      <details class="management-panel" id="section-change-panel"><summary><span>Section edit, move, and delete requests</span><span id="section-change-count" class="management-count">0</span></summary><div class="management-body">
+      <details class="management-panel" id="section-change-panel"><summary><span>Section Edit/Move/Delete requests</span><span id="section-change-count" class="management-count">0</span></summary><div class="management-body">
         <p id="section-change-error" role="alert" hidden></p>
         <div id="section-change-list" class="change-requests"></div>
       </div></details>
