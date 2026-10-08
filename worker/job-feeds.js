@@ -237,7 +237,7 @@ async function readCompanyFeed(company,depth=0){
 
 const eliteSourceId='source:elite-technical';
 const aggregateJobSourceId='source:career-vendors';
-const jobSourceIds=[eliteSourceId,'source:vaco','source:apex-systems','source:motion-recruitment','source:inspyr-solutions'];
+const jobSourceIds=[eliteSourceId,'source:vaco','source:apex-systems','source:motion-recruitment','source:inspyr-solutions','source:remotive','source:remoteok','source:themuse','source:arbeitnow','source:weworkremotely','source:jobicy','source:himalayas'];
 function vendorCategory(title,description=''){
  const category=jobCategory(title,description);if(category)return category;
  if(/\banalyst\b/i.test(title)&&!/\b(?:quality assurance|qa|financial|finance|accounting|budget|credit|risk|security operations|soc analyst)\b/i.test(title))return 'data';
@@ -251,7 +251,7 @@ function cleanVendorJob(raw,source){
  const title=plain(raw.title).slice(0,200),category=vendorCategory(title,raw.description);
  const apply=safeJobUrl(raw.url);if(!title||!category||!apply)return null;
  const years=yearsFromDescription(raw.description||'');
- return {sourceId:String(raw.id||apply.toString()).slice(0,500),companyName:source.name,title,category,applyUrl:apply.toString(),postedAt:dateValue(raw.postedAt).slice(0,10),minYears:years.min,maxYears:years.max};
+ return {sourceId:String(raw.id||apply.toString()).slice(0,500),companyName:plain(raw.companyName||source.name).slice(0,200)||source.name,title,category,applyUrl:apply.toString(),postedAt:dateValue(raw.postedAt).slice(0,10),minYears:years.min,maxYears:years.max};
 }
 function uniqueJobs(raw,source){
  const unique=new Map();
@@ -333,8 +333,78 @@ async function readInspyrFeed(){
  const jobs=linkJobs((await sourceText('https://www.inspyrsolutions.com/job-search/')).text,'https://www.inspyrsolutions.com',source,/^\/job\/\d{2}-/);
  return {...source,status:'checked',message:`Checked INSPYR Solutions jobs.`,jobs,complete:false};
 }
+
+function epochDate(value){
+ const number=Number(value);if(!Number.isFinite(number)||number<=0)return '';
+ const millis=number>100000000000?number:number*1000;
+ const d=new Date(millis);return Number.isFinite(d.getTime())?d.toISOString():'';
+}
+async function readRemotiveFeed(){
+ const source={id:'source:remotive',name:'Remotive'};
+ const data=JSON.parse((await sourceText('https://remotive.com/api/remote-jobs')).text);
+ const raw=(data.jobs||[]).map(job=>({id:job.id,title:job.title,companyName:job.company_name,url:job.url,postedAt:job.publication_date,description:[job.description,(job.tags||[]).join(' '),job.candidate_required_location].filter(Boolean).join(' ')}));
+ const jobs=uniqueJobs(raw,source);
+ return {...source,status:'checked',message:`Checked Remotive remote jobs.`,jobs,complete:true};
+}
+async function readRemoteOkFeed(){
+ const source={id:'source:remoteok',name:'Remote OK'};
+ const data=JSON.parse((await sourceText('https://remoteok.com/api')).text);
+ const raw=(Array.isArray(data)?data:[]).filter(job=>job&&job.id).map(job=>({id:job.id,title:job.position,companyName:job.company,url:job.url||job.apply_url,postedAt:job.date||epochDate(job.epoch),description:[job.description,(job.tags||[]).join(' '),job.location].filter(Boolean).join(' ')}));
+ const jobs=uniqueJobs(raw,source);
+ return {...source,status:'checked',message:`Checked Remote OK jobs.`,jobs,complete:true};
+}
+async function readMuseFeed(){
+ const source={id:'source:themuse',name:'The Muse'},raw=[];
+ const categories=['Software Engineering','Data and Analytics','Computer and IT'];
+ for(const categoryName of categories){
+  const pages=categoryName==='Software Engineering'?4:3;
+  for(let page=1;page<=pages;page++){
+   const url=`https://www.themuse.com/api/public/jobs?page=${page}&category=${encodeURIComponent(categoryName)}`;
+   const data=JSON.parse((await sourceText(url)).text);
+   raw.push(...(data.results||[]).map(job=>({id:job.id,title:job.name,companyName:job.company?.name,url:job.refs?.landing_page,postedAt:job.publication_date,description:[job.contents,(job.categories||[]).map(x=>x.name).join(' '),(job.locations||[]).map(x=>x.name).join(' ')].filter(Boolean).join(' ')})));
+   if(page>=Number(data.page_count||page))break;
+  }
+ }
+ const jobs=uniqueJobs(raw,source);
+ return {...source,status:'checked',message:`Checked The Muse public jobs.`,jobs,complete:false};
+}
+async function readArbeitnowFeed(){
+ const source={id:'source:arbeitnow',name:'Arbeitnow'};
+ const data=JSON.parse((await sourceText('https://www.arbeitnow.com/api/job-board-api')).text);
+ const raw=(data.data||[]).map(job=>({id:job.slug,title:job.title,companyName:job.company_name,url:job.url,postedAt:epochDate(job.created_at),description:[job.description,(job.tags||[]).join(' '),job.location,job.remote?'remote':''].filter(Boolean).join(' ')}));
+ const jobs=uniqueJobs(raw,source);
+ return {...source,status:'checked',message:`Checked Arbeitnow jobs.`,jobs,complete:false};
+}
+async function readWeWorkRemotelyFeed(){
+ const source={id:'source:weworkremotely',name:'We Work Remotely'},raw=[];
+ const feeds=['https://weworkremotely.com/categories/remote-programming-jobs.rss','https://weworkremotely.com/categories/remote-devops-sysadmin-jobs.rss'];
+ for(const feed of feeds){
+  const items=rssJobs((await sourceText(feed)).text);
+  raw.push(...items.map(job=>{const parts=job.title.split(/:\s+/),companyName=parts.length>1?parts.shift():'';return {...job,companyName,title:parts.join(': ')||job.title,url:job.url,description:[job.description,'remote',companyName].join(' ')};}));
+ }
+ const jobs=uniqueJobs(raw,source);
+ return {...source,status:'checked',message:`Checked We Work Remotely feeds.`,jobs,complete:true};
+}
+
+async function readJobicyFeed(){
+ const source={id:'source:jobicy',name:'Jobicy'},raw=[];
+ for(const tag of ['developer','data','devops']){
+  const data=JSON.parse((await sourceText(`https://jobicy.com/api/v2/remote-jobs?count=100&tag=${encodeURIComponent(tag)}`)).text);
+  raw.push(...(data.jobs||[]).map(job=>({id:job.id,title:job.jobTitle,companyName:job.companyName,url:job.url,postedAt:job.pubDate,description:[job.jobDescription,(job.jobIndustry||[]).join(' '),(job.jobType||[]).join(' '),job.jobGeo,tag].filter(Boolean).join(' ')})));
+ }
+ const jobs=uniqueJobs(raw,source);
+ return {...source,status:'checked',message:`Checked Jobicy remote jobs.`,jobs,complete:false};
+}
+async function readHimalayasFeed(){
+ const source={id:'source:himalayas',name:'Himalayas'};
+ const data=JSON.parse((await sourceText('https://himalayas.app/jobs/api?limit=100')).text);
+ const raw=(data.jobs||[]).map(job=>({id:job.guid||job.applicationLink,title:job.title,companyName:job.companyName,url:job.applicationLink||job.guid,postedAt:epochDate(job.pubDate),description:[job.description,(job.categories||[]).join(' '),(job.parentCategories||[]).join(' '),(job.locationRestrictions||[]).join(' ')].filter(Boolean).join(' ')}));
+ const jobs=uniqueJobs(raw,source);
+ return {...source,status:'checked',message:`Checked Himalayas remote jobs.`,jobs,complete:false};
+}
+
 async function readVendorFeeds(){
- const readers=[readEliteFeed,readVacoFeed,readApexFeed,readMotionFeed,readInspyrFeed],results=[];
+ const readers=[readEliteFeed,readVacoFeed,readApexFeed,readMotionFeed,readInspyrFeed,readRemotiveFeed,readRemoteOkFeed,readMuseFeed,readArbeitnowFeed,readWeWorkRemotelyFeed,readJobicyFeed,readHimalayasFeed],results=[];
  for(const reader of readers){
   try{results.push(await reader());}
   catch(error){results.push({id:'source:error-'+results.length,name:'Job source',status:'error',message:String(error.message).slice(0,160),jobs:[]});}
@@ -346,7 +416,7 @@ async function refreshElite(env){
  const lock=await database.prepare("INSERT INTO job_source_checks (company_id,checked_at,status,message,jobs_found) VALUES (?,?,'refreshing','Loading...',0) ON CONFLICT(company_id) DO UPDATE SET checked_at=excluded.checked_at,status='refreshing',message='Loading...' WHERE job_source_checks.checked_at < ? RETURNING company_id").bind(aggregateJobSourceId,now,lockCutoff).first();
  if(!lock)return {status:'cached',message:'Loading...'};
  try{
-  const sources=await readVendorFeeds(),successful=sources.filter(source=>source.status==='checked'),jobs=successful.flatMap(source=>source.jobs.map(job=>({...job,sourceId:job.sourceId,sourceKey:source.id,companyName:source.name})));
+  const sources=await readVendorFeeds(),successful=sources.filter(source=>source.status==='checked'),jobs=successful.flatMap(source=>source.jobs.map(job=>({...job,sourceId:job.sourceId,sourceKey:source.id,companyName:job.companyName||source.name})));
   if(!successful.length)throw Error(sources.map(source=>source.message).filter(Boolean).join('; ')||'No job sources were available.');
   for(let i=0;i<jobs.length;i+=8){
    const values=[],rows=jobs.slice(i,i+8).map(job=>{values.push(crypto.randomUUID(),job.sourceKey,job.companyName,job.category,job.title,job.applyUrl,job.sourceId,job.postedAt,now,now,job.minYears,job.maxYears);return '(?,?,?,?,?,?,?,?,?,?,1,?,?)';});
