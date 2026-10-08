@@ -148,3 +148,6 @@ input:focus,select:focus,textarea:focus{box-shadow:none!important;outline:2px so
 /* Latest jobs manual refresh hint */
 .jobs-refresh-hint{display:inline-flex;vertical-align:middle;margin-left:10px;padding:5px 10px;border:1px solid #c8d6de;border-radius:999px;background:#fff;color:#5c7180;font-size:.82rem;font-weight:700;letter-spacing:0;white-space:nowrap}
 @media(max-width:760px){.jobs-refresh-hint{display:flex;width:max-content;max-width:100%;margin:10px 0 0;font-size:.78rem;white-space:normal}}
+
+/* Make latest jobs refresh instruction easier to notice */
+.jobs-refresh-hint{background:linear-gradient(135deg,#fff7d6,#e7fff6)!important;border-color:#f2c94c!important;color:#075b48!important;box-shadow:0 8px 22px rgba(242,201,76,.22)!important;font-weight:850!important}
