@@ -23,6 +23,9 @@ function linkCell(url,label,name){
  return td;
 }
 function updateCounts(){
+ const loading=!loaded;
+ for(const key of ['client','implementation','vendor','mylist'])$('count-'+key).classList.toggle('is-loading',loading);
+ if(loading){for(const key of ['client','implementation','vendor','mylist'])$('count-'+key).textContent='—';return;}
  for(const key of ['client','implementation','vendor'])$('count-'+key).textContent=companies.filter(r=>r[3]===key).length.toLocaleString();
  $('count-mylist').textContent=companies.filter(r=>saved.has(r[4])).length.toLocaleString();
 }
@@ -57,9 +60,9 @@ function render(){
  $('empty').hidden=filtered.length>0||!loaded;
  $('empty').textContent=category==='mylist'&&!companies.some(r=>saved.has(r[4]))?'Your list is empty. Select the star beside any company to save it here.':'No companies found in this tab. Try another name or category.';
  $('results').textContent=loaded?`${filtered.length.toLocaleString()} companies`:'Loading companies…';
- $('range').textContent=filtered.length?`${(page*pageSize+1).toLocaleString()}–${Math.min((page+1)*pageSize,filtered.length).toLocaleString()} of ${filtered.length.toLocaleString()}`:'0 results';
- $('page').textContent=`Page ${page+1} of ${Math.max(1,Math.ceil(filtered.length/pageSize))}`;
- $('previous').disabled=page===0;$('next').disabled=(page+1)*pageSize>=filtered.length;
+ $('range').textContent=loaded?(filtered.length?`${(page*pageSize+1).toLocaleString()}–${Math.min((page+1)*pageSize,filtered.length).toLocaleString()} of ${filtered.length.toLocaleString()}`:'0 results'):'';
+ $('page').textContent=loaded?`Page ${page+1} of ${Math.max(1,Math.ceil(filtered.length/pageSize))}`:'Loading';
+ $('previous').disabled=!loaded||page===0;$('next').disabled=!loaded||(page+1)*pageSize>=filtered.length;
 }
 $('search').addEventListener('input',()=>{page=0;applyFilter();});
 for(const [i,tab] of tabs.entries()){
@@ -68,10 +71,10 @@ for(const [i,tab] of tabs.entries()){
 }
 for(const [id,change] of [['previous',-1],['next',1]])$(id).addEventListener('click',()=>{page+=change;render();document.querySelector('.category-tabs').scrollIntoView({behavior:'smooth',block:'start'});});
 window.addEventListener('storage',event=>{if(event.key===storageKey||event.key===null){try{const value=JSON.parse(event.newValue||'[]');saved=new Set(Array.isArray(value)?value.filter(x=>typeof x==='string'):[]);updateCounts();applyFilter();}catch{}}});
-fetch('companies.json').then(r=>{if(!r.ok)throw Error('Data unavailable');return r.json();}).then(async data=>{
- baseData=data;loaded=true;await loadChanges();updateCounts();applyFilter();
+fetch('companies.json',{cache:'no-store'}).then(r=>{if(!r.ok)throw Error('Data unavailable');return r.json();}).then(async data=>{
+ baseData=data;await loadChanges({deferRender:true});loaded=true;document.body.classList.add('directory-ready');$('total').textContent=companies.length.toLocaleString();$('total-label').textContent='companies';$('total-card')?.classList.remove('is-loading');updateCounts();applyFilter();
 
-}).catch(()=>{$('results').textContent='Could not load companies';$('empty').hidden=false;$('empty').textContent='The directory could not be loaded. Please refresh the page to try again.';});
+}).catch(()=>{$('total').textContent='—';$('total-label').textContent='Load failed';$('total-card')?.classList.remove('is-loading');$('results').textContent='Could not load companies';$('empty').hidden=false;$('empty').textContent='The directory could not be loaded. Please refresh the page to try again.';});
 
 let overrides={},versions={},menuCompany=null,menuTrigger=null,editingId=null,deletingCompany=null,sharedReady=false,saving=false;
 let baseData=[],addedData=[];
@@ -84,17 +87,17 @@ function applyOverrides(){
   if(['client','implementation','vendor'].includes(value.category))row[3]=value.category;
  }
 }
-async function loadChanges(){
+async function loadChanges(options={}){
  const additions=[];let cursor=0;
  do{const response=await fetch('/api/companies'+(cursor?'?after='+cursor:''),{cache:'no-store'});if(!response.ok)throw Error('Could not load added companies. Please refresh and try again.');const data=await response.json();additions.push(...data.items);cursor=data.next;}while(cursor);
  const next={},nextVersions={};let after='';
  do{const response=await fetch('/api/changes'+(after?'?after='+encodeURIComponent(after):''),{cache:'no-store'});if(!response.ok)throw Error('Could not load shared changes. Please refresh and try again.');const data=await response.json();for(const item of data.items){const {id,version,...fields}=item;next[id]=fields;nextVersions[id]=version;}after=data.next;}while(after);
- addedData=additions;overrides=next;versions=nextVersions;rebuildCompanies();sharedReady=true;updateCounts();applyFilter();
+ addedData=additions;overrides=next;versions=nextVersions;rebuildCompanies();sharedReady=true;if(!options.deferRender){updateCounts();applyFilter();}
 }
 function rebuildCompanies(){
  companies=[...baseData.map(r=>[...r.slice(0,4),r[0],false]),...addedData.map(r=>[r.name,r.linkedin,r.careers,r.category,r.id,true])];
  companies=companies.filter(r=>!overrides[r[4]]?.deleted);
- applyOverrides();$('total').textContent=companies.length.toLocaleString();
+ applyOverrides();if(loaded){$('total').textContent=companies.length.toLocaleString();$('total-label').textContent='companies';$('total-card')?.classList.remove('is-loading');}
 }
 async function persistChange(id,change){
  if(!sharedReady)throw Error('Shared data is not ready. Refresh and try again.');
@@ -167,3 +170,4 @@ $('add-form').addEventListener('submit',async event=>{
 updateRole();
 window.updateDirectoryRole=()=>{updateRole();render();};
 window.refreshDirectory=()=>loadChanges().catch(error=>notify(error.message));
+updateCounts();
