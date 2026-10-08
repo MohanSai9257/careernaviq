@@ -36,6 +36,22 @@ byId('job-generate').hidden=true;
 document.querySelector('.section-toolbar').hidden=sectionKey==='latest-posted-jobs';
 byId('section-posted-wrap').hidden=sectionKey!=='latest-posted-jobs';
 byId('section-posted').required=false;
+
+function normalizeSearch(value){return String(value||'').toLocaleLowerCase().replace(/[^a-z0-9]+/g,' ').trim();}
+function sectionMatchRank(item,query){
+ if(!query)return 0;
+ const fields=[item.title,item.organization,item.company_name,item.email,item.phone,item.details].map(normalizeSearch);
+ for(const value of fields)if(value===query)return 0;
+ for(const value of fields)if(value.startsWith(query))return 1;
+ for(const value of fields)if(value.split(' ').some(part=>part===query))return 2;
+ for(const value of fields)if(value.includes(query))return 3;
+ return 99;
+}
+function rankSectionItems(items,query){
+ const normalized=normalizeSearch(query);
+ if(!normalized)return items;
+ return [...items].sort((a,b)=>sectionMatchRank(a,normalized)-sectionMatchRank(b,normalized)||String(a.organization||a.company_name||'').localeCompare(String(b.organization||b.company_name||''),undefined,{sensitivity:'base'})||String(a.title||'').localeCompare(String(b.title||''),undefined,{sensitivity:'base'}));
+}
 function status(message){byId('section-status').textContent=message;}
 function sectionNotice(message){status(message);window.showAppNotice?.(message);}
 async function api(url,options){const response=await fetch(url,{cache:'no-store',...options});const result=await response.json();if(!response.ok)throw Error(result.error||'Please try again.');return result;}
@@ -144,10 +160,10 @@ async function loadItems(){
   if(current!==requestNumber)return;
   if(sectionKey==='latest-posted-jobs'){
    const data=await api('/api/jobs/query',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({category,window:'all',search:query,minYears:null,maxYears:null})});
-   if(current!==requestNumber)return;renderJobs(data.items);if(!automaticRefreshAttempted&&!data.source?.checked_at){automaticRefreshAttempted=true;setTimeout(()=>refreshJobs(category),0);}status(data.source?.status==='refreshing'?'Loading…':`${data.items.length} ${category==='devops'?'DevOps':category.charAt(0).toUpperCase()+category.slice(1)} jobs${data.source?.checked_at?' · Last refreshed '+new Date(data.source.checked_at).toLocaleString():''}.${data.source?.status==='error'?' Refresh failed; showing saved jobs.':''}`);return data.items.length;
+   if(current!==requestNumber)return;renderJobs(rankSectionItems(data.items,query));if(!automaticRefreshAttempted&&!data.source?.checked_at){automaticRefreshAttempted=true;setTimeout(()=>refreshJobs(category),0);}status(data.source?.status==='refreshing'?'Loading…':`${data.items.length} ${category==='devops'?'DevOps':category.charAt(0).toUpperCase()+category.slice(1)} jobs${data.source?.checked_at?' · Last refreshed '+new Date(data.source.checked_at).toLocaleString():''}.${data.source?.status==='error'?' Refresh failed; showing saved jobs.':''}`);return data.items.length;
   }
   const data=await api(`/api/section-items?${params}`);if(current!==requestNumber)return;
-  render(data.items);status(`${data.items.length} entries`);
+  const ranked=rankSectionItems(data.items,query);render(ranked);status(`${data.items.length} entries`);
  }
  catch(error){if(current===requestNumber)status(error.message);}
 }
