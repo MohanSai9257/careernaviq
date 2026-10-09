@@ -14,7 +14,7 @@
     <div class="wrap brand"><img class="brand-logo" src="/logo.svg" alt=""><span>CareerNaviq</span><div id="profile-greeting" class="profile-greeting" hidden></div><div class="role-control"><span id="profile-role" class="public-label">User</span><button id="profile-logout" type="button">Logout</button></div></div>
   </header>
   <main id="profile-page" class="wrap" hidden>
-    <div class="profile-heading-row"><h1 class="recruiter-heading">Profile</h1><div class="profile-account-icons" aria-label="Job account connections"><button type="button" class="profile-provider-icon gmail" data-provider="gmail" aria-label="Connect Gmail"><span class="icon-gmail">M</span></button><button type="button" class="profile-provider-icon linkedin" data-provider="linkedin" aria-label="Connect LinkedIn">in</button><button type="button" class="profile-provider-icon indeed" data-provider="indeed" aria-label="Connect Indeed">i</button><button type="button" class="profile-provider-icon dice" data-provider="dice" aria-label="Connect Dice">Dice</button></div></div>
+    <div class="profile-heading-row"><h1 class="recruiter-heading">Profile</h1><div class="profile-account-icons" aria-label="Job account connections"><button type="button" class="profile-provider-icon gmail" data-provider="gmail" aria-label="Connect Gmail"><span class="brand-gmail"><span></span></span></button><button type="button" class="profile-provider-icon linkedin" data-provider="linkedin" aria-label="Connect LinkedIn"><span class="brand-linkedin">in</span></button><button type="button" class="profile-provider-icon indeed" data-provider="indeed" aria-label="Connect Indeed"><span class="brand-indeed">i</span></button><button type="button" class="profile-provider-icon dice" data-provider="dice" aria-label="Connect Dice"><span class="brand-dice">Dice</span></button></div></div>
     <section class="profile-card profile-resume-card">
       <h2>Resume Manager</h2>
       <p class="form-hint">Upload resume versions here. AI Auto Apply will use the selected/default resume from your Profile.</p>
@@ -67,7 +67,7 @@
   <dialog id="profile-accounts-dialog" class="connect-dialog" aria-labelledby="profile-accounts-title">
     <form id="profile-accounts-form">
       <div class="connect-header"><div id="connect-provider-logo" class="connect-logo">M</div><div><h2 id="profile-accounts-title">Connect Gmail</h2><p id="connect-provider-subtitle">Job account</p><strong id="connect-provider-name">Gmail</strong></div></div>
-      <p class="connect-note">Only you can access and manage this connection. Passwords are not stored in CareerNaviq; secure sign-in will use OAuth or an isolated browser session when the automation worker is enabled.</p>
+      <p class="connect-note">Your credentials stay private and secure. Only you can manage this connection.</p>
       <input id="account-provider" type="hidden" value="gmail">
       <label>Email ID<input id="account-email" type="email" autocomplete="username" placeholder="you@company.com"></label>
       <label>Password<div class="password-shell"><input id="account-password" type="password" autocomplete="current-password" placeholder="••••••••"><button id="account-password-toggle" type="button" aria-label="Show password">◉</button></div></label>
