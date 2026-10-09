@@ -532,15 +532,22 @@ export default {async fetch(request,env){
    return json({email:session.email,name});
   }
   if(url.pathname==='/api/app-profile'&&request.method==='DELETE'){
-   if(!sameOrigin(request,url))return json({error:'Use CareerNaviq to delete your profile.'},403);
-   let input;try{input=await jsonInput(request);}catch{return json({error:'Invalid profile deletion.'},400);}
+   if(!sameOrigin(request,url))return json({error:'Use CareerNaviq to delete your account access.'},403);
+   let input;try{input=await jsonInput(request);}catch{return json({error:'Invalid account deletion.'},400);}
    const email=String(input?.email||'').trim().toLowerCase();
-   if(email!==session.email)return json({error:'Enter your own account email to delete profile details.'},400);
-   const database=db(env);await ensureAccessUserColumns(database);await database.batch([
-    database.prepare('DELETE FROM user_profiles WHERE email = ?').bind(session.email),
-    database.prepare("UPDATE access_users SET name = '', updated_at = ? WHERE email = ?").bind(new Date().toISOString(),session.email)
+   if(email!==session.email)return json({error:'Enter your own account email to delete access.'},400);
+   if(email===adminEmail)return json({error:'The Admin account cannot be deleted here.'},400);
+   const database=db(env);await ensureAskMessages(database);await ensureAutoApply(database);await database.batch([
+    database.prepare('DELETE FROM access_sessions WHERE email = ?').bind(email),
+    database.prepare('DELETE FROM user_profiles WHERE email = ?').bind(email),
+    database.prepare('DELETE FROM auto_resumes WHERE user_email = ?').bind(email),
+    database.prepare('DELETE FROM auto_connected_accounts WHERE user_email = ?').bind(email),
+    database.prepare('DELETE FROM auto_agent_settings WHERE user_email = ?').bind(email),
+    database.prepare('DELETE FROM coadmins WHERE email = ?').bind(email),
+    database.prepare('DELETE FROM ask_messages WHERE user_email = ?').bind(email),
+    database.prepare('DELETE FROM access_users WHERE email = ?').bind(email)
    ]);
-   return json({deleted:true,email:session.email,name:''});
+   return json({deleted:true,email},200);
   }
   if(url.pathname==='/api/profile'&&request.method==='GET'){
    const database=db(env);await ensureProfileColumns(database);await ensureAccessUserColumns(database);const profile=await database.prepare('SELECT * FROM user_profiles WHERE email = ?').bind(session.email).first();const accessUser=await database.prepare('SELECT name FROM access_users WHERE email = ?').bind(session.email).first();
