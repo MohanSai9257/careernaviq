@@ -468,6 +468,16 @@ export default {async fetch(request,env){
    return json({items:results,source});
   }
   if(['/companies.json','/api/changes','/api/companies','/api/company'].includes(url.pathname)&&!canManage(session)&&!await tabAllowed(env,'employer-directory'))return json({error:restrictedMessage},403);
+
+  if(url.pathname==='/api/app-profile'&&request.method==='PUT'){
+   if(!sameOrigin(request,url))return json({error:'Use CareerNaviq to update your profile.'},403);
+   let input;try{input=await jsonInput(request);}catch{return json({error:'Invalid profile details.'},400);}
+   const name=String(input?.name||'').trim().replace(/\s+/g,' ');
+   if(!name||name.length>120)return json({error:'Enter your name.'},400);
+   const database=db(env);await ensureAccessUserColumns(database);
+   await database.prepare('UPDATE access_users SET name = ?, updated_at = ? WHERE email = ?').bind(name,new Date().toISOString(),session.email).run();
+   return json({email:session.email,name});
+  }
   if(url.pathname==='/api/profile'&&request.method==='GET'){
    const database=db(env);await ensureProfileColumns(database);await ensureAccessUserColumns(database);const profile=await database.prepare('SELECT * FROM user_profiles WHERE email = ?').bind(session.email).first();const accessUser=await database.prepare('SELECT name FROM access_users WHERE email = ?').bind(session.email).first();
    return json({email:session.email,name:accessUser?.name||session.name||'',profile:profile||null});
@@ -734,9 +744,9 @@ export default {async fetch(request,env){
   if((url.pathname==='/admin'||url.pathname==='/admin/')&&!canManage(await sessionFor(request,env)))return Response.redirect(url.origin+'/',302);
   const sections=['recruiter-directory','latest-posted-jobs','ai-auto-apply','study-materials','interview-prep','interview-support'];
   const section=sections.find(name=>url.pathname===`/${name}`||url.pathname===`/${name}/`);
-  const requestedTab=url.pathname==='/'||url.pathname==='/index.html'?'employer-directory':section;
+  const requestedTab=url.pathname==='/employer-directory'||url.pathname==='/employer-directory/'||url.pathname==='/index.html'?'employer-directory':section;
   const restricted=requestedTab&&session?.status==='approved'&&!canManage(session)&&!await tabAllowed(env,requestedTab);
-  const path=restricted?'/restricted.html':url.pathname==='/'||url.pathname==='/admin'||url.pathname==='/admin/'?'/index.html':section?(section==='ai-auto-apply'?'/ai-auto-apply.html':'/recruiter-directory.html'):url.pathname==='/profile'||url.pathname==='/profile/'?'/profile.html':url.pathname;
+  const path=restricted?'/restricted.html':url.pathname==='/'?(session?.status==='approved'?'/careernaviq.html':'/index.html'):url.pathname==='/careernaviq'||url.pathname==='/careernaviq/'?'/careernaviq.html':url.pathname==='/employer-directory'||url.pathname==='/employer-directory/'||url.pathname==='/admin'||url.pathname==='/admin/'?'/index.html':section?(section==='ai-auto-apply'?'/ai-auto-apply.html':'/recruiter-directory.html'):url.pathname==='/profile'||url.pathname==='/profile/'?'/profile.html':url.pathname;
   if(!Object.hasOwn(ASSETS,path))return new Response('Not found',{status:404});
   const type=path.endsWith('.html')?'text/html':path.endsWith('.css')?'text/css':path.endsWith('.js')?'text/javascript':path.endsWith('.svg')?'image/svg+xml':'application/json';
   return new Response(request.method==='HEAD'?null:ASSETS[path],{headers:{'Content-Type':type+'; charset=utf-8','Cache-Control':'no-cache','X-Content-Type-Options':'nosniff'}});

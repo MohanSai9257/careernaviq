@@ -37,6 +37,7 @@ function showAccessState(){
  accessEl('admin-open').textContent=managesAccess()?'Logout':'Admin';
  accessEl('admin-open').classList.toggle('is-admin',managesAccess());
  accessEl('user-logout').hidden=!(active&&accessSession.role==='user');
+ if(active&&location.pathname==='/'&&!adminPage){location.replace('/careernaviq');return;}
  if(active){
   document.dispatchEvent(new Event('directory-access-ready'));
   if(!adminPage){
