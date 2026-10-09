@@ -9,6 +9,15 @@ let adminAccessRequests=[];
 let analyticsData=null;
 let questionThreads=[];
 let selectedMessageEmail='',messageFilter='all',activeAdminTab='analytics-dashboard';
+function messageDateLabel(value){
+ const date=new Date(value),now=new Date();
+ const sameDay=date.getFullYear()===now.getFullYear()&&date.getMonth()===now.getMonth()&&date.getDate()===now.getDate();
+ if(sameDay)return 'Today';
+ const yesterday=new Date(now);yesterday.setDate(now.getDate()-1);
+ if(date.getFullYear()===yesterday.getFullYear()&&date.getMonth()===yesterday.getMonth()&&date.getDate()===yesterday.getDate())return 'Yesterday';
+ return date.toLocaleDateString(undefined,{month:'short',day:'numeric',year:date.getFullYear()===now.getFullYear()?undefined:'numeric'});
+}
+function messageTimeLabel(value){return new Date(value).toLocaleTimeString(undefined,{hour:'numeric',minute:'2-digit'});}
 let deletingUserEmail='';
 window.directoryRole='guest';
 const managesAccess=()=>['admin','coadmin'].includes(accessSession.role)&&accessSession.status==='approved';
@@ -247,7 +256,7 @@ function renderQuestionThreads(){
   const button=document.createElement('button');button.type='button';button.className='admin-conversation'+(selectedMessageEmail===thread.email?' is-selected':'');button.setAttribute('aria-label',`Open conversation with ${thread.name||thread.email}`);
   const avatar=document.createElement('span');avatar.className='admin-message-avatar';avatar.textContent=(thread.name||thread.email).trim().charAt(0).toUpperCase();
   const content=document.createElement('span');content.className='admin-conversation-copy';const name=document.createElement('strong');name.textContent=thread.name||thread.email;const preview=document.createElement('small');preview.textContent=thread.messages.at(-1)?.body||'';content.append(name,preview);
-  const meta=document.createElement('span');meta.className='admin-conversation-meta';const date=document.createElement('small');date.textContent=thread.lastAt?new Date(thread.lastAt).toLocaleDateString(undefined,{month:'short',day:'numeric'}):'';meta.append(date);if(thread.unread){const count=document.createElement('b');count.textContent=thread.unread;meta.append(count);}
+  const meta=document.createElement('span');meta.className='admin-conversation-meta';const date=document.createElement('small');date.textContent=thread.lastAt?messageDateLabel(thread.lastAt):'';meta.append(date);if(thread.unread){const count=document.createElement('b');count.textContent=thread.unread;meta.append(count);}
   button.append(avatar,content,meta);button.addEventListener('click',()=>selectMessageThread(thread.email));list.append(button);
  }
  if(selectedMessageEmail){const selected=questionThreads.find(thread=>thread.email===selectedMessageEmail);if(selected)renderSelectedMessage(selected);else{selectedMessageEmail='';renderSelectedMessage(null);}}
@@ -256,7 +265,7 @@ function renderSelectedMessage(thread){
  const header=accessEl('messages-chat-header'),history=accessEl('messages-chat');history.replaceChildren();accessEl('messages-reply-form').hidden=!thread;
  if(!thread){header.textContent='Select a conversation';const empty=document.createElement('p');empty.className='management-empty';empty.textContent='Choose a conversation to read and reply.';history.append(empty);return;}
  header.replaceChildren();const avatar=document.createElement('span');avatar.className='admin-message-avatar';avatar.textContent=(thread.name||thread.email).trim().charAt(0).toUpperCase();const identity=document.createElement('span');const name=document.createElement('strong');name.textContent=thread.name||thread.email;const email=document.createElement('small');email.textContent=thread.email;identity.append(name,email);header.append(avatar,identity);
- for(const message of thread.messages){const row=document.createElement('div');row.className='admin-chat-row '+(message.sender==='admin'?'is-admin':'is-user');const bubble=document.createElement('div');bubble.className='admin-chat-bubble';const body=document.createElement('p');body.textContent=message.body;const time=document.createElement('small');time.textContent=new Date(message.createdAt).toLocaleString(undefined,{dateStyle:'medium',timeStyle:'short'});bubble.append(body,time);row.append(bubble);history.append(row);}history.scrollTop=history.scrollHeight;
+ let previousDay='';for(const message of thread.messages){const day=messageDateLabel(message.createdAt);if(day!==previousDay){const divider=document.createElement('div');divider.className='admin-chat-day';divider.textContent=day;history.append(divider);previousDay=day;}const row=document.createElement('div');row.className='admin-chat-row '+(message.sender==='admin'?'is-admin':'is-user');const bubble=document.createElement('div');bubble.className='admin-chat-bubble';const body=document.createElement('p');body.textContent=message.body;const time=document.createElement('small');time.textContent=messageTimeLabel(message.createdAt);bubble.append(body,time);row.append(bubble);history.append(row);}history.scrollTop=history.scrollHeight;
 }
 async function selectMessageThread(email){selectedMessageEmail=email;renderQuestionThreads();const thread=questionThreads.find(item=>item.email===email);if(thread?.unread){try{await accessJson('/api/admin/questions/read',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email})});thread.unread=0;renderQuestionThreads();}catch(error){accessError('questions-error',error.message);}}}
 async function loadQuestionThreads(){try{const data=await accessJson('/api/admin/questions');questionThreads=data.items;accessError('questions-error','');renderQuestionThreads();}catch(error){accessError('questions-error',error.message);}}
