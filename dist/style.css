@@ -5332,3 +5332,17 @@ body:has(.admin-tabs:not([hidden])) .admin-dashboard-content {
     grid-template-columns: 1fr;
   }
 }
+
+.profile-theme-setting {
+  display: grid;
+  gap: 7px;
+  max-width: 760px;
+  margin-top: 20px;
+}
+.profile-theme-setting label {
+  font-weight: 750;
+}
+.profile-theme-setting select {
+  width: 100%;
+  padding: 11px 12px;
+}

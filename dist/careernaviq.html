@@ -232,22 +232,20 @@
               >Email<input id="career-email" type="email" readonly /></label
             ><button type="submit" class="primary">Save user profile</button>
           </form>
+          <div class="profile-theme-setting">
+            <label for="profile-theme">Theme</label
+            ><select id="profile-theme">
+              <option value="system">Use device theme</option>
+              <option value="light">Light</option>
+              <option value="dark">Dark</option>
+            </select>
+          </div>
           <form
             id="career-delete-profile-form"
             class="career-delete-profile-form"
           >
-            <h3>Delete account access</h3>
-            <p class="form-hint">
-              Enter your account email to delete your CarrerNaviq access. You
-              will need to request access again if you want to use the app
-              later.
-            </p>
-            <label
-              >Email confirmation<input
-                id="career-delete-email"
-                type="email"
-                placeholder="Enter your email" /></label
-            ><button type="submit" class="danger">Delete access</button>
+            <h3>Delete Account</h3>
+            <button type="submit" class="danger">Delete Account</button>
           </form>
         </div>
       </section>

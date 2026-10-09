@@ -239,11 +239,13 @@ c('career-question-form').addEventListener('submit', async (event) => {
 });
 c('career-delete-profile-form').addEventListener('submit', async (event) => {
   event.preventDefault();
-  const email = c('career-delete-email').value.trim().toLowerCase();
-  if (email !== careerState.email) {
-    careerMessage('Enter your own account email to delete profile details.');
+  if (
+    !window.confirm(
+      'Delete your account? You will need to request access again to use the app.',
+    )
+  )
     return;
-  }
+  const email = careerState.email;
   const button = event.currentTarget.querySelector('[type=submit]');
   button.disabled = true;
   careerMessage('Deleting account access…');
