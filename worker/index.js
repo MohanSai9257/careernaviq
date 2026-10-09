@@ -447,11 +447,11 @@ export default {async fetch(request,env){
   if(url.pathname==='/api/auto-apply/vault'&&['PUT','DELETE'].includes(request.method)){
    if(!sameOrigin(request,url))return json({error:'Use CareerNaviq to manage your vault.'},403);
    let input;try{input=await jsonInput(request);}catch{return json({error:'Invalid vault request.'},400);}
-   const provider=autoProvider(input?.provider);if(!provider)return json({error:'Choose a supported account.'},400);
+   const provider=input?.provider==='career_portals'?'career_portals':autoProvider(input?.provider);if(!provider)return json({error:'Choose a supported account.'},400);
    const database=db(env);await ensureVault(database);
    if(request.method==='DELETE'){await database.prepare('DELETE FROM credential_vault WHERE user_email=? AND provider=?').bind(session.email,provider).run();return json({saved:false});}
    const account=String(input.account||'').trim(),password=String(input.password||'');if(!account||account.length>254||password.length>2048)return json({error:'Enter a valid email or username.'},400);
-   if(provider==='gmail'&&!emailPattern.test(account))return json({error:'Enter a valid email.'},400);
+   if(['gmail','career_portals'].includes(provider)&&!emailPattern.test(account))return json({error:'Enter a valid email.'},400);
    const old=await database.prepare('SELECT encrypted_value FROM credential_vault WHERE user_email=? AND provider=?').bind(session.email,provider).first();
    const previous=old?await vaultCrypto(env,session.email,provider,old.encrypted_value):null;
    if(!password&&!previous?.password)return json({error:'Enter a password to save this account.'},400);
