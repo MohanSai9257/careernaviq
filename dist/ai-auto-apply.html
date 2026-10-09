@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="AI Auto Apply for CareerNaviq.">
+  <title>AI Auto Apply — CareerNaviq</title>
+  <link rel="icon" type="image/svg+xml" href="/logo.svg">
+  <link rel="stylesheet" href="/style.css">
+  <script src="/sidebar.js" defer></script>
+  <script src="/ai-auto-apply.js" defer></script>
+  <script src="/profile.js" defer></script>
+</head>
+<body>
+  <header class="masthead">
+    <div class="wrap brand"><img class="brand-logo" src="/logo.svg" alt=""><span>CareerNaviq</span><div id="profile-greeting" class="profile-greeting" hidden></div><div class="role-control"><span id="section-role" class="public-label">User</span><button id="section-logout" type="button">Logout</button></div></div>
+  </header>
+  <main id="auto-apply-page" class="wrap auto-apply-page" hidden>
+    <div class="auto-apply-hero">
+      <div><p class="eyebrow">CAREERNAVIQ</p><h1>AI Auto Apply</h1><p class="description">Match jobs, prepare applications, resolve blockers, and track every step with user approval before submission.</p></div>
+      <div id="worker-status" class="auto-status-card">Checking worker…</div>
+    </div>
+    <nav class="auto-tabs" role="tablist" aria-label="AI Auto Apply sections">
+      <button type="button" role="tab" data-panel="dashboard" aria-selected="true">Dashboard</button>
+      <button type="button" role="tab" data-panel="profile">My Profile</button>
+      <button type="button" role="tab" data-panel="resumes">Resume Manager</button>
+      <button type="button" role="tab" data-panel="accounts">Connected Accounts</button>
+      <button type="button" role="tab" data-panel="matching">Job Matching</button>
+      <button type="button" role="tab" data-panel="agent">AI Agent</button>
+      <button type="button" role="tab" data-panel="blockers">Blockers</button>
+      <button type="button" role="tab" data-panel="answers">Answer Library</button>
+      <button type="button" role="tab" data-panel="tracker">Application Tracker</button>
+      <button type="button" role="tab" data-panel="settings">Agent Settings</button>
+    </nav>
+    <p id="auto-message" class="section-status" role="status" aria-live="polite"></p>
+
+    <section id="panel-dashboard" class="auto-panel" role="tabpanel">
+      <div id="dashboard-cards" class="analytics-grid"></div>
+      <div class="auto-controls"><button id="start-agent" class="primary" type="button">Start Agent</button><button id="pause-agent" type="button">Pause Agent</button><button id="resume-agent" type="button">Resume Agent</button><button id="stop-agent" class="danger" type="button">Stop Agent</button><button id="refresh-auto" type="button">View Activity</button></div>
+      <div class="auto-card"><h2>Recent activity</h2><div id="activity-list" class="auto-list"></div></div>
+    </section>
+
+    <section id="panel-profile" class="auto-panel" role="tabpanel" hidden>
+      <div class="auto-card"><h2>Profile reused from CareerNaviq</h2><p class="form-hint">This reads your existing CareerNaviq Profile. Add missing details in Profile; Auto Apply never invents qualifications or answers.</p><dl id="profile-summary" class="profile-summary"></dl><a class="button-link" href="/profile">Open Profile</a></div>
+    </section>
+
+    <section id="panel-resumes" class="auto-panel" role="tabpanel" hidden>
+      <div class="auto-card"><h2>Upload resume</h2><form id="resume-form" class="auto-form"><label>Name<input id="resume-name" maxlength="120" placeholder="Java backend resume"></label><label>Resume file<input id="resume-file" type="file" accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" required></label><label class="check-row"><input id="resume-default" type="checkbox"> Make default resume</label><button class="primary" type="submit">Upload resume</button></form></div>
+      <div class="auto-card"><h2>Resume versions</h2><div id="resume-list" class="auto-list"></div></div>
+    </section>
+
+    <section id="panel-accounts" class="auto-panel" role="tabpanel" hidden>
+      <div class="auto-card"><h2>Connected Accounts</h2><p class="form-hint">LinkedIn is shown first. OAuth is used only where configured. Otherwise the external worker can open an isolated user browser session for permitted interactive sign-in. Passwords are never stored in CareerNaviq.</p><div id="account-list" class="account-grid"></div></div>
+    </section>
+
+    <section id="panel-matching" class="auto-panel" role="tabpanel" hidden>
+      <div class="auto-card"><h2>Job Matching</h2><form id="match-form" class="auto-form inline"><label>Category<select id="match-category"><option value="java">Java</option><option value="data">Data</option><option value="devops">DevOps</option><option value="validation">Validation</option></select></label><label>Minimum score<input id="match-min" type="number" min="0" max="100" value="60"></label><label>Resume<select id="match-resume"></select></label><button class="primary" type="submit">Find matches</button></form><div id="match-list" class="auto-list"></div></div>
+    </section>
+
+    <section id="panel-agent" class="auto-panel" role="tabpanel" hidden>
+      <div class="auto-card"><h2>AI Agent</h2><p class="form-hint">The agent prepares applications and pauses for final approval before submission. Actual browser automation requires the Skyvern/Ollama worker to be configured.</p><form id="agent-form" class="auto-form"><label>Natural-language instructions<textarea id="agent-instructions" rows="4" placeholder="Use my default resume. Stop before final submit. Do not answer sponsorship/legal questions unless saved in my answer library."></textarea></label><label>Application ID<input id="agent-application-id" placeholder="Paste an application ID from the tracker"></label><button class="primary" type="submit">Start selected application</button></form></div>
+    </section>
+
+    <section id="panel-blockers" class="auto-panel" role="tabpanel" hidden>
+      <div class="auto-card"><h2>Blockers</h2><div id="blocker-list" class="auto-list"></div></div>
+    </section>
+
+    <section id="panel-answers" class="auto-panel" role="tabpanel" hidden>
+      <div class="auto-card"><h2>Answer Library</h2><form id="answer-form" class="auto-form"><label>Question<input id="answer-question" maxlength="500"></label><label>Approved answer<textarea id="answer-text" rows="3" maxlength="3000"></textarea></label><label>Answer type<select id="answer-type"><option value="general">General</option><option value="work_authorization">Work authorization</option><option value="sponsorship">Sponsorship</option><option value="salary">Salary</option><option value="legal">Legal declaration</option><option value="company_specific">Company-specific</option></select></label><button class="primary" type="submit">Save answer</button></form><div id="answer-list" class="auto-list"></div></div>
+    </section>
+
+    <section id="panel-tracker" class="auto-panel" role="tabpanel" hidden>
+      <div class="auto-card"><h2>Application Tracker</h2><div class="auto-filter"><select id="tracker-status"><option value="">All statuses</option><option>MATCHED</option><option>QUEUED</option><option>IN_PROGRESS</option><option>BLOCKED</option><option>READY_FOR_REVIEW</option><option>SUBMITTED</option><option>FAILED</option><option>SKIPPED</option></select></div><div id="tracker-list" class="auto-list"></div></div>
+    </section>
+
+    <section id="panel-settings" class="auto-panel" role="tabpanel" hidden>
+      <div class="auto-card"><h2>Agent Settings</h2><form id="settings-form" class="auto-form inline"><label>Daily limit<input id="daily-limit" type="number" min="0" max="100" value="10"></label><label>Minimum match score<input id="minimum-score" type="number" min="0" max="100" value="70"></label><label class="check-row"><input id="require-review" type="checkbox" checked> Require final approval before submit</label><button class="primary" type="submit">Save settings</button></form><p class="form-hint">Skyvern worker URL, shared secret, OAuth client IDs, and Ollama model are configured as server-side environment values, not in the browser.</p></div>
+    </section>
+  </main>
+</body>
+</html>

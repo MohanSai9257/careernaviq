@@ -7,7 +7,7 @@ function bucket(env){if(!env.BUCKET)throw Error('Document storage unavailable');
 function link(value){if(typeof value!=='string'||value.length>2048)return false;if(!value)return true;try{const u=new URL(value);return ['http:','https:'].includes(u.protocol)&&!u.username&&!u.password;}catch{return false;}}
 function normalizedName(value){return value.trim().replace(/\s+/g,' ').toLocaleLowerCase();}
 const sectionNames=new Set(['recruiter-directory','latest-posted-jobs','study-materials','interview-prep','interview-support']);
-const tabNames=new Map([['employer-directory','Employer Directory'],['recruiter-directory','Recruiter Directory'],['latest-posted-jobs','Latest Posted Jobs'],['study-materials','Study Materials'],['interview-prep','Interview Prep'],['interview-support','Interview Support']]);
+const tabNames=new Map([['employer-directory','Employer Directory'],['recruiter-directory','Recruiter Directory'],['latest-posted-jobs','Latest Posted Jobs'],['ai-auto-apply','AI Auto Apply'],['study-materials','Study Materials'],['interview-prep','Interview Prep'],['interview-support','Interview Support']]);
 const restrictedMessage='Access restricted temporarily by the Admin.';
 const sectionCategories=new Set(['java','data','devops','validation']);
 const adminEmail='chatgpt3577@gmail.com';
@@ -30,6 +30,40 @@ function canManage(session){return session?.status==='approved'&&['admin','coadm
 async function ensureSectionFavorites(database){await database.prepare("CREATE TABLE IF NOT EXISTS section_favorites (user_email text NOT NULL, item_id text NOT NULL, created_at text NOT NULL, PRIMARY KEY (user_email,item_id))").run();}
 async function ensureAppSettings(database){await database.prepare("CREATE TABLE IF NOT EXISTS app_settings (key text PRIMARY KEY, value text NOT NULL, updated_at text NOT NULL, updated_by text NOT NULL DEFAULT '')").run();}
 async function ensureAdminAccessRequests(database){await database.prepare("CREATE TABLE IF NOT EXISTS admin_access_requests (email text PRIMARY KEY, status text NOT NULL, requested_at text NOT NULL, reviewed_at text, reviewed_by text)").run();}
+
+async function ensureAutoApply(database){
+ await database.batch([
+  database.prepare("CREATE TABLE IF NOT EXISTS auto_resumes (id text PRIMARY KEY, user_email text NOT NULL, name text NOT NULL, file_key text NOT NULL, file_name text NOT NULL, file_type text NOT NULL, file_size integer NOT NULL, extracted_text text NOT NULL DEFAULT '', extraction_status text NOT NULL DEFAULT 'pending_worker', is_default integer NOT NULL DEFAULT 0, created_at text NOT NULL, updated_at text NOT NULL)"),
+  database.prepare("CREATE TABLE IF NOT EXISTS auto_connected_accounts (id text PRIMARY KEY, user_email text NOT NULL, provider text NOT NULL, status text NOT NULL, auth_type text NOT NULL DEFAULT 'interactive_browser', last_verified_at text, metadata text NOT NULL DEFAULT '{}', created_at text NOT NULL, updated_at text NOT NULL)"),
+  database.prepare("CREATE UNIQUE INDEX IF NOT EXISTS auto_connected_accounts_user_provider ON auto_connected_accounts (user_email,provider)"),
+  database.prepare("CREATE TABLE IF NOT EXISTS auto_agent_settings (user_email text PRIMARY KEY, daily_limit integer NOT NULL DEFAULT 10, minimum_score integer NOT NULL DEFAULT 70, require_review integer NOT NULL DEFAULT 1, updated_at text NOT NULL)"),
+  database.prepare("CREATE TABLE IF NOT EXISTS auto_applications (id text PRIMARY KEY, user_email text NOT NULL, imported_job_id text, company_name text NOT NULL, job_title text NOT NULL, job_url text NOT NULL, resume_id text, match_score integer, match_reasons text NOT NULL DEFAULT '[]', status text NOT NULL DEFAULT 'MATCHED', blocker_status text NOT NULL DEFAULT '', worker_task_id text NOT NULL DEFAULT '', last_activity_at text NOT NULL, created_at text NOT NULL, updated_at text NOT NULL)"),
+  database.prepare("CREATE UNIQUE INDEX IF NOT EXISTS auto_applications_user_job ON auto_applications (user_email,job_url)"),
+  database.prepare("CREATE TABLE IF NOT EXISTS auto_blockers (id text PRIMARY KEY, user_email text NOT NULL, application_id text NOT NULL, company_name text NOT NULL, job_title text NOT NULL, question text NOT NULL DEFAULT '', reason text NOT NULL, status text NOT NULL DEFAULT 'OPEN', answer text NOT NULL DEFAULT '', created_at text NOT NULL, updated_at text NOT NULL)"),
+  database.prepare("CREATE TABLE IF NOT EXISTS auto_saved_answers (id text PRIMARY KEY, user_email text NOT NULL, normalized_question text NOT NULL, question text NOT NULL, answer text NOT NULL, answer_type text NOT NULL DEFAULT 'general', source text NOT NULL DEFAULT 'user', approved_at text NOT NULL, expires_at text, updated_at text NOT NULL)"),
+  database.prepare("CREATE UNIQUE INDEX IF NOT EXISTS auto_saved_answers_user_question ON auto_saved_answers (user_email,normalized_question)"),
+  database.prepare("CREATE TABLE IF NOT EXISTS auto_activity_logs (id text PRIMARY KEY, user_email text NOT NULL, application_id text, event_type text NOT NULL, message text NOT NULL, metadata text NOT NULL DEFAULT '{}', created_at text NOT NULL)")
+ ]);
+}
+function normalizeQuestion(value){return String(value||'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim().slice(0,500);}
+function autoProvider(value){return ['linkedin','indeed','dice','gmail'].includes(value)?value:'';}
+function autoStatus(value){return ['MATCHED','QUEUED','IN_PROGRESS','BLOCKED','READY_FOR_REVIEW','SUBMITTED','FAILED','SKIPPED'].includes(value)?value:'';}
+async function logAuto(database,email,type,message,applicationId='',metadata={}){await database.prepare('INSERT INTO auto_activity_logs (id,user_email,application_id,event_type,message,metadata,created_at) VALUES (?,?,?,?,?,?,?)').bind(crypto.randomUUID(),email,applicationId,type,message,JSON.stringify(metadata),new Date().toISOString()).run();}
+async function autoSettings(database,email){await ensureAutoApply(database);let row=await database.prepare('SELECT daily_limit,minimum_score,require_review FROM auto_agent_settings WHERE user_email=?').bind(email).first();if(!row){const now=new Date().toISOString();await database.prepare('INSERT INTO auto_agent_settings (user_email,daily_limit,minimum_score,require_review,updated_at) VALUES (?,10,70,1,?)').bind(email,now).run();row={daily_limit:10,minimum_score:70,require_review:1};}return row;}
+function scoreJob(job,profile,resumeText=''){
+ const text=`${job.title} ${job.company_name} ${resumeText} ${profile?.visa_status||''}`.toLowerCase();let score=35,reasons=[];
+ const title=String(job.title||'').toLowerCase();
+ for(const term of ['java','spring','software','developer','engineer','data','devops','cloud','validation'])if(title.includes(term)){score+=8;reasons.push(`Title contains ${term}`);}
+ if(profile?.visa_status){score+=8;reasons.push(`Profile status available: ${profile.visa_status}`);} if(resumeText){score+=15;reasons.push('Resume text available for matching.');}
+ if(/remote|united states|usa|us/.test(text)){score+=5;reasons.push('US/remote signal found.');}
+ return {score:Math.min(100,score),reasons};
+}
+async function workerCall(env,path,payload){
+ const base=env.SKYVERN_WORKER_URL,secret=env.AUTO_APPLY_WORKER_SECRET;if(!base||!secret)throw Object.assign(Error('Skyvern/Ollama worker is not configured for this Site. Deploy the external worker and set SKYVERN_WORKER_URL and AUTO_APPLY_WORKER_SECRET.'),{status:501});
+ const response=await fetch(new URL(path,base).toString(),{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${secret}`},body:JSON.stringify(payload),signal:AbortSignal.timeout(30000)});
+ const body=await response.json().catch(()=>({}));if(!response.ok)throw Object.assign(Error(body.error||'Automation worker request failed.'),{status:502});return body;
+}
+
 async function autoApproveAccess(database){await ensureAppSettings(database);const row=await database.prepare("SELECT value FROM app_settings WHERE key = 'auto_approve_access'").first();return row?.value==='true';}
 async function tabAllowed(env,tab){const row=await db(env).prepare('SELECT allowed FROM tab_access WHERE tab = ?').bind(tab).first();return row?.allowed!==0;}
 async function currentCompany(database,id,old){
@@ -320,6 +354,74 @@ export default {async fetch(request,env){
    return json(reviewed);
   }
   if((url.pathname==='/companies.json'||url.pathname.startsWith('/api/'))&&session?.status!=='approved')return json({error:'Access approval required.'},403);
+  if(url.pathname==='/api/auto-apply/bootstrap'&&request.method==='GET'){
+   if(!canManage(session)&&!await tabAllowed(env,'ai-auto-apply'))return json({error:restrictedMessage},403);
+   const database=db(env);await ensureAutoApply(database);
+   const profile=await database.prepare('SELECT * FROM user_profiles WHERE email=?').bind(session.email).first();
+   const settings=await autoSettings(database,session.email);
+   const resumes=(await database.prepare('SELECT id,name,file_name,file_type,file_size,extraction_status,is_default,created_at,updated_at FROM auto_resumes WHERE user_email=? ORDER BY is_default DESC, created_at DESC').bind(session.email).all()).results||[];
+   const accounts=(await database.prepare('SELECT provider,status,auth_type,last_verified_at,metadata,created_at,updated_at FROM auto_connected_accounts WHERE user_email=? ORDER BY provider').bind(session.email).all()).results||[];
+   const applications=(await database.prepare('SELECT id,company_name,job_title,job_url,resume_id,match_score,status,blocker_status,last_activity_at,created_at,updated_at FROM auto_applications WHERE user_email=? ORDER BY last_activity_at DESC LIMIT 200').bind(session.email).all()).results||[];
+   const blockers=(await database.prepare("SELECT id,application_id,company_name,job_title,question,reason,status,created_at,updated_at FROM auto_blockers WHERE user_email=? AND status IN ('OPEN','WAITING_FOR_USER','FAILED') ORDER BY created_at DESC LIMIT 100").bind(session.email).all()).results||[];
+   const answers=(await database.prepare('SELECT id,question,answer,answer_type,source,approved_at,expires_at,updated_at FROM auto_saved_answers WHERE user_email=? ORDER BY updated_at DESC LIMIT 200').bind(session.email).all()).results||[];
+   const activity=(await database.prepare('SELECT application_id,event_type,message,metadata,created_at FROM auto_activity_logs WHERE user_email=? ORDER BY created_at DESC LIMIT 50').bind(session.email).all()).results||[];
+   const countStatus=Object.fromEntries(((await database.prepare('SELECT status,count(*) AS count FROM auto_applications WHERE user_email=? GROUP BY status').bind(session.email).all()).results||[]).map(r=>[r.status,Number(r.count)]));
+   const counts={matched:countStatus.MATCHED||0,queued:countStatus.QUEUED||0,inProgress:countStatus.IN_PROGRESS||0,readyForReview:countStatus.READY_FOR_REVIEW||0,submitted:countStatus.SUBMITTED||0,failed:countStatus.FAILED||0,blockers:blockers.length};
+   return json({email:session.email,profile:{email:session.email,profile},resumes,accounts,applications,blockers,answers,settings,summary:{counts,activity,worker:{configured:Boolean(env.SKYVERN_WORKER_URL&&env.AUTO_APPLY_WORKER_SECRET),model:env.OLLAMA_MODEL||''}}});
+  }
+  if(url.pathname==='/api/auto-apply/resumes'&&request.method==='POST'){
+   if(!sameOrigin(request,url))return json({error:'Use CareerNaviq to upload resumes.'},403);if(!canManage(session)&&!await tabAllowed(env,'ai-auto-apply'))return json({error:restrictedMessage},403);
+   const form=await request.formData(),file=form.get('file'),name=String(form.get('name')||'Resume').trim().slice(0,120)||'Resume',isDefault=String(form.get('isDefault')||'')==='true';
+   if(!file||typeof file.arrayBuffer!=='function'||file.size===0||file.size>10*1024*1024)return json({error:'Choose a PDF or Word resume smaller than 10 MB.'},400);
+   const fileName=String(file.name||'resume').split(/[\\/]/).pop().slice(0,200),ext=fileName.toLowerCase().split('.').pop(),fileType={pdf:'application/pdf',doc:'application/msword',docx:'application/vnd.openxmlformats-officedocument.wordprocessingml.document'}[ext];
+   if(!fileType)return json({error:'Only PDF, DOC, and DOCX resumes are allowed.'},400);
+   const bytes=await file.arrayBuffer(),magic=new Uint8Array(bytes.slice(0,8));
+   if(!((ext==='pdf'&&[37,80,68,70,45].every((n,i)=>magic[i]===n))||(ext==='doc'&&[208,207,17,224,161,177,26,225].every((n,i)=>magic[i]===n))||(ext==='docx'&&magic[0]===80&&magic[1]===75&&magic[2]===3&&magic[3]===4)))return json({error:'The resume file does not match its extension.'},400);
+   const database=db(env);await ensureAutoApply(database);const id=crypto.randomUUID(),key=`auto-resumes/${session.email}/${id}`,now=new Date().toISOString();await bucket(env).put(key,bytes,{httpMetadata:{contentType:fileType}});
+   if(isDefault)await database.prepare('UPDATE auto_resumes SET is_default=0 WHERE user_email=?').bind(session.email).run();
+   await database.prepare('INSERT INTO auto_resumes (id,user_email,name,file_key,file_name,file_type,file_size,is_default,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)').bind(id,session.email,name,key,fileName,fileType,file.size,isDefault?1:0,now,now).run();
+   await logAuto(database,session.email,'RESUME_UPLOADED',`Uploaded resume ${name}`);return json({id,name,fileName},201);
+  }
+  if(url.pathname.startsWith('/api/auto-apply/resumes/')&&(request.method==='PUT'||request.method==='DELETE')){
+   if(!sameOrigin(request,url))return json({error:'Use CareerNaviq to manage resumes.'},403);const id=decodeURIComponent(url.pathname.split('/').pop());const database=db(env);await ensureAutoApply(database);const row=await database.prepare('SELECT id,file_key,name FROM auto_resumes WHERE id=? AND user_email=?').bind(id,session.email).first();if(!row)return json({error:'Resume not found.'},404);
+   if(request.method==='DELETE'){await bucket(env).delete(row.file_key);await database.prepare('DELETE FROM auto_resumes WHERE id=? AND user_email=?').bind(id,session.email).run();await logAuto(database,session.email,'RESUME_DELETED',`Deleted resume ${row.name}`);return json({deleted:true});}
+   await database.prepare('UPDATE auto_resumes SET is_default=0 WHERE user_email=?').bind(session.email).run();await database.prepare('UPDATE auto_resumes SET is_default=1,updated_at=? WHERE id=? AND user_email=?').bind(new Date().toISOString(),id,session.email).run();return json({id,isDefault:true});
+  }
+  if(url.pathname==='/api/auto-apply/accounts'&&request.method==='POST'){
+   if(!sameOrigin(request,url))return json({error:'Use CareerNaviq to manage accounts.'},403);let input;try{input=await jsonInput(request);}catch{return json({error:'Invalid account request.'},400);}const provider=autoProvider(input?.provider),action=input?.action;if(!provider||!['connect','disconnect'].includes(action))return json({error:'Choose LinkedIn, Indeed, Dice, or Gmail.'},400);
+   const database=db(env);await ensureAutoApply(database);const now=new Date().toISOString();
+   if(action==='disconnect'){await database.prepare('DELETE FROM auto_connected_accounts WHERE user_email=? AND provider=?').bind(session.email,provider).run();await logAuto(database,session.email,'ACCOUNT_DISCONNECTED',`Disconnected ${provider}`);return json({message:`${provider} disconnected.`});}
+   const authType=provider==='gmail'?'oauth_required':'interactive_browser';await database.prepare('INSERT INTO auto_connected_accounts (id,user_email,provider,status,auth_type,last_verified_at,metadata,created_at,updated_at) VALUES (?,?,?,?,?,?,?, ?, ?) ON CONFLICT(user_email,provider) DO UPDATE SET status=excluded.status,auth_type=excluded.auth_type,updated_at=excluded.updated_at').bind(crypto.randomUUID(),session.email,provider,authType==='oauth_required'?'oauth_not_configured':'ready_for_worker_login',authType,null,'{}',now,now).run();
+   await logAuto(database,session.email,'ACCOUNT_CONNECT_REQUESTED',`Connection prepared for ${provider}`);return json({message:provider==='gmail'?'Gmail OAuth must be configured before connecting.':'Interactive browser sign-in will open in the external worker when configured.'});
+  }
+  if(url.pathname==='/api/auto-apply/matches'&&request.method==='POST'){
+   if(!sameOrigin(request,url))return json({error:'Use CareerNaviq to match jobs.'},403);let input;try{input=await jsonInput(request);}catch{return json({error:'Invalid matching request.'},400);}const category=String(input?.category||''),minScore=Number(input?.minScore||60);if(!sectionCategories.has(category)||!Number.isInteger(minScore)||minScore<0||minScore>100)return json({error:'Invalid matching filters.'},400);
+   const database=db(env);await ensureAutoApply(database);const profile=await database.prepare('SELECT * FROM user_profiles WHERE email=?').bind(session.email).first();let resume=null;if(input?.resumeId)resume=await database.prepare('SELECT id,extracted_text FROM auto_resumes WHERE user_email=? AND id=?').bind(session.email,input.resumeId).first();else resume=await database.prepare('SELECT id,extracted_text FROM auto_resumes WHERE user_email=? ORDER BY is_default DESC, created_at DESC LIMIT 1').bind(session.email).first();
+   const jobs=(await database.prepare("SELECT id,company_name,title,apply_url,posted_at FROM imported_jobs WHERE is_open=1 AND category=? ORDER BY CASE WHEN posted_at='' THEN 1 ELSE 0 END, posted_at DESC, discovered_at DESC LIMIT 200").bind(category).all()).results||[];const now=new Date().toISOString(),items=[];
+   for(const job of jobs){const scored=scoreJob({title:job.title,company_name:job.company_name},profile,resume?.extracted_text||'');if(scored.score<minScore)continue;const appId=crypto.randomUUID();await database.prepare("INSERT INTO auto_applications (id,user_email,imported_job_id,company_name,job_title,job_url,resume_id,match_score,match_reasons,status,last_activity_at,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,'MATCHED',?,?,?) ON CONFLICT(user_email,job_url) DO UPDATE SET match_score=excluded.match_score,match_reasons=excluded.match_reasons,updated_at=excluded.updated_at RETURNING id,company_name,job_title,job_url,resume_id,match_score,match_reasons,status,blocker_status,last_activity_at,created_at,updated_at").bind(appId,session.email,job.id,job.company_name,job.title,job.apply_url,resume?.id||'',scored.score,JSON.stringify(scored.reasons),now,now,now).first().then(r=>items.push(r));}
+   await logAuto(database,session.email,'MATCHING_COMPLETE',`Created or updated ${items.length} job matches`, '', {category,minScore});return json({items});
+  }
+  if(url.pathname==='/api/auto-apply/agent/start'&&request.method==='POST'){
+   if(!sameOrigin(request,url))return json({error:'Use CareerNaviq to start the agent.'},403);let input;try{input=await jsonInput(request);}catch{return json({error:'Invalid agent request.'},400);}const applicationId=String(input?.applicationId||'').trim(),instructions=String(input?.instructions||'').slice(0,3000);const database=db(env);await ensureAutoApply(database);const app=await database.prepare('SELECT * FROM auto_applications WHERE id=? AND user_email=?').bind(applicationId,session.email).first();if(!app)return json({error:'Application not found.'},404);
+   const profile=await database.prepare('SELECT * FROM user_profiles WHERE email=?').bind(session.email).first(),resume=app.resume_id?await database.prepare('SELECT id,file_name,file_type FROM auto_resumes WHERE id=? AND user_email=?').bind(app.resume_id,session.email).first():null;
+   let worker;try{worker=await workerCall(env,'/tasks/start',{userEmail:session.email,application:app,profile,resume,instructions,requireFinalApproval:true});}catch(error){await database.prepare("UPDATE auto_applications SET status='FAILED',last_activity_at=?,updated_at=? WHERE id=?").bind(new Date().toISOString(),new Date().toISOString(),applicationId).run();await logAuto(database,session.email,'AGENT_NOT_STARTED',error.message,applicationId);return json({error:error.message},error.status||500);}
+   const now=new Date().toISOString();await database.prepare("UPDATE auto_applications SET status='QUEUED',worker_task_id=?,last_activity_at=?,updated_at=? WHERE id=?").bind(worker.taskId||'',now,now,applicationId).run();await logAuto(database,session.email,'AGENT_STARTED','Automation task queued.',applicationId,worker);return json({message:'Automation task queued.',taskId:worker.taskId||''});
+  }
+  if(url.pathname==='/api/auto-apply/agent/control'&&request.method==='POST'){
+   if(!sameOrigin(request,url))return json({error:'Use CareerNaviq to control the agent.'},403);let input;try{input=await jsonInput(request);}catch{return json({error:'Invalid agent control.'},400);}const action=String(input?.action||'');if(!['start','pause','resume','stop'].includes(action))return json({error:'Invalid agent control.'},400);const database=db(env);await ensureAutoApply(database);await logAuto(database,session.email,`AGENT_${action.toUpperCase()}`,`Agent ${action} requested.`);return json({message:`Agent ${action} requested. ${env.SKYVERN_WORKER_URL?'Worker will receive task-specific controls from Application Tracker.':'Configure the external worker to execute browser controls.'}`});
+  }
+  if(url.pathname==='/api/auto-apply/blockers/answer'&&request.method==='POST'){
+   if(!sameOrigin(request,url))return json({error:'Use CareerNaviq to answer blockers.'},403);let input;try{input=await jsonInput(request);}catch{return json({error:'Invalid blocker answer.'},400);}const answer=String(input?.answer||'').trim();if(!answer)return json({error:'Enter an answer.'},400);const database=db(env);await ensureAutoApply(database);const b=await database.prepare('SELECT * FROM auto_blockers WHERE id=? AND user_email=?').bind(input.blockerId,session.email).first();if(!b)return json({error:'Blocker not found.'},404);const now=new Date().toISOString();await database.prepare("UPDATE auto_blockers SET answer=?,status='RESOLVED',updated_at=? WHERE id=?").bind(answer,now,b.id).run();await database.prepare("UPDATE auto_applications SET blocker_status='RESOLVED',status='QUEUED',last_activity_at=?,updated_at=? WHERE id=? AND user_email=?").bind(now,now,b.application_id,session.email).run();if(input.saveAnswer)await database.prepare('INSERT INTO auto_saved_answers (id,user_email,normalized_question,question,answer,answer_type,source,approved_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?) ON CONFLICT(user_email,normalized_question) DO UPDATE SET answer=excluded.answer,approved_at=excluded.approved_at,updated_at=excluded.updated_at').bind(crypto.randomUUID(),session.email,normalizeQuestion(b.question),b.question,answer,'general','blocker',now,now).run();await logAuto(database,session.email,'BLOCKER_RESOLVED',`Resolved blocker: ${b.reason}`,b.application_id);return json({resolved:true});
+  }
+  if(url.pathname==='/api/auto-apply/answers'&&request.method==='POST'){
+   if(!sameOrigin(request,url))return json({error:'Use CareerNaviq to save answers.'},403);let input;try{input=await jsonInput(request);}catch{return json({error:'Invalid answer.'},400);}const question=String(input?.question||'').trim(),answer=String(input?.answer||'').trim(),type=String(input?.answerType||'general');if(!question||!answer||question.length>500||answer.length>3000||!['general','work_authorization','sponsorship','salary','legal','company_specific'].includes(type))return json({error:'Enter a valid question and approved answer.'},400);const database=db(env);await ensureAutoApply(database);const now=new Date().toISOString();await database.prepare('INSERT INTO auto_saved_answers (id,user_email,normalized_question,question,answer,answer_type,source,approved_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?) ON CONFLICT(user_email,normalized_question) DO UPDATE SET question=excluded.question,answer=excluded.answer,answer_type=excluded.answer_type,approved_at=excluded.approved_at,updated_at=excluded.updated_at').bind(crypto.randomUUID(),session.email,normalizeQuestion(question),question,answer,type,'user',now,now).run();return json({saved:true});
+  }
+  if(url.pathname.startsWith('/api/auto-apply/answers/')&&request.method==='DELETE'){
+   const id=decodeURIComponent(url.pathname.split('/').pop());const database=db(env);await ensureAutoApply(database);await database.prepare('DELETE FROM auto_saved_answers WHERE id=? AND user_email=?').bind(id,session.email).run();return json({deleted:true});
+  }
+  if(url.pathname==='/api/auto-apply/settings'&&request.method==='PUT'){
+   if(!sameOrigin(request,url))return json({error:'Use CareerNaviq to save settings.'},403);let input;try{input=await jsonInput(request);}catch{return json({error:'Invalid settings.'},400);}const daily=Number(input?.dailyLimit),minimum=Number(input?.minimumScore),review=Boolean(input?.requireReview);if(!Number.isInteger(daily)||daily<0||daily>100||!Number.isInteger(minimum)||minimum<0||minimum>100)return json({error:'Check daily limit and score.'},400);const database=db(env);await ensureAutoApply(database);await database.prepare('INSERT INTO auto_agent_settings (user_email,daily_limit,minimum_score,require_review,updated_at) VALUES (?,?,?,?,?) ON CONFLICT(user_email) DO UPDATE SET daily_limit=excluded.daily_limit,minimum_score=excluded.minimum_score,require_review=excluded.require_review,updated_at=excluded.updated_at').bind(session.email,daily,minimum,review?1:0,new Date().toISOString()).run();return json({saved:true});
+  }
   if(url.pathname==='/api/jobs/generate'&&request.method==='POST'){
    if(!sameOrigin(request,url))return json({error:'Use the jobs page to generate results.'},403);
    if(!canManage(session)&&!await tabAllowed(env,'latest-posted-jobs'))return json({error:restrictedMessage},403);
@@ -599,11 +701,11 @@ export default {async fetch(request,env){
   if(url.pathname.startsWith('/api/'))return json({error:'Not found.'},404);
   if(!['GET','HEAD'].includes(request.method))return new Response('Method not allowed',{status:405});
   if((url.pathname==='/admin'||url.pathname==='/admin/')&&!canManage(await sessionFor(request,env)))return Response.redirect(url.origin+'/',302);
-  const sections=['recruiter-directory','latest-posted-jobs','study-materials','interview-prep','interview-support'];
+  const sections=['recruiter-directory','latest-posted-jobs','ai-auto-apply','study-materials','interview-prep','interview-support'];
   const section=sections.find(name=>url.pathname===`/${name}`||url.pathname===`/${name}/`);
   const requestedTab=url.pathname==='/'||url.pathname==='/index.html'?'employer-directory':section;
   const restricted=requestedTab&&session?.status==='approved'&&!canManage(session)&&!await tabAllowed(env,requestedTab);
-  const path=restricted?'/restricted.html':url.pathname==='/'||url.pathname==='/admin'||url.pathname==='/admin/'?'/index.html':section?'/recruiter-directory.html':url.pathname==='/profile'||url.pathname==='/profile/'?'/profile.html':url.pathname;
+  const path=restricted?'/restricted.html':url.pathname==='/'||url.pathname==='/admin'||url.pathname==='/admin/'?'/index.html':section?(section==='ai-auto-apply'?'/ai-auto-apply.html':'/recruiter-directory.html'):url.pathname==='/profile'||url.pathname==='/profile/'?'/profile.html':url.pathname;
   if(!Object.hasOwn(ASSETS,path))return new Response('Not found',{status:404});
   const type=path.endsWith('.html')?'text/html':path.endsWith('.css')?'text/css':path.endsWith('.js')?'text/javascript':path.endsWith('.svg')?'image/svg+xml':'application/json';
   return new Response(request.method==='HEAD'?null:ASSETS[path],{headers:{'Content-Type':type+'; charset=utf-8','Cache-Control':'no-cache','X-Content-Type-Options':'nosniff'}});
