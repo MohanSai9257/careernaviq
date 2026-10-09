@@ -8,6 +8,7 @@ let accessSettings={autoApprove:false};
 let adminAccessRequests=[];
 let analyticsData=null;
 let questionThreads=[];
+let selectedMessageEmail='',messageFilter='all',activeAdminTab='analytics-dashboard';
 let deletingUserEmail='';
 window.directoryRole='guest';
 const managesAccess=()=>['admin','coadmin'].includes(accessSession.role)&&accessSession.status==='approved';
@@ -32,6 +33,9 @@ function showAccessState(){
  accessEl('analytics-dashboard').hidden=!adminPage||!managesAccess();
  accessEl('admin-dashboard').hidden=!adminPage||!managesAccess();
  accessEl('data-dashboard').hidden=!adminPage||!managesAccess();
+ accessEl('admin-tabs').hidden=!adminPage||!managesAccess();
+ accessEl('messages-dashboard').hidden=!adminPage||!managesAccess();
+ if(adminPage&&managesAccess())showAdminTab(activeAdminTab);
  if(!adminPage||!managesAccess()){accessEl('analytics-dashboard').open=false;accessEl('admin-dashboard').open=false;accessEl('data-dashboard').open=false;}
  accessEl('coadmin-section').hidden=accessSession.role!=='admin';
  accessEl('role-label').textContent=accessSession.role==='admin'?'Admin':accessSession.role==='coadmin'?'Coadmin':'User';
@@ -228,22 +232,33 @@ function renderSectionChanges(){
 }
 async function loadSectionChanges(){try{const data=await accessJson('/api/review/section-changes');sectionChanges=data.items;accessError('section-change-error','');renderSectionChanges();}catch(error){accessError('section-change-error',error.message);}}
 function renderQuestionThreads(){
- accessEl('questions-count').textContent=questionThreads.reduce((sum,thread)=>sum+Number(thread.unread||0),0)||questionThreads.length;
+ const unread=questionThreads.reduce((sum,thread)=>sum+Number(thread.unread||0),0);
+ const badge=accessEl('messages-tab-count');badge.textContent=unread;badge.hidden=!unread;
  const list=accessEl('questions-list');list.replaceChildren();
- if(!questionThreads.length){const empty=document.createElement('p');empty.className='management-empty';empty.textContent='No user questions yet.';list.append(empty);return;}
- for(const thread of questionThreads){
-  const card=document.createElement('article');card.className='ask-admin-thread';
-  const header=document.createElement('div');header.className='ask-admin-header';
-  const identity=document.createElement('div');const name=document.createElement('strong');name.textContent=thread.name||thread.email;const email=document.createElement('small');email.textContent=thread.email;identity.append(name,email);
-  const count=document.createElement('span');count.className='management-count';count.textContent=thread.unread?`${thread.unread} new`:'Open';header.append(identity,count);card.append(header);
-  const messages=document.createElement('div');messages.className='ask-admin-messages';
-  for(const message of thread.messages){const row=document.createElement('div');row.className=`ask-admin-message ${message.sender==='admin'?'is-admin':'is-user'}`;const label=document.createElement('strong');label.textContent=message.sender==='admin'?'Admin reply':'User';const body=document.createElement('p');body.textContent=message.body;const time=document.createElement('small');time.textContent=new Date(message.createdAt).toLocaleString();row.append(label,body,time);messages.append(row);}
-  card.append(messages);
-  const form=document.createElement('form');form.className='ask-admin-reply';const input=document.createElement('textarea');input.rows=2;input.maxLength=1200;input.placeholder='Reply to user';const button=document.createElement('button');button.type='submit';button.className='primary';button.textContent='Reply';form.append(input,button);
-  form.addEventListener('submit',async event=>{event.preventDefault();const body=input.value.trim();if(!body){input.focus();return;}button.disabled=true;accessError('questions-error','');try{await accessJson('/api/admin/questions/reply',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:thread.email,body})});input.value='';await loadQuestionThreads();window.showAppNotice?.('Reply sent.');}catch(error){accessError('questions-error',error.message);button.disabled=false;}});
-  card.append(form);list.append(card);
+ const query=accessEl('messages-search').value.trim().toLowerCase();
+ const visible=questionThreads.filter(thread=>{
+  const last=thread.messages.at(-1);
+  if(messageFilter==='unread'&&!thread.unread)return false;
+  if(messageFilter==='replied'&&last?.sender!=='admin')return false;
+  return !query||[thread.name,thread.email,...thread.messages.map(message=>message.body)].some(value=>String(value||'').toLowerCase().includes(query));
+ });
+ if(!visible.length){const empty=document.createElement('p');empty.className='management-empty';empty.textContent=questionThreads.length?'No matching conversations.':'No messages yet.';list.append(empty);}
+ for(const thread of visible){
+  const button=document.createElement('button');button.type='button';button.className='admin-conversation'+(selectedMessageEmail===thread.email?' is-selected':'');button.setAttribute('aria-label',`Open conversation with ${thread.name||thread.email}`);
+  const avatar=document.createElement('span');avatar.className='admin-message-avatar';avatar.textContent=(thread.name||thread.email).trim().charAt(0).toUpperCase();
+  const content=document.createElement('span');content.className='admin-conversation-copy';const name=document.createElement('strong');name.textContent=thread.name||thread.email;const preview=document.createElement('small');preview.textContent=thread.messages.at(-1)?.body||'';content.append(name,preview);
+  const meta=document.createElement('span');meta.className='admin-conversation-meta';const date=document.createElement('small');date.textContent=thread.lastAt?new Date(thread.lastAt).toLocaleDateString(undefined,{month:'short',day:'numeric'}):'';meta.append(date);if(thread.unread){const count=document.createElement('b');count.textContent=thread.unread;meta.append(count);}
+  button.append(avatar,content,meta);button.addEventListener('click',()=>selectMessageThread(thread.email));list.append(button);
  }
+ if(selectedMessageEmail){const selected=questionThreads.find(thread=>thread.email===selectedMessageEmail);if(selected)renderSelectedMessage(selected);else{selectedMessageEmail='';renderSelectedMessage(null);}}
 }
+function renderSelectedMessage(thread){
+ const header=accessEl('messages-chat-header'),history=accessEl('messages-chat');history.replaceChildren();accessEl('messages-reply-form').hidden=!thread;
+ if(!thread){header.textContent='Select a conversation';const empty=document.createElement('p');empty.className='management-empty';empty.textContent='Choose a conversation to read and reply.';history.append(empty);return;}
+ header.replaceChildren();const avatar=document.createElement('span');avatar.className='admin-message-avatar';avatar.textContent=(thread.name||thread.email).trim().charAt(0).toUpperCase();const identity=document.createElement('span');const name=document.createElement('strong');name.textContent=thread.name||thread.email;const email=document.createElement('small');email.textContent=thread.email;identity.append(name,email);header.append(avatar,identity);
+ for(const message of thread.messages){const row=document.createElement('div');row.className='admin-chat-row '+(message.sender==='admin'?'is-admin':'is-user');const bubble=document.createElement('div');bubble.className='admin-chat-bubble';const body=document.createElement('p');body.textContent=message.body;const time=document.createElement('small');time.textContent=new Date(message.createdAt).toLocaleString(undefined,{dateStyle:'medium',timeStyle:'short'});bubble.append(body,time);row.append(bubble);history.append(row);}history.scrollTop=history.scrollHeight;
+}
+async function selectMessageThread(email){selectedMessageEmail=email;renderQuestionThreads();const thread=questionThreads.find(item=>item.email===email);if(thread?.unread){try{await accessJson('/api/admin/questions/read',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email})});thread.unread=0;renderQuestionThreads();}catch(error){accessError('questions-error',error.message);}}}
 async function loadQuestionThreads(){try{const data=await accessJson('/api/admin/questions');questionThreads=data.items;accessError('questions-error','');renderQuestionThreads();}catch(error){accessError('questions-error',error.message);}}
 
 function renderTabAccess(){
@@ -268,6 +283,17 @@ async function loadTabAccess(){
  catch(error){accessError('tab-access-error',error.message);}
 }
 function loadAdminData(){loadAnalytics();loadAccessUsers();loadAccessSettings();loadAdminAccessRequests();loadChangeRequests();loadSectionSubmissions();loadSectionChanges();loadCoadmins();loadTabAccess();loadQuestionThreads();}
+function showAdminTab(id){
+ activeAdminTab=id;
+ for(const button of document.querySelectorAll('[data-admin-tab]'))button.setAttribute('aria-selected',String(button.dataset.adminTab===id));
+ for(const panelId of ['analytics-dashboard','admin-dashboard','data-dashboard','messages-dashboard']){
+  const panel=accessEl(panelId);panel.hidden=panelId!==id;if(panel.tagName==='DETAILS')panel.open=panelId===id;
+ }
+}
+for(const button of document.querySelectorAll('[data-admin-tab]'))button.addEventListener('click',()=>showAdminTab(button.dataset.adminTab));
+accessEl('messages-search').addEventListener('input',renderQuestionThreads);
+for(const button of document.querySelectorAll('[data-message-filter]'))button.addEventListener('click',()=>{messageFilter=button.dataset.messageFilter;for(const filter of document.querySelectorAll('[data-message-filter]'))filter.setAttribute('aria-pressed',String(filter===button));renderQuestionThreads();});
+accessEl('messages-reply-form').addEventListener('submit',async event=>{event.preventDefault();const input=accessEl('messages-reply'),body=input.value.trim(),button=event.currentTarget.querySelector('button');if(!body||!selectedMessageEmail)return;button.disabled=true;accessError('questions-error','');try{await accessJson('/api/admin/questions/reply',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:selectedMessageEmail,body})});input.value='';await loadQuestionThreads();window.showAppNotice?.('Reply sent.');}catch(error){accessError('questions-error',error.message);}finally{button.disabled=false;}});
 accessEl('auto-approve-toggle').addEventListener('click',async()=>{
  const button=accessEl('auto-approve-toggle');button.disabled=true;accessError('access-settings-error','');
  try{accessSettings=await accessJson('/api/access/settings',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({autoApprove:!accessSettings.autoApprove})});renderAccessSettings();window.showAppNotice?.(`Auto approve new users is now ${accessSettings.autoApprove?'on':'off'}.`);}

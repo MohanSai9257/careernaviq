@@ -521,6 +521,16 @@ export default {async fetch(request,env){
    ]);
    return json({sent:true});
   }
+  if(url.pathname==='/api/admin/questions/read'&&request.method==='POST'){
+   if(!canManage(session))return json({error:'Admin access required.'},403);
+   if(!sameOrigin(request,url))return json({error:'Use Admin to read messages.'},403);
+   let input;try{input=await jsonInput(request);}catch{return json({error:'Invalid conversation.'},400);}
+   const userEmail=String(input?.email||'').trim().toLowerCase();
+   if(!emailPattern.test(userEmail))return json({error:'Invalid user email.'},400);
+   const database=db(env);await ensureAskMessages(database);
+   await database.prepare("UPDATE ask_messages SET read_by_admin_at = COALESCE(read_by_admin_at, ?) WHERE user_email = ? AND sender = 'user'").bind(new Date().toISOString(),userEmail).run();
+   return json({read:true});
+  }
 
   if(url.pathname==='/api/app-profile'&&request.method==='PUT'){
    if(!sameOrigin(request,url))return json({error:'Use CareerNaviq to update your profile.'},403);
