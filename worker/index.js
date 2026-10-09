@@ -872,6 +872,7 @@ export default {async fetch(request,env){
    if(!result)return json({error:'Another visitor just updated this company. Refresh and try again.'},409);
    return json({id,deleted:true,version:result.version});
   }
+  if(url.pathname==='/profile'||url.pathname==='/profile/')return Response.redirect(url.origin+'/ai-auto-apply#apply-profile',302);
   if(url.pathname.startsWith('/api/'))return json({error:'Not found.'},404);
   if(!['GET','HEAD'].includes(request.method))return new Response('Method not allowed',{status:405});
   if((url.pathname==='/admin'||url.pathname==='/admin/')&&!canManage(await sessionFor(request,env)))return Response.redirect(url.origin+'/',302);

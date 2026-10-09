@@ -58,7 +58,7 @@ const logoutButton=document.createElement('button');logoutButton.type='button';l
 const logoutIcon=document.createElement('span');logoutIcon.className='side-icon';logoutIcon.setAttribute('aria-hidden','true');logoutIcon.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 5H6a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h4"/><path d="M15 8l4 4-4 4"/><path d="M19 12H9"/></svg>';
 const logoutLabel=document.createElement('span');logoutLabel.className='side-label';logoutLabel.textContent='Logout';logoutButton.append(logoutIcon,logoutLabel);
 logoutButton.addEventListener('click',async()=>{logoutButton.disabled=true;try{await fetch('/api/logout',{method:'POST'});}finally{location.replace('/');}});
-navFooter.append(adminLink,profileLink,logoutButton);sidebar.append(navFooter);document.body.prepend(sidebar);
+navFooter.append(adminLink,logoutButton);sidebar.append(navFooter);document.body.prepend(sidebar);
 function setSidebarCollapsed(collapsed){document.body.classList.toggle('sidebar-collapsed',collapsed);toggle.textContent=collapsed?'›':'‹';toggle.setAttribute('aria-expanded',String(!collapsed));}
 setSidebarCollapsed(localStorage.getItem('directory-sidebar-collapsed')==='true');
 toggle.addEventListener('click',()=>{const collapsed=!document.body.classList.contains('sidebar-collapsed');setSidebarCollapsed(collapsed);localStorage.setItem('directory-sidebar-collapsed',String(collapsed));});

@@ -20,16 +20,63 @@
     </div>
     <nav class="auto-tabs" role="tablist" aria-label="AI Auto Apply sections">
       <button type="button" role="tab" data-panel="dashboard" aria-selected="true">Dashboard</button>
-      <button type="button" role="tab" data-panel="profile">My Profile</button>
-      <button type="button" role="tab" data-panel="resumes">Resume Manager</button>
-      <button type="button" role="tab" data-panel="accounts">Connected Accounts</button>
-      <button type="button" role="tab" data-panel="matching">Job Matching</button>
+      <button type="button" role="tab" data-panel="apply-profile">AI Apply Profile</button>
       <button type="button" role="tab" data-panel="agent">AI Agent</button>
       <button type="button" role="tab" data-panel="blockers">Blockers</button>
-      <button type="button" role="tab" data-panel="answers">Answer Library</button>
       <button type="button" role="tab" data-panel="tracker">Application Tracker</button>
       <button type="button" role="tab" data-panel="settings">Agent Settings</button>
     </nav>
+    <section id="panel-apply-profile" class="auto-panel" role="tabpanel" hidden><div id="profile-page" hidden>
+    <div class="profile-heading-row"><div class="page-title-block"><p class="eyebrow">CAREERNAVIQ</p><h1 class="recruiter-heading">Profile</h1></div><div class="profile-account-icons" aria-label="Job account connections"><button type="button" class="profile-provider-icon gmail" data-provider="gmail" aria-label="Connect Gmail"><svg class="provider-svg provider-svg-gmail" viewBox="0 0 64 48" aria-hidden="true"><path d="M8 10v28c0 4.4 3.6 8 8 8h4V22L8 13.2Z" fill="#4285F4"/><path d="M44 46h4c4.4 0 8-3.6 8-8V10l-12 12v24Z" fill="#34A853"/><path d="M20 22 8 13.2V10c0-5 5.7-7.8 9.7-4.8L32 16l14.3-10.8C50.3 2.2 56 5 56 10v3.2L44 22 32 31 20 22Z" fill="#EA4335"/><path d="M44 22 56 13.2v8.2L44 30.4V22Z" fill="#FBBC04"/><path d="M8 13.2 20 22v8.4L8 21.4v-8.2Z" fill="#C5221F"/></svg></button><button type="button" class="profile-provider-icon linkedin" data-provider="linkedin" aria-label="Connect LinkedIn"><svg class="provider-svg provider-svg-linkedin" viewBox="0 0 64 64" aria-hidden="true"><rect x="5" y="5" width="54" height="54" rx="10" fill="#0A66C2"/><circle cx="21" cy="22" r="5.5" fill="#fff"/><path d="M16.5 30h9v22h-9V30Zm15 0h8.6v3c1.2-1.8 3.8-3.6 7.9-3.6 7.1 0 10.5 4.6 10.5 12.2V52h-9V42c0-3.2-1.1-5.3-4.1-5.3-2.8 0-4.5 1.9-4.9 3.8-.2.6-.2 1.4-.2 2.2V52h-8.8V30Z" fill="#fff"/></svg></button><button type="button" class="profile-provider-icon indeed" data-provider="indeed" aria-label="Connect Indeed"><svg class="provider-svg provider-svg-indeed" viewBox="0 0 64 64" aria-hidden="true"><path d="M43.8 7.6C32.4 6 20.7 11.2 14.4 21.4c-.9 1.5.9 2.9 2.2 1.7 8.8-8.2 18.9-10.4 31-8.3 1.7.3 2.6-1.9 1.2-2.9a16.3 16.3 0 0 0-5-4.3Z" fill="#2164F3"/><circle cx="35" cy="25" r="8" fill="#2164F3"/><rect x="29" y="34" width="12" height="23" rx="5" fill="#2164F3"/></svg></button><button type="button" class="profile-provider-icon dice" data-provider="dice" aria-label="Connect Dice"><svg class="provider-svg provider-svg-dice" viewBox="0 0 88 64" aria-hidden="true"><path d="M10 8h66c5.5 0 10 4.5 10 10v26c0 5.5-4.5 10-10 10H25L7 62l5-8h-2c-5.5 0-10-4.5-10-10V18C0 12.5 4.5 8 10 8Z" fill="#D71920"/><text x="17" y="40" fill="#fff" font-family="Arial Black,Arial,sans-serif" font-size="25" font-style="italic" font-weight="900">Dice</text></svg></button></div></div>
+    <section class="profile-card profile-resume-card">
+      <h2>Resume Manager</h2>
+      <p class="form-hint">Upload resume versions here. AI Auto Apply will use the selected/default resume from your Profile.</p>
+      <form id="profile-resume-form" class="auto-form inline"><label>Resume Name<input id="profile-resume-name" maxlength="120" placeholder="Java full stack resume"></label><label>Resume File<input id="profile-resume-file" type="file" accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" required></label><label class="check-row"><input id="profile-resume-default" type="checkbox"> Default</label><button type="submit" class="primary">Upload resume</button></form>
+      <div id="profile-resume-list" class="auto-list"></div>
+    </section>
+    <section class="profile-card">
+      <form id="profile-form">
+        <p class="form-hint">CareerNaviq uses this profile for AI Auto Apply. Share only verified details. Leave anything blank if you do not want it used.</p>
+        <div class="profile-fields profile-fields-wide">
+          <label>First Name<input id="profile-first" name="firstName" maxlength="80" autocomplete="given-name"></label>
+          <label>Last Name<input id="profile-last" name="lastName" maxlength="80" autocomplete="family-name"></label>
+          <label>Legal Name<input id="profile-legal-name" name="legalName" maxlength="180" placeholder="Full legal name used on applications"></label>
+          <label>Job Application Gmail<input id="profile-application-email" name="applicationEmail" type="email" maxlength="254" placeholder="Email to use on job applications"></label>
+          <div class="profile-phone-field"><span>Mobile Number</span><div class="phone-combo"><select id="profile-mobile-country" name="mobileCountryCode" aria-label="Country code"><option value="+1">🇺🇸 +1</option><option value="+91">🇮🇳 +91</option><option value="+44">🇬🇧 +44</option><option value="+1-CA">🇨🇦 +1</option><option value="+61">🇦🇺 +61</option><option value="+49">🇩🇪 +49</option><option value="+33">🇫🇷 +33</option><option value="+65">🇸🇬 +65</option><option value="+971">🇦🇪 +971</option><option value="+81">🇯🇵 +81</option></select><input id="profile-mobile" name="mobile" type="tel" maxlength="40" autocomplete="tel-national" placeholder="Phone number"></div></div>
+          <label>Work Authorization<select id="profile-work-authorization"><option value="">Select authorization</option><option>U.S. Citizen</option><option>Green Card / Permanent Resident</option><option>H1B</option><option>H4 EAD</option><option>L2 EAD</option><option>OPT</option><option>STEM OPT</option><option>CPT</option><option>TN Visa</option><option>Requires sponsorship now</option><option>Requires sponsorship in the future</option><option>Other work authorization</option></select></label>
+          <label>Address Line<input id="profile-address" maxlength="240" placeholder="Street address"></label>
+          <label>City<input id="profile-city" maxlength="100"></label>
+          <label>State<input id="profile-state" maxlength="80"></label>
+          <label>ZIP Code<input id="profile-zip" maxlength="20"></label>
+          <label>Current Location<input id="profile-location" name="location" maxlength="160" placeholder="City, State"></label>
+          <label>LinkedIn URL<input id="profile-linkedin" type="url" maxlength="500" placeholder="https://www.linkedin.com/in/..."></label>
+          <label>Portfolio URL<input id="profile-portfolio" type="url" maxlength="500" placeholder="https://..."></label>
+          <label>GitHub URL<input id="profile-github" type="url" maxlength="500" placeholder="https://github.com/..."></label>
+          <label>University<input id="profile-university" maxlength="200" placeholder="University name"></label>
+          <label>Degree<input id="profile-degree" maxlength="200" placeholder="Master's in Computer Science"></label>
+          <label>Education Start Month<select id="profile-edu-start-month"><option value="">Month</option><option>January</option><option>February</option><option>March</option><option>April</option><option>May</option><option>June</option><option>July</option><option>August</option><option>September</option><option>October</option><option>November</option><option>December</option></select></label>
+          <label>Education Start Year<input id="profile-edu-start-year" type="number" min="1950" max="2100" placeholder="2020"></label>
+          <label>Education Completed Month<select id="profile-edu-end-month"><option value="">Month</option><option>January</option><option>February</option><option>March</option><option>April</option><option>May</option><option>June</option><option>July</option><option>August</option><option>September</option><option>October</option><option>November</option><option>December</option></select></label>
+          <label>Education Completed Year<input id="profile-edu-end-year" type="number" min="1950" max="2100" placeholder="2024"></label>
+          <label>Earliest Start Date<input id="profile-start-date" type="date"></label>
+          <label>Employment Type<select id="profile-employment-type"><option value="">Any / Not specified</option><option>Full-time</option><option>Contract - W2</option><option>Contract - C2C</option><option>Contract - 1099</option><option>Contract-to-hire</option><option>Part-time</option><option>Internship</option></select></label>
+          <label>Relocation Preference<select id="profile-relocation"><option value="">Select preference</option><option>Open to relocate</option><option>Not open to relocate</option><option>Remote only</option><option>Hybrid only</option><option>On-site only</option><option>Within current city</option><option>Within current state</option><option>Anywhere in the U.S.</option><option>Specific locations only</option></select></label>
+          <label>Minimum Salary<input id="profile-salary-min" type="number" min="0" step="1000" placeholder="Minimum annual salary"></label>
+          <label>Maximum Salary<input id="profile-salary-max" type="number" min="0" step="1000" placeholder="Maximum annual salary"></label>
+          <label>Minimum Hourly Rate<input id="profile-hourly-min" type="number" min="0" step="1" placeholder="Minimum hourly"></label>
+          <label>Maximum Hourly Rate<input id="profile-hourly-max" type="number" min="0" step="1" placeholder="Maximum hourly"></label>
+          <label>Experience<textarea id="profile-experience" rows="3" maxlength="3000" placeholder="Years of experience, recent roles, domains"></textarea></label>
+          <label>Skills<textarea id="profile-skills" rows="3" maxlength="3000" placeholder="Java, Spring Boot, AWS, SQL..."></textarea></label>
+          <label>Certifications<textarea id="profile-certifications" rows="3" maxlength="2000"></textarea></label>
+          <label>Sponsorship Details<textarea id="profile-sponsorship" rows="3" maxlength="2000" placeholder="Only if needed. Example: will need H1B transfer / future sponsorship."></textarea></label>
+          <label>Job Preferences Notes<textarea id="profile-job-preferences" rows="3" maxlength="2000" placeholder="Preferred titles, industries, shifts, locations"></textarea></label>
+          <label>Approved Screening Answers<textarea id="profile-screening" rows="4" maxlength="5000" placeholder="Only answers you approve the agent to reuse. Sensitive answers are revalidated before use."></textarea></label>
+        </div>
+        <p id="profile-message" role="status" aria-live="polite"></p>
+        <button type="submit" class="primary">Save profile</button>
+      </form>
+    </section>
+  </div></section>
     <p id="auto-message" class="section-status" role="status" aria-live="polite"></p>
 
     <section id="panel-dashboard" class="auto-panel" role="tabpanel">
@@ -39,20 +86,12 @@
       <div class="auto-card"><h2>Recent activity</h2><div id="activity-list" class="auto-list"></div></div>
     </section>
 
-    <section id="panel-profile" class="auto-panel" role="tabpanel" hidden>
-      <div class="auto-card"><h2>Profile reused from CareerNaviq</h2><p class="form-hint">This reads your existing CareerNaviq Profile. Add missing details in Profile; Auto Apply never invents qualifications or answers.</p><dl id="profile-summary" class="profile-summary"></dl><a class="button-link" href="/profile">Open Profile</a></div>
-    </section>
-
-    <section id="panel-resumes" class="auto-panel" role="tabpanel" hidden>
+<section id="panel-resumes" class="auto-panel" role="tabpanel" hidden>
       <div class="auto-card"><h2>Upload resume</h2><form id="resume-form" class="auto-form"><label>Name<input id="resume-name" maxlength="120" placeholder="Java backend resume"></label><label>Resume file<input id="resume-file" type="file" accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" required></label><label class="check-row"><input id="resume-default" type="checkbox"> Make default resume</label><button class="primary" type="submit">Upload resume</button></form></div>
       <div class="auto-card"><h2>Resume versions</h2><div id="resume-list" class="auto-list"></div></div>
     </section>
 
-    <section id="panel-accounts" class="auto-panel" role="tabpanel" hidden>
-      <div class="auto-card"><h2>Connected Accounts</h2><p class="form-hint">LinkedIn is shown first. OAuth is used only where configured. Otherwise the external worker can open an isolated user browser session for permitted interactive sign-in. Passwords are never stored in CareerNaviq.</p><div id="account-list" class="account-grid"></div></div>
-    </section>
-
-    <section id="panel-matching" class="auto-panel" role="tabpanel" hidden>
+<section id="panel-matching" class="auto-panel" role="tabpanel" hidden>
       <div class="auto-card"><h2>Job Matching</h2><form id="match-form" class="auto-form inline"><label>Category<select id="match-category"><option value="java">Java</option><option value="data">Data</option><option value="devops">DevOps</option><option value="validation">Validation</option></select></label><label>Minimum score<input id="match-min" type="number" min="0" max="100" value="60"></label><label>Resume<select id="match-resume"></select></label><button class="primary" type="submit">Find matches</button></form><div id="match-list" class="auto-list"></div></div>
     </section>
 
@@ -64,11 +103,7 @@
       <div class="auto-card"><h2>Blockers</h2><div id="blocker-list" class="auto-list"></div></div>
     </section>
 
-    <section id="panel-answers" class="auto-panel" role="tabpanel" hidden>
-      <div class="auto-card"><h2>Answer Library</h2><form id="answer-form" class="auto-form"><label>Question<input id="answer-question" maxlength="500"></label><label>Approved answer<textarea id="answer-text" rows="3" maxlength="3000"></textarea></label><label>Answer type<select id="answer-type"><option value="general">General</option><option value="work_authorization">Work authorization</option><option value="sponsorship">Sponsorship</option><option value="salary">Salary</option><option value="legal">Legal declaration</option><option value="company_specific">Company-specific</option></select></label><button class="primary" type="submit">Save answer</button></form><div id="answer-list" class="auto-list"></div></div>
-    </section>
-
-    <section id="panel-tracker" class="auto-panel" role="tabpanel" hidden>
+<section id="panel-tracker" class="auto-panel" role="tabpanel" hidden>
       <div class="auto-card"><h2>Application Tracker</h2><div class="auto-filter"><select id="tracker-status"><option value="">All statuses</option><option>MATCHED</option><option>QUEUED</option><option>IN_PROGRESS</option><option>BLOCKED</option><option>READY_FOR_REVIEW</option><option>SUBMITTED</option><option>FAILED</option><option>SKIPPED</option></select></div><div id="tracker-list" class="auto-list"></div></div>
     </section>
 
@@ -76,5 +111,16 @@
       <div class="auto-card"><h2>Agent Settings</h2><form id="settings-form" class="auto-form inline"><label>Daily limit<input id="daily-limit" type="number" min="0" max="100" value="10"></label><label>Minimum match score<input id="minimum-score" type="number" min="0" max="100" value="70"></label><label class="check-row"><input id="require-review" type="checkbox" checked> Require final approval before submit</label><button class="primary" type="submit">Save settings</button></form><p class="form-hint">Skyvern worker URL, shared secret, OAuth client IDs, and Ollama model are configured as server-side environment values, not in the browser.</p></div>
     </section>
   </main>
+  <dialog id="profile-accounts-dialog" class="connect-dialog" aria-labelledby="profile-accounts-title">
+    <form id="profile-accounts-form">
+      <div class="connect-header"><div id="connect-provider-logo" class="connect-logo">M</div><div><h2 id="profile-accounts-title">Connect Gmail</h2><p id="connect-provider-subtitle">Job account</p><strong id="connect-provider-name">Gmail</strong></div></div>
+      <p class="connect-note">Your credentials stay private and secure. Only you can manage this connection.</p>
+      <input id="account-provider" type="hidden" value="gmail">
+      <label>Email ID<input id="account-email" type="email" autocomplete="username" placeholder="you@company.com"></label>
+      <label>Password<div class="password-shell"><input id="account-password" type="password" autocomplete="current-password" placeholder="••••••••"><button id="account-password-toggle" type="button" aria-label="Show password"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="1.8"/></svg></button></div></label>
+      <p id="profile-accounts-message" role="alert" hidden></p>
+      <div class="dialog-actions"><button id="profile-accounts-cancel" type="button">Cancel</button><button type="submit" class="primary">Connect</button></div>
+    </form>
+  </dialog>
 </body>
 </html>

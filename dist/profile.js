@@ -30,7 +30,7 @@ async function loadProfile(){
   setValue('profile-salary-min',p.salary_min);setValue('profile-salary-max',p.salary_max);setValue('profile-hourly-min',p.hourly_min);setValue('profile-hourly-max',p.hourly_max);
   setValue('profile-experience',p.experience);setValue('profile-skills',p.skills);setValue('profile-certifications',p.certifications);setValue('profile-sponsorship',p.sponsorship_needs);setValue('profile-job-preferences',p.job_preferences);setValue('profile-screening',p.approved_screening_answers);
   profileElement('profile-page').hidden=false;
-  const session=await profileApi('/api/session');profileElement('profile-role').textContent=session.role==='admin'?'Admin':session.role==='coadmin'?'Coadmin':'User';
+  const session=await profileApi('/api/session');(profileElement('profile-role')||profileElement('section-role')).textContent=session.role==='admin'?'Admin':session.role==='coadmin'?'Coadmin':'User';
   loadProfileExtras();
  }catch(error){if(onProfilePage&&current===profileRequest){if(error.status===403)location.replace('/');else{document.body.classList.add('has-access');profileElement('profile-page').hidden=false;profileElement('profile-message').textContent=error.message;}}else showGreeting('');}
 }
@@ -43,5 +43,5 @@ if(onProfilePage){
  profileElement('profile-accounts-cancel').addEventListener('click',()=>profileElement('profile-accounts-dialog').close());
  profileElement('account-password-toggle').addEventListener('click',()=>{const input=profileElement('account-password');input.type=input.type==='password'?'text':'password';});
  profileElement('profile-accounts-form').addEventListener('submit',async event=>{event.preventDefault();const message=profileElement('profile-accounts-message'),provider=profileElement('account-provider').value,account=profileElement('account-email').value.trim();message.hidden=true;if(!account){message.textContent='Enter the account email or username.';message.hidden=false;return;}try{await profileApi('/api/auto-apply/accounts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({provider,action:'connect',account})});profileElement('profile-accounts-dialog').close();await loadProfileExtras();window.showAppNotice?.(`${accountProviders[provider]?.label||'Account'} connection saved.`);}catch(error){message.textContent=error.message;message.hidden=false;}});
- profileElement('profile-logout').addEventListener('click',async()=>{try{await profileApi('/api/logout',{method:'POST'});location.replace('/');}catch(error){profileElement('profile-message').textContent=error.message;}});
+ profileElement('profile-logout')?.addEventListener('click',async()=>{try{await profileApi('/api/logout',{method:'POST'});location.replace('/');}catch(error){profileElement('profile-message').textContent=error.message;}});
 }
