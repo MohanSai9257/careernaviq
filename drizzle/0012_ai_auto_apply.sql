@@ -136,3 +136,28 @@ ALTER TABLE `user_profiles` ADD `github_url` text DEFAULT '' NOT NULL;
 ALTER TABLE `user_profiles` ADD `start_date` text DEFAULT '' NOT NULL;
 --> statement-breakpoint
 ALTER TABLE `user_profiles` ADD `employment_type_preferences` text DEFAULT '' NOT NULL;
+--> statement-breakpoint
+ALTER TABLE `user_profiles` ADD `application_email` text DEFAULT '' NOT NULL;
+--> statement-breakpoint
+ALTER TABLE `user_profiles` ADD `education_university` text DEFAULT '' NOT NULL;
+--> statement-breakpoint
+ALTER TABLE `user_profiles` ADD `education_degree` text DEFAULT '' NOT NULL;
+--> statement-breakpoint
+ALTER TABLE `user_profiles` ADD `education_start_month` text DEFAULT '' NOT NULL;
+--> statement-breakpoint
+ALTER TABLE `user_profiles` ADD `education_start_year` text DEFAULT '' NOT NULL;
+--> statement-breakpoint
+ALTER TABLE `user_profiles` ADD `education_end_month` text DEFAULT '' NOT NULL;
+--> statement-breakpoint
+ALTER TABLE `user_profiles` ADD `education_end_year` text DEFAULT '' NOT NULL;
+--> statement-breakpoint
+ALTER TABLE `user_profiles` ADD `salary_min` text DEFAULT '' NOT NULL;
+--> statement-breakpoint
+ALTER TABLE `user_profiles` ADD `salary_max` text DEFAULT '' NOT NULL;
+--> statement-breakpoint
+ALTER TABLE `user_profiles` ADD `hourly_min` text DEFAULT '' NOT NULL;
+--> statement-breakpoint
+ALTER TABLE `user_profiles` ADD `hourly_max` text DEFAULT '' NOT NULL;
+--> statement-breakpoint
+ALTER TABLE `user_profiles` ADD `state` text DEFAULT '' NOT NULL;
+--> statement-breakpoint

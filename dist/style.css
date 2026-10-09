@@ -178,3 +178,6 @@ input:focus,select:focus,textarea:focus{box-shadow:none!important;outline:2px so
 /* Expanded Profile */
 .profile-app-icon{width:44px;height:44px;border-radius:14px;border:1px solid #8bdac4;background:linear-gradient(135deg,#e6fff6,#fff);color:#006b55;font-size:1.25rem;font-weight:900;box-shadow:0 8px 20px rgba(0,131,102,.12)}
 .profile-fields-wide{grid-template-columns:repeat(2,minmax(0,1fr))}.profile-fields-wide label:has(textarea){align-self:stretch}.profile-fields textarea{width:100%;resize:vertical;min-height:94px;padding:12px;border:1px solid var(--app-border-strong);border-radius:10px;font:inherit}.profile-resume-card{margin-top:20px}.profile-resume-card h2{margin-top:0}#profile-accounts-dialog form{min-width:min(560px,calc(100vw - 32px));display:grid;gap:14px}#profile-accounts-dialog label{display:grid;gap:6px;font-weight:750;color:#23495a}@media(max-width:820px){.profile-fields-wide{grid-template-columns:1fr}.role-control{gap:8px}.profile-app-icon{width:40px;height:40px}}
+
+.profile-phone-field{display:grid;gap:6px;font-weight:750;color:#23495a}.phone-combo{display:grid;grid-template-columns:minmax(96px,20%) 1fr;gap:10px}.phone-combo select,.phone-combo input{width:100%}
+@media(max-width:620px){.phone-combo{grid-template-columns:1fr}}
