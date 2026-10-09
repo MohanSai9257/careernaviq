@@ -1,5 +1,5 @@
 const directorySections=[
-  {name:'Home',path:'/careernaviq',icon:'<path d="M5 19V5l14 14V5"/><path d="M17 4h3v3"/>'},
+  {name:'Home',path:'/careernaviq',icon:'<path d="M3 11.5 12 4l9 7.5"/><path d="M5 10.5V21h5v-6h4v6h5V10.5"/>'},
   {name:'Employer Directory',path:'/employer-directory',icon:'<rect x="5" y="3" width="14" height="18" rx="1"/><path d="M9 7h2m2 0h2M9 11h2m2 0h2M9 15h2m2 0h2M11 21v-3h2v3"/>'},
   {name:'Recruiter Directory',path:'/recruiter-directory',icon:'<circle cx="9" cy="8" r="3"/><path d="M3 20v-2a6 6 0 0 1 12 0v2M17 5a3 3 0 0 1 0 6m2 4a5 5 0 0 1 2 4v1"/>'},
   {name:'Latest Posted Jobs',path:'/latest-posted-jobs',icon:'<rect x="3" y="7" width="18" height="14" rx="2"/><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M3 12h18m-11 0v2h4v-2"/>'},
@@ -54,7 +54,11 @@ const profileLink=document.createElement('a');profileLink.href='/profile';profil
 if(location.pathname==='/profile')profileLink.setAttribute('aria-current','page');
 const profileIcon=document.createElement('span');profileIcon.className='side-icon';profileIcon.setAttribute('aria-hidden','true');profileIcon.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21v-2a8 8 0 0 1 16 0v2"/></svg>';
 const profileLabel=document.createElement('span');profileLabel.className='side-label';profileLabel.textContent='AI Apply Profile';profileLink.append(profileIcon,profileLabel);
-navFooter.append(adminLink,profileLink);sidebar.append(navFooter);document.body.prepend(sidebar);
+const logoutButton=document.createElement('button');logoutButton.type='button';logoutButton.className='side-logout';logoutButton.title='Logout';
+const logoutIcon=document.createElement('span');logoutIcon.className='side-icon';logoutIcon.setAttribute('aria-hidden','true');logoutIcon.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 5H6a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h4"/><path d="M15 8l4 4-4 4"/><path d="M19 12H9"/></svg>';
+const logoutLabel=document.createElement('span');logoutLabel.className='side-label';logoutLabel.textContent='Logout';logoutButton.append(logoutIcon,logoutLabel);
+logoutButton.addEventListener('click',async()=>{logoutButton.disabled=true;try{await fetch('/api/logout',{method:'POST'});}finally{location.replace('/');}});
+navFooter.append(adminLink,profileLink,logoutButton);sidebar.append(navFooter);document.body.prepend(sidebar);
 function setSidebarCollapsed(collapsed){document.body.classList.toggle('sidebar-collapsed',collapsed);toggle.textContent=collapsed?'›':'‹';toggle.setAttribute('aria-expanded',String(!collapsed));}
 setSidebarCollapsed(localStorage.getItem('directory-sidebar-collapsed')==='true');
 toggle.addEventListener('click',()=>{const collapsed=!document.body.classList.contains('sidebar-collapsed');setSidebarCollapsed(collapsed);localStorage.setItem('directory-sidebar-collapsed',String(collapsed));});

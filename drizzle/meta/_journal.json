@@ -85,6 +85,20 @@
       "when": 1790292529834,
       "tag": "0011_new_stark_industries",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1791560751477,
+      "tag": "0012_ai_auto_apply",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "6",
+      "when": 1791560751477,
+      "tag": "0013_java_recruiters_csv",
+      "breakpoints": true
     }
   ]
 }

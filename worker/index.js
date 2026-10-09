@@ -638,6 +638,10 @@ export default {async fetch(request,env){
    if(!sectionNames.has(section)||(!sectionCategories.has(category)&&!(section==='recruiter-directory'&&category==='all'))||title.length>200||organization.length>200||details.length>2000||email.length>254||email&&!emailPattern.test(email)||phone.length>40||extension.length>20||!link(itemUrl))return json({error:'Check the required fields and link.'},400);
    if(!canManage(session)&&!await tabAllowed(env,section))return json({error:restrictedMessage},403);
    if(![title,organization,itemUrl,details,email,phone,extension,input?.postedAt].some(Boolean)&&!file)return json({error:'Add at least one detail or a file to create an entry.'},400);
+   if(section==='recruiter-directory'&&email){
+    const duplicate=await db(env).prepare("SELECT id FROM section_items WHERE section = 'recruiter-directory' AND lower(email) = lower(?) AND status != 'denied' LIMIT 1").bind(email).first();
+    if(duplicate)return json({error:'A recruiter with this email already exists.'},409);
+   }
    const documentSection=section==='study-materials';
    if(file&&!documentSection)return json({error:'Uploads are available only for materials and interview prep.'},400);
    let fileKey='',fileName='',fileType='',fileBytes=null;
