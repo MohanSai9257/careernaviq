@@ -116,3 +116,23 @@ ALTER TABLE `user_profiles` ADD `job_preferences` text DEFAULT '' NOT NULL;
 ALTER TABLE `user_profiles` ADD `relocation_preferences` text DEFAULT '' NOT NULL;
 --> statement-breakpoint
 ALTER TABLE `user_profiles` ADD `approved_screening_answers` text DEFAULT '' NOT NULL;
+--> statement-breakpoint
+ALTER TABLE `user_profiles` ADD `mobile_country_code` text DEFAULT '' NOT NULL;
+--> statement-breakpoint
+ALTER TABLE `user_profiles` ADD `legal_name` text DEFAULT '' NOT NULL;
+--> statement-breakpoint
+ALTER TABLE `user_profiles` ADD `address` text DEFAULT '' NOT NULL;
+--> statement-breakpoint
+ALTER TABLE `user_profiles` ADD `city` text DEFAULT '' NOT NULL;
+--> statement-breakpoint
+ALTER TABLE `user_profiles` ADD `zip` text DEFAULT '' NOT NULL;
+--> statement-breakpoint
+ALTER TABLE `user_profiles` ADD `linkedin_url` text DEFAULT '' NOT NULL;
+--> statement-breakpoint
+ALTER TABLE `user_profiles` ADD `portfolio_url` text DEFAULT '' NOT NULL;
+--> statement-breakpoint
+ALTER TABLE `user_profiles` ADD `github_url` text DEFAULT '' NOT NULL;
+--> statement-breakpoint
+ALTER TABLE `user_profiles` ADD `start_date` text DEFAULT '' NOT NULL;
+--> statement-breakpoint
+ALTER TABLE `user_profiles` ADD `employment_type_preferences` text DEFAULT '' NOT NULL;

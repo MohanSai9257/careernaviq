@@ -22,9 +22,19 @@
           <label>First Name<input id="profile-first" name="firstName" maxlength="80" autocomplete="given-name"></label>
           <label>Last Name<input id="profile-last" name="lastName" maxlength="80" autocomplete="family-name"></label>
           <label>Gmail<input id="profile-email" name="email" type="email" readonly></label>
-          <label>Mobile Number<input id="profile-mobile" name="mobile" type="tel" maxlength="40" autocomplete="tel"></label>
+          <label>Country Code<input id="profile-mobile-country" name="mobileCountryCode" maxlength="8" placeholder="+1"></label>
+          <label>Mobile Number<input id="profile-mobile" name="mobile" type="tel" maxlength="40" autocomplete="tel-national"></label>
+          <label>Legal Name<input id="profile-legal-name" name="legalName" maxlength="180" placeholder="Full legal name"></label>
           <label>Current Location<input id="profile-location" name="location" maxlength="160" placeholder="City, State"></label>
           <label>Status<select id="profile-status" name="visaStatus"><option value="">Select status</option><option value="OPT">OPT</option><option value="STEMOPT">STEMOPT</option><option value="CPT">CPT</option><option value="H1B">H1B</option><option value="H4">H4</option></select></label>
+          <label>Address Line<input id="profile-address" maxlength="240" placeholder="Street address"></label>
+          <label>City<input id="profile-city" maxlength="100"></label>
+          <label>State<input id="profile-state" maxlength="80"></label>
+          <label>ZIP Code<input id="profile-zip" maxlength="20"></label>
+          <label>LinkedIn URL<input id="profile-linkedin" type="url" maxlength="500" placeholder="https://www.linkedin.com/in/..."></label>
+          <label>Portfolio URL<input id="profile-portfolio" type="url" maxlength="500" placeholder="https://..."></label>
+          <label>GitHub URL<input id="profile-github" type="url" maxlength="500" placeholder="https://github.com/..."></label>
+          <label>Earliest Start Date<input id="profile-start-date" type="date"></label>
           <label>Education<textarea id="profile-education" rows="3" maxlength="2000" placeholder="Degree, university, graduation year"></textarea></label>
           <label>Experience<textarea id="profile-experience" rows="3" maxlength="3000" placeholder="Years of experience, recent roles, domains"></textarea></label>
           <label>Skills<textarea id="profile-skills" rows="3" maxlength="3000" placeholder="Java, Spring Boot, AWS, SQL..."></textarea></label>
@@ -33,6 +43,7 @@
           <label>Sponsorship Needs<textarea id="profile-sponsorship" rows="3" maxlength="2000" placeholder="Example: need sponsorship now/in future, or no sponsorship needed"></textarea></label>
           <label>Salary Expectations<textarea id="profile-salary" rows="3" maxlength="1000"></textarea></label>
           <label>Job Preferences<textarea id="profile-job-preferences" rows="3" maxlength="2000" placeholder="Role titles, employment type, remote/hybrid/on-site"></textarea></label>
+          <label>Employment Type Preferences<textarea id="profile-employment-type" rows="3" maxlength="1000" placeholder="Full-time, contract, C2C, W2, remote, hybrid"></textarea></label>
           <label>Relocation Preferences<textarea id="profile-relocation" rows="3" maxlength="2000"></textarea></label>
           <label>Approved Screening Answers<textarea id="profile-screening" rows="4" maxlength="5000" placeholder="Only answers you approve the agent to reuse. Sensitive answers are revalidated before use."></textarea></label>
         </div>
@@ -51,7 +62,6 @@
     <form id="profile-accounts-form">
       <h2 id="profile-accounts-title">Job account access</h2>
       <p class="form-hint">Save only account email or username. CareerNaviq does not store Gmail, LinkedIn, Indeed, or Dice passwords. Sign-in must use OAuth or an isolated browser session.</p>
-      <label>Gmail account<input id="account-gmail" type="email" placeholder="yourname@gmail.com"></label>
       <label>LinkedIn email / username<input id="account-linkedin" autocomplete="off"></label>
       <label>Indeed email / username<input id="account-indeed" autocomplete="off"></label>
       <label>Dice email / username<input id="account-dice" autocomplete="off"></label>
