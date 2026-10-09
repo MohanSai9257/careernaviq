@@ -262,3 +262,6 @@ body:has(#career-panel-ask:not([hidden])) .career-page{padding-bottom:16px}#care
  .sidebar-collapsed .side-head .side-toggle{position:absolute;left:48px;top:50%;transform:translateY(-50%);margin:0}
  .sidebar-collapsed .side-head .side-brand-logo{flex:0 0 42px}
 }
+/* The collapsed toggle extends over the page, so use an opaque background. */
+.has-access.sidebar-collapsed .side-head .side-toggle{background:#294957!important;color:#fff!important}
+.has-access.sidebar-collapsed .side-head .side-toggle:hover{background:#365d6e!important}
