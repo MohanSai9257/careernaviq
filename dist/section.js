@@ -2,7 +2,6 @@ const sectionConfig={
  'recruiter-directory':{title:'Recruiter Directory',action:'Add recruiter',name:'Name',organization:'Company',url:'LinkedIn'},
  'latest-posted-jobs':{title:'Latest Posted Jobs',action:'',name:'Job title',organization:'Company',url:'Job posting link'},
  'study-materials':{title:'Study Materials',action:'Add material',name:'Name',organization:'',url:'Link'},
- 'interview-prep':{title:'Interview Prep',action:'Add DOCs',name:'Name',organization:'',url:'Link'},
  'interview-support':{title:'Interview Support',action:'Add contact',name:'Contact name',organization:'',url:''}
 };
 const sectionKey=location.pathname.split('/').filter(Boolean)[0]||'recruiter-directory';
@@ -17,7 +16,7 @@ if(sectionKey==='latest-posted-jobs'){const hint=document.createElement('small')
 byId('section-add').textContent=config.action;byId('section-dialog-title').textContent=config.action;
 byId('section-add').hidden=!config.action;
 byId('section-title-label').textContent=config.name;byId('section-organization-label').textContent=config.organization;byId('section-url-label').textContent=config.url;
-const isRecruiter=sectionKey==='recruiter-directory',isDocument=sectionKey==='study-materials'||sectionKey==='interview-prep',isContact=sectionKey==='interview-support';
+const isRecruiter=sectionKey==='recruiter-directory',isDocument=sectionKey==='study-materials',isContact=sectionKey==='interview-support';
 for(const optionalTab of ['tab-all','tab-mylist']){if(byId(optionalTab)){byId(optionalTab).hidden=!isRecruiter;if(!isRecruiter)tabs=tabs.filter(tab=>tab.id!==optionalTab);}}
 byId('section-organization-wrap').hidden=!config.organization;byId('section-organization').required=false;
 byId('section-url-wrap').hidden=!config.url;
@@ -84,7 +83,6 @@ window.addEventListener('resize',()=>closeActions());window.addEventListener('sc
 const tableColumns={
  'recruiter-directory':[['Name','title'],['Company','organization'],['LinkedIn','url'],['Mail','email'],['Number','phone'],['Ext','extension']],
  'study-materials':[['Name','title'],['Link','url'],['Upload Material','file_name']],
- 'interview-prep':[['Name','title'],['Link','url'],['Upload Material','file_name']],
  'interview-support':[['Contact Name','title'],['Number','phone'],['Details','details']]
 };
 function renderTable(items){

@@ -5,7 +5,6 @@ const directorySections=[
   {name:'Latest Posted Jobs',path:'/latest-posted-jobs',icon:'<rect x="3" y="7" width="18" height="14" rx="2"/><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M3 12h18m-11 0v2h4v-2"/>'},
   {name:'AI Auto Apply',path:'/ai-auto-apply',icon:'<path d="M12 3v4M12 17v4M3 12h4M17 12h4"/><circle cx="12" cy="12" r="4"/><path d="m16 8 3-3M8 8 5 5m11 11 3 3M8 16l-3 3"/>'},
   {name:'Study Materials',path:'/study-materials',icon:'<path d="M12 6c-2-2-5-2-9-1v15c4-1 7-1 9 1 2-2 5-2 9-1V5c-4-1-7-1-9 1Zm0 0v15"/>'},
-  {name:'Interview Prep',path:'/interview-prep',icon:'<rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 8h6M9 12h6M9 16h4"/>'},
   {name:'Interview Support',path:'/interview-support',icon:'<path d="M4 13v-2a8 8 0 0 1 16 0v2M4 13H3v5h4v-5H4Zm16 0h1v5h-4v-5h3Zm0 5a4 4 0 0 1-4 4h-3"/>'}
 ];
 const currentPath=location.pathname==='/'?'/careernaviq':location.pathname.replace(/\/$/,'');

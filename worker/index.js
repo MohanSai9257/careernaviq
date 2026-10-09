@@ -6,8 +6,8 @@ function db(env){if(!env.DB)throw Error('Database unavailable');return env.DB;}
 function bucket(env){if(!env.BUCKET)throw Error('Document storage unavailable');return env.BUCKET;}
 function link(value){if(typeof value!=='string'||value.length>2048)return false;if(!value)return true;try{const u=new URL(value);return ['http:','https:'].includes(u.protocol)&&!u.username&&!u.password;}catch{return false;}}
 function normalizedName(value){return value.trim().replace(/\s+/g,' ').toLocaleLowerCase();}
-const sectionNames=new Set(['recruiter-directory','latest-posted-jobs','study-materials','interview-prep','interview-support']);
-const tabNames=new Map([['employer-directory','Employer Directory'],['recruiter-directory','Recruiter Directory'],['latest-posted-jobs','Latest Posted Jobs'],['ai-auto-apply','AI Auto Apply'],['study-materials','Study Materials'],['interview-prep','Interview Prep'],['interview-support','Interview Support']]);
+const sectionNames=new Set(['recruiter-directory','latest-posted-jobs','study-materials','interview-support']);
+const tabNames=new Map([['employer-directory','Employer Directory'],['recruiter-directory','Recruiter Directory'],['latest-posted-jobs','Latest Posted Jobs'],['ai-auto-apply','AI Auto Apply'],['study-materials','Study Materials'],['interview-support','Interview Support']]);
 const restrictedMessage='Access restricted temporarily by the Admin.';
 const sectionCategories=new Set(['java','data','devops','validation']);
 const adminEmail='chatgpt3577@gmail.com';
@@ -174,7 +174,7 @@ export default {async fetch(request,env){
    const sourceStatus=Object.fromEntries(jobStatusRows.map(row=>[row.status,Number(row.count||0)]));
    const baseCompanies=baseRows.length,addedCompanies=await count('SELECT count(*) AS count FROM added_companies');
    const pendingAccess=users.pending||0,pendingCompanyChanges=await count("SELECT count(*) AS count FROM change_requests WHERE status = 'pending'"),pendingSectionItems=await count("SELECT count(*) AS count FROM section_items WHERE status = 'pending'"),pendingSectionChanges=await count("SELECT count(*) AS count FROM section_change_requests WHERE status = 'pending'"),pendingAdminAccess=await count("SELECT count(*) AS count FROM admin_access_requests WHERE status = 'pending'");
-   return json({generatedAt:now.toISOString(),totals:{baseCompanies,addedCompanies,companies:baseCompanies+addedCompanies,recruiters:sections['recruiter-directory']||0,studyMaterials:sections['study-materials']||0,interviewPrep:sections['interview-prep']||0,interviewSupport:sections['interview-support']||0},users:{approved:users.approved||0,pending:pendingAccess,blocked:users.blocked||0,newThisWeek:await count('SELECT count(*) AS count FROM access_users WHERE requested_at >= ?',weekAgo),profiles:await count('SELECT count(*) AS count FROM user_profiles'),coadmins:await count('SELECT count(*) AS count FROM coadmins')},pending:{accessRequests:pendingAccess,adminAccess:pendingAdminAccess,companyChanges:pendingCompanyChanges,sectionItems:pendingSectionItems,sectionChanges:pendingSectionChanges,total:pendingAccess+pendingAdminAccess+pendingCompanyChanges+pendingSectionItems+pendingSectionChanges},jobs:{open:await count('SELECT count(*) AS count FROM imported_jobs WHERE is_open = 1'),lastDay:await count('SELECT count(*) AS count FROM imported_jobs WHERE discovered_at >= ?',dayAgo),lastWeek:await count('SELECT count(*) AS count FROM imported_jobs WHERE discovered_at >= ?',weekAgo),sourcesChecked:await count('SELECT count(*) AS count FROM job_source_checks'),failedSources:(sourceStatus.error||0)+(sourceStatus.failed||0)},tabs:{restricted:await count('SELECT count(*) AS count FROM tab_access WHERE allowed = 0')}});
+   return json({generatedAt:now.toISOString(),totals:{baseCompanies,addedCompanies,companies:baseCompanies+addedCompanies,recruiters:sections['recruiter-directory']||0,studyMaterials:sections['study-materials']||0,interviewSupport:sections['interview-support']||0},users:{approved:users.approved||0,pending:pendingAccess,blocked:users.blocked||0,newThisWeek:await count('SELECT count(*) AS count FROM access_users WHERE requested_at >= ?',weekAgo),profiles:await count('SELECT count(*) AS count FROM user_profiles'),coadmins:await count('SELECT count(*) AS count FROM coadmins')},pending:{accessRequests:pendingAccess,adminAccess:pendingAdminAccess,companyChanges:pendingCompanyChanges,sectionItems:pendingSectionItems,sectionChanges:pendingSectionChanges,total:pendingAccess+pendingAdminAccess+pendingCompanyChanges+pendingSectionItems+pendingSectionChanges},jobs:{open:await count('SELECT count(*) AS count FROM imported_jobs WHERE is_open = 1'),lastDay:await count('SELECT count(*) AS count FROM imported_jobs WHERE discovered_at >= ?',dayAgo),lastWeek:await count('SELECT count(*) AS count FROM imported_jobs WHERE discovered_at >= ?',weekAgo),sourcesChecked:await count('SELECT count(*) AS count FROM job_source_checks'),failedSources:(sourceStatus.error||0)+(sourceStatus.failed||0)},tabs:{restricted:await count('SELECT count(*) AS count FROM tab_access WHERE allowed = 0')}});
   }
   if(url.pathname==='/api/tab-access'&&request.method==='GET'){
    if(!canManage(session))return json({error:'Admin access required.'},403);
@@ -588,7 +588,7 @@ export default {async fetch(request,env){
     const title=String(input?.title||'').trim(),organization=String(input?.organization||'').trim(),itemUrl=String(input?.url||'').trim(),details=String(input?.details||'').trim();
     const email=String(input?.email||'').trim(),phone=String(input?.phone||'').trim(),extension=String(input?.extension||'').trim();
     if(title.length>200||organization.length>200||details.length>2000||email.length>254||email&&!emailPattern.test(email)||phone.length>40||extension.length>20||!link(itemUrl))return json({error:'Check the edited fields and link.'},400);
-    const isDocument=current.section==='study-materials'||current.section==='interview-prep';
+    const isDocument=current.section==='study-materials';
     if(file&&!isDocument)return json({error:'Only materials and interview prep accept uploads.'},400);
     let postedAt=current.posted_at;
     if(current.section==='latest-posted-jobs'){postedAt='';if(input?.postedAt){const date=new Date(input.postedAt);if(!Number.isFinite(date.getTime()))return json({error:'Enter a valid posting date or leave it blank.'},400);postedAt=date.toISOString();}}
@@ -638,7 +638,7 @@ export default {async fetch(request,env){
    if(!sectionNames.has(section)||(!sectionCategories.has(category)&&!(section==='recruiter-directory'&&category==='all'))||title.length>200||organization.length>200||details.length>2000||email.length>254||email&&!emailPattern.test(email)||phone.length>40||extension.length>20||!link(itemUrl))return json({error:'Check the required fields and link.'},400);
    if(!canManage(session)&&!await tabAllowed(env,section))return json({error:restrictedMessage},403);
    if(![title,organization,itemUrl,details,email,phone,extension,input?.postedAt].some(Boolean)&&!file)return json({error:'Add at least one detail or a file to create an entry.'},400);
-   const documentSection=section==='study-materials'||section==='interview-prep';
+   const documentSection=section==='study-materials';
    if(file&&!documentSection)return json({error:'Uploads are available only for materials and interview prep.'},400);
    let fileKey='',fileName='',fileType='',fileBytes=null;
    if(file){
@@ -742,7 +742,7 @@ export default {async fetch(request,env){
   if(url.pathname.startsWith('/api/'))return json({error:'Not found.'},404);
   if(!['GET','HEAD'].includes(request.method))return new Response('Method not allowed',{status:405});
   if((url.pathname==='/admin'||url.pathname==='/admin/')&&!canManage(await sessionFor(request,env)))return Response.redirect(url.origin+'/',302);
-  const sections=['recruiter-directory','latest-posted-jobs','ai-auto-apply','study-materials','interview-prep','interview-support'];
+  const sections=['recruiter-directory','latest-posted-jobs','ai-auto-apply','study-materials','interview-support'];
   const section=sections.find(name=>url.pathname===`/${name}`||url.pathname===`/${name}/`);
   const requestedTab=url.pathname==='/employer-directory'||url.pathname==='/employer-directory/'||url.pathname==='/index.html'?'employer-directory':section;
   const restricted=requestedTab&&session?.status==='approved'&&!canManage(session)&&!await tabAllowed(env,requestedTab);

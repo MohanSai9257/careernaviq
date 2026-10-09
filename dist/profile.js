@@ -18,7 +18,7 @@ async function loadProfile(){
  const current=++profileRequest;
  try{
   const data=await profileApi('/api/profile');if(current!==profileRequest)return;
-  const p=data.profile||{};showGreeting(onProfilePage?(p.first_name||data.name||''):(data.name||p.first_name||''));
+  const p=data.profile||{};showGreeting(data.name||p.first_name||'');
   if(!onProfilePage)return;
   document.body.classList.add('has-access');
   setValue('profile-first',p.first_name);setValue('profile-last',p.last_name);setValue('profile-legal-name',p.legal_name);setValue('profile-application-email',p.application_email);

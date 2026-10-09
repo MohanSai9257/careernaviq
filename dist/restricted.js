@@ -1,4 +1,4 @@
-const restrictedNames={'/':'Employer Directory','/index.html':'Employer Directory','/recruiter-directory':'Recruiter Directory','/latest-posted-jobs':'Latest Posted Jobs','/study-materials':'Study Materials','/interview-prep':'Interview Prep','/interview-support':'Interview Support'};
+const restrictedNames={'/':'Employer Directory','/index.html':'Employer Directory','/recruiter-directory':'Recruiter Directory','/latest-posted-jobs':'Latest Posted Jobs','/study-materials':'Study Materials','/interview-support':'Interview Support'};
 const restrictedPath=location.pathname.replace(/\/$/,'')||'/';
 const restrictedName=restrictedNames[restrictedPath]||'This tab';
 document.title=`${restrictedName} — Access restricted — CareerNaviq`;
