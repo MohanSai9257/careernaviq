@@ -31,6 +31,12 @@ function canManage(session){return session?.status==='approved'&&['admin','coadm
 async function ensureSectionFavorites(database){await database.prepare("CREATE TABLE IF NOT EXISTS section_favorites (user_email text NOT NULL, item_id text NOT NULL, created_at text NOT NULL, PRIMARY KEY (user_email,item_id))").run();}
 async function ensureAppSettings(database){await database.prepare("CREATE TABLE IF NOT EXISTS app_settings (key text PRIMARY KEY, value text NOT NULL, updated_at text NOT NULL, updated_by text NOT NULL DEFAULT '')").run();}
 async function ensureAdminAccessRequests(database){await database.prepare("CREATE TABLE IF NOT EXISTS admin_access_requests (email text PRIMARY KEY, status text NOT NULL, requested_at text NOT NULL, reviewed_at text, reviewed_by text)").run();}
+async function ensureAskMessages(database){await database.batch([
+ database.prepare("CREATE TABLE IF NOT EXISTS ask_messages (id text PRIMARY KEY NOT NULL, user_email text NOT NULL, user_name text DEFAULT '' NOT NULL, body text NOT NULL, sender text NOT NULL, admin_email text DEFAULT '' NOT NULL, created_at text NOT NULL, read_by_admin_at text, read_by_user_at text)"),
+ database.prepare("CREATE INDEX IF NOT EXISTS ask_messages_user_created ON ask_messages (user_email,created_at)"),
+ database.prepare("CREATE INDEX IF NOT EXISTS ask_messages_created ON ask_messages (created_at)")
+]);}
+
 async function ensureAccessUserColumns(database){
  const existing=new Set(((await database.prepare('PRAGMA table_info(access_users)').all()).results||[]).map(row=>row.name));
  if(!existing.has('name'))await database.prepare("ALTER TABLE access_users ADD name text DEFAULT '' NOT NULL").run();
@@ -469,6 +475,53 @@ export default {async fetch(request,env){
   }
   if(['/companies.json','/api/changes','/api/companies','/api/company'].includes(url.pathname)&&!canManage(session)&&!await tabAllowed(env,'employer-directory'))return json({error:restrictedMessage},403);
 
+  if(url.pathname==='/api/ask/messages'&&request.method==='GET'){
+   const database=db(env);await ensureAskMessages(database);
+   const {results}=await database.prepare("SELECT id,body,sender,created_at FROM ask_messages WHERE user_email = ? ORDER BY created_at ASC LIMIT 300").bind(session.email).all();
+   await database.prepare("UPDATE ask_messages SET read_by_user_at = COALESCE(read_by_user_at, ?) WHERE user_email = ? AND sender = 'admin'").bind(new Date().toISOString(),session.email).run();
+   return json({items:results.map(row=>({id:row.id,body:row.body,sender:row.sender==='admin'?'support':'user',createdAt:row.created_at}))});
+  }
+  if(url.pathname==='/api/ask/messages'&&request.method==='POST'){
+   if(!sameOrigin(request,url))return json({error:'Use CareerNaviq to send questions.'},403);
+   let input;try{input=await jsonInput(request);}catch{return json({error:'Invalid message.'},400);}
+   const body=String(input?.body||'').trim();
+   if(!body||body.length>1200)return json({error:'Enter a message under 1200 characters.'},400);
+   const database=db(env);await ensureAskMessages(database);await ensureAccessUserColumns(database);
+   const user=await database.prepare('SELECT name FROM access_users WHERE email = ?').bind(session.email).first();
+   const now=new Date().toISOString();
+   const item={id:crypto.randomUUID(),body,sender:'user',createdAt:now};
+   await database.prepare("INSERT INTO ask_messages (id,user_email,user_name,body,sender,created_at) VALUES (?,?,?,?,?,?)").bind(item.id,session.email,user?.name||session.name||'',body,'user',now).run();
+   return json({item:{id:item.id,body:item.body,sender:'user',createdAt:item.createdAt}},201);
+  }
+  if(url.pathname==='/api/admin/questions'&&request.method==='GET'){
+   if(!canManage(session))return json({error:'Admin access required.'},403);
+   const database=db(env);await ensureAskMessages(database);
+   const {results}=await database.prepare("SELECT m.id,m.user_email,m.user_name,m.body,m.sender,m.created_at,m.read_by_admin_at,m.read_by_user_at FROM ask_messages m JOIN (SELECT user_email,max(created_at) AS last_at FROM ask_messages GROUP BY user_email) latest ON latest.user_email = m.user_email ORDER BY latest.last_at DESC,m.created_at ASC LIMIT 1000").all();
+   const threads=[];const byEmail=new Map();
+   for(const row of results){
+    let thread=byEmail.get(row.user_email);if(!thread){thread={email:row.user_email,name:row.user_name||row.user_email,messages:[],unread:0,lastAt:row.created_at};byEmail.set(row.user_email,thread);threads.push(thread);}
+    thread.messages.push({id:row.id,body:row.body,sender:row.sender,createdAt:row.created_at,readByUserAt:row.read_by_user_at||''});
+    thread.lastAt=row.created_at;if(row.sender==='user'&&!row.read_by_admin_at)thread.unread++;
+   }
+   return json({items:threads});
+  }
+  if(url.pathname==='/api/admin/questions/reply'&&request.method==='POST'){
+   if(!canManage(session))return json({error:'Admin access required.'},403);
+   if(!sameOrigin(request,url))return json({error:'Use Admin to reply.'},403);
+   let input;try{input=await jsonInput(request);}catch{return json({error:'Invalid reply.'},400);}
+   const userEmail=String(input?.email||'').trim().toLowerCase(),body=String(input?.body||'').trim();
+   if(!emailPattern.test(userEmail)||!body||body.length>1200)return json({error:'Enter a valid user and reply.'},400);
+   const database=db(env);await ensureAskMessages(database);
+   const existing=await database.prepare('SELECT user_email FROM ask_messages WHERE user_email = ? LIMIT 1').bind(userEmail).first();
+   if(!existing)return json({error:'Question thread not found.'},404);
+   const now=new Date().toISOString();
+   await database.batch([
+    database.prepare("UPDATE ask_messages SET read_by_admin_at = COALESCE(read_by_admin_at, ?) WHERE user_email = ? AND sender = 'user'").bind(now,userEmail),
+    database.prepare("INSERT INTO ask_messages (id,user_email,user_name,body,sender,admin_email,created_at) VALUES (?,?,?,?,?,?,?)").bind(crypto.randomUUID(),userEmail,'',body,'admin',session.email,now)
+   ]);
+   return json({sent:true});
+  }
+
   if(url.pathname==='/api/app-profile'&&request.method==='PUT'){
    if(!sameOrigin(request,url))return json({error:'Use CareerNaviq to update your profile.'},403);
    let input;try{input=await jsonInput(request);}catch{return json({error:'Invalid profile details.'},400);}
@@ -477,6 +530,17 @@ export default {async fetch(request,env){
    const database=db(env);await ensureAccessUserColumns(database);
    await database.prepare('UPDATE access_users SET name = ?, updated_at = ? WHERE email = ?').bind(name,new Date().toISOString(),session.email).run();
    return json({email:session.email,name});
+  }
+  if(url.pathname==='/api/app-profile'&&request.method==='DELETE'){
+   if(!sameOrigin(request,url))return json({error:'Use CareerNaviq to delete your profile.'},403);
+   let input;try{input=await jsonInput(request);}catch{return json({error:'Invalid profile deletion.'},400);}
+   const email=String(input?.email||'').trim().toLowerCase();
+   if(email!==session.email)return json({error:'Enter your own account email to delete profile details.'},400);
+   const database=db(env);await ensureAccessUserColumns(database);await database.batch([
+    database.prepare('DELETE FROM user_profiles WHERE email = ?').bind(session.email),
+    database.prepare("UPDATE access_users SET name = '', updated_at = ? WHERE email = ?").bind(new Date().toISOString(),session.email)
+   ]);
+   return json({deleted:true,email:session.email,name:''});
   }
   if(url.pathname==='/api/profile'&&request.method==='GET'){
    const database=db(env);await ensureProfileColumns(database);await ensureAccessUserColumns(database);const profile=await database.prepare('SELECT * FROM user_profiles WHERE email = ?').bind(session.email).first();const accessUser=await database.prepare('SELECT name FROM access_users WHERE email = ?').bind(session.email).first();

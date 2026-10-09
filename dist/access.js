@@ -7,6 +7,7 @@ let tabAccessItems=[];
 let accessSettings={autoApprove:false};
 let adminAccessRequests=[];
 let analyticsData=null;
+let questionThreads=[];
 let deletingUserEmail='';
 window.directoryRole='guest';
 const managesAccess=()=>['admin','coadmin'].includes(accessSession.role)&&accessSession.status==='approved';
@@ -133,7 +134,7 @@ function renderAdminAccessRequests(){
    try{await accessJson('/api/admin-access-requests',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:request.email,action})});adminAccessRequests=adminAccessRequests.filter(item=>item.email!==request.email);renderAdminAccessRequests();if(action==='approve')loadCoadmins();}
    catch(error){accessError('admin-request-error',error.message);for(const control of actions.querySelectorAll('button'))control.disabled=false;}
   });actions.append(button);}
-  row.append(identity,actions);list.append(row);
+  row.append(email,actions);list.append(row);
  }
 }
 async function loadAdminAccessRequests(){
@@ -178,7 +179,7 @@ function renderCoadmins(){
   button.addEventListener('click',async()=>{button.disabled=true;accessError('coadmin-error','');
    try{await accessJson('/api/coadmins',{method:'DELETE',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:user.email})});coadmins=coadmins.filter(u=>u.email!==user.email);renderCoadmins();}
    catch(error){accessError('coadmin-error',error.message);button.disabled=false;}
-  });actions.append(button);row.append(identity,actions);list.append(row);
+  });actions.append(button);row.append(email,actions);list.append(row);
  }
 }
 async function loadCoadmins(){
@@ -226,6 +227,25 @@ function renderSectionChanges(){
  }
 }
 async function loadSectionChanges(){try{const data=await accessJson('/api/review/section-changes');sectionChanges=data.items;accessError('section-change-error','');renderSectionChanges();}catch(error){accessError('section-change-error',error.message);}}
+function renderQuestionThreads(){
+ accessEl('questions-count').textContent=questionThreads.reduce((sum,thread)=>sum+Number(thread.unread||0),0)||questionThreads.length;
+ const list=accessEl('questions-list');list.replaceChildren();
+ if(!questionThreads.length){const empty=document.createElement('p');empty.className='management-empty';empty.textContent='No user questions yet.';list.append(empty);return;}
+ for(const thread of questionThreads){
+  const card=document.createElement('article');card.className='ask-admin-thread';
+  const header=document.createElement('div');header.className='ask-admin-header';
+  const identity=document.createElement('div');const name=document.createElement('strong');name.textContent=thread.name||thread.email;const email=document.createElement('small');email.textContent=thread.email;identity.append(name,email);
+  const count=document.createElement('span');count.className='management-count';count.textContent=thread.unread?`${thread.unread} new`:'Open';header.append(identity,count);card.append(header);
+  const messages=document.createElement('div');messages.className='ask-admin-messages';
+  for(const message of thread.messages){const row=document.createElement('div');row.className=`ask-admin-message ${message.sender==='admin'?'is-admin':'is-user'}`;const label=document.createElement('strong');label.textContent=message.sender==='admin'?'Admin reply':'User';const body=document.createElement('p');body.textContent=message.body;const time=document.createElement('small');time.textContent=new Date(message.createdAt).toLocaleString();row.append(label,body,time);messages.append(row);}
+  card.append(messages);
+  const form=document.createElement('form');form.className='ask-admin-reply';const input=document.createElement('textarea');input.rows=2;input.maxLength=1200;input.placeholder='Reply to user';const button=document.createElement('button');button.type='submit';button.className='primary';button.textContent='Reply';form.append(input,button);
+  form.addEventListener('submit',async event=>{event.preventDefault();const body=input.value.trim();if(!body){input.focus();return;}button.disabled=true;accessError('questions-error','');try{await accessJson('/api/admin/questions/reply',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:thread.email,body})});input.value='';await loadQuestionThreads();window.showAppNotice?.('Reply sent.');}catch(error){accessError('questions-error',error.message);button.disabled=false;}});
+  card.append(form);list.append(card);
+ }
+}
+async function loadQuestionThreads(){try{const data=await accessJson('/api/admin/questions');questionThreads=data.items;accessError('questions-error','');renderQuestionThreads();}catch(error){accessError('questions-error',error.message);}}
+
 function renderTabAccess(){
  const list=accessEl('tab-access-list');list.replaceChildren();
  accessEl('tab-access-count').textContent=`${tabAccessItems.filter(item=>item.allowed).length} open`;
@@ -247,7 +267,7 @@ async function loadTabAccess(){
  try{const data=await accessJson('/api/tab-access');tabAccessItems=data.items;accessError('tab-access-error','');renderTabAccess();}
  catch(error){accessError('tab-access-error',error.message);}
 }
-function loadAdminData(){loadAnalytics();loadAccessUsers();loadAccessSettings();loadAdminAccessRequests();loadChangeRequests();loadSectionSubmissions();loadSectionChanges();loadCoadmins();loadTabAccess();}
+function loadAdminData(){loadAnalytics();loadAccessUsers();loadAccessSettings();loadAdminAccessRequests();loadChangeRequests();loadSectionSubmissions();loadSectionChanges();loadCoadmins();loadTabAccess();loadQuestionThreads();}
 accessEl('auto-approve-toggle').addEventListener('click',async()=>{
  const button=accessEl('auto-approve-toggle');button.disabled=true;accessError('access-settings-error','');
  try{accessSettings=await accessJson('/api/access/settings',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({autoApprove:!accessSettings.autoApprove})});renderAccessSettings();window.showAppNotice?.(`Auto approve new users is now ${accessSettings.autoApprove?'on':'off'}.`);}
