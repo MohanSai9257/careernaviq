@@ -32,11 +32,31 @@ async function ensureSectionFavorites(database){await database.prepare("CREATE T
 async function ensureAppSettings(database){await database.prepare("CREATE TABLE IF NOT EXISTS app_settings (key text PRIMARY KEY, value text NOT NULL, updated_at text NOT NULL, updated_by text NOT NULL DEFAULT '')").run();}
 async function ensureAdminAccessRequests(database){await database.prepare("CREATE TABLE IF NOT EXISTS admin_access_requests (email text PRIMARY KEY, status text NOT NULL, requested_at text NOT NULL, reviewed_at text, reviewed_by text)").run();}
 async function ensureAskMessages(database){await database.batch([
+ database.prepare("CREATE TABLE IF NOT EXISTS ask_attachments (id text PRIMARY KEY,message_id text NOT NULL,user_email text NOT NULL,file_key text NOT NULL,file_name text NOT NULL,file_size integer NOT NULL)"),
+ database.prepare("CREATE INDEX IF NOT EXISTS ask_attachments_message ON ask_attachments(message_id)"),
  database.prepare("CREATE TABLE IF NOT EXISTS ask_threads (user_email text PRIMARY KEY NOT NULL,updated_at text NOT NULL)"),
  database.prepare("CREATE TABLE IF NOT EXISTS ask_messages (id text PRIMARY KEY NOT NULL, user_email text NOT NULL, user_name text DEFAULT '' NOT NULL, body text NOT NULL, sender text NOT NULL, admin_email text DEFAULT '' NOT NULL, created_at text NOT NULL, read_by_admin_at text, read_by_user_at text)"),
  database.prepare("CREATE INDEX IF NOT EXISTS ask_messages_user_created ON ask_messages (user_email,created_at)"),
  database.prepare("CREATE INDEX IF NOT EXISTS ask_messages_created ON ask_messages (created_at)")
 ]);}
+
+async function chatInput(request){
+ if(!(request.headers.get('content-type')||'').includes('multipart/form-data'))return {...await jsonInput(request),files:[]};
+ if(Number(request.headers.get('content-length')||0)>27*1024*1024)throw Error('Attachments are too large.');
+ const form=await request.formData();const files=form.getAll('files').filter(f=>typeof f!=='string'&&f.size);
+ if(files.length>5||files.some(f=>f.size>10*1024*1024)||files.reduce((n,f)=>n+f.size,0)>25*1024*1024)throw Error('Choose up to 5 files, 10 MB each and 25 MB total.');
+ return {body:form.get('body'),email:form.get('email'),files};
+}
+async function saveChatFiles(database,env,input,messageId,email){
+ const saved=[];
+ try{for(const file of input.files||[]){const id=crypto.randomUUID(),key='chat/'+id,name=file.name.replace(/[\\/\x00-\x1f]/g,'_').slice(0,180)||'attachment';
+ await bucket(env).put(key,await file.arrayBuffer(),{httpMetadata:{contentType:'application/octet-stream'}});
+ saved.push({id,key,name,size:file.size});}
+ if(saved.length)await database.batch(saved.map(f=>database.prepare('INSERT INTO ask_attachments VALUES(?,?,?,?,?,?)').bind(f.id,messageId,email,f.key,f.name,f.size)));
+ }catch(error){await Promise.all(saved.map(f=>bucket(env).delete(f.key)));await database.prepare('DELETE FROM ask_attachments WHERE message_id=?').bind(messageId).run();throw error;}
+}
+async function chatAttachments(database){const data=await database.prepare('SELECT id,message_id,file_name,file_size FROM ask_attachments').all();const map=new Map();for(const f of data.results||[]){if(!map.has(f.message_id))map.set(f.message_id,[]);map.get(f.message_id).push({id:f.id,name:f.file_name,size:f.file_size,url:'/api/ask/attachments/'+f.id});}return map;}
+async function removeChatFiles(database,env,email){const data=await database.prepare('SELECT file_key FROM ask_attachments WHERE user_email=?').bind(email).all();await Promise.all((data.results||[]).map(f=>bucket(env).delete(f.file_key)));await database.prepare('DELETE FROM ask_attachments WHERE user_email=?').bind(email).run();}
 
 async function ensureAccessUserColumns(database){
  const existing=new Set(((await database.prepare('PRAGMA table_info(access_users)').all()).results||[]).map(row=>row.name));
@@ -476,21 +496,28 @@ export default {async fetch(request,env){
   }
   if(['/companies.json','/api/changes','/api/companies','/api/company'].includes(url.pathname)&&!canManage(session)&&!await tabAllowed(env,'employer-directory'))return json({error:restrictedMessage},403);
 
+  if(url.pathname.startsWith('/api/ask/attachments/')&&request.method==='GET'){
+   const database=db(env);await ensureAskMessages(database);const file=await database.prepare('SELECT * FROM ask_attachments WHERE id=?').bind(url.pathname.split('/').pop()).first();
+   if(!file||(file.user_email!==session.email&&!canManage(session)))return json({error:'Attachment unavailable.'},404);
+   const object=await bucket(env).get(file.file_key);if(!object)return json({error:'Attachment unavailable.'},404);
+   return new Response(object.body,{headers:{'Content-Type':'application/octet-stream','Content-Disposition':"attachment; filename*=UTF-8''"+encodeURIComponent(file.file_name),'Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'}});
+  }
   if(url.pathname==='/api/ask/messages'&&request.method==='GET'){
    const database=db(env);await ensureAskMessages(database);
    const {results}=await database.prepare("SELECT id,body,sender,created_at FROM ask_messages WHERE user_email = ? ORDER BY created_at ASC LIMIT 300").bind(session.email).all();
    await database.prepare("UPDATE ask_messages SET read_by_user_at = COALESCE(read_by_user_at, ?) WHERE user_email = ? AND sender = 'admin'").bind(new Date().toISOString(),session.email).run();
-   return json({items:results.map(row=>({id:row.id,body:row.body,sender:row.sender==='admin'?'support':'user',createdAt:row.created_at}))});
+   const attachments=await chatAttachments(database);return json({items:results.map(row=>({id:row.id,attachments:attachments.get(row.id)||[],body:row.body,sender:row.sender==='admin'?'support':'user',createdAt:row.created_at}))});
   }
   if(url.pathname==='/api/ask/messages'&&request.method==='POST'){
    if(!sameOrigin(request,url))return json({error:'Use CareerNaviq to send questions.'},403);
-   let input;try{input=await jsonInput(request);}catch{return json({error:'Invalid message.'},400);}
+   let input;try{input=await chatInput(request);}catch(error){return json({error:error.message||'Invalid message.'},400);}
    const body=String(input?.body||'').trim();
-   if(!body||body.length>1200)return json({error:'Enter a message under 1200 characters.'},400);
+   if((!body&&!input.files?.length)||body.length>1200)return json({error:'Enter a message under 1200 characters.'},400);
    const database=db(env);await ensureAskMessages(database);await ensureAccessUserColumns(database);
    const user=await database.prepare('SELECT name FROM access_users WHERE email = ?').bind(session.email).first();
    const now=new Date().toISOString();
    const item={id:crypto.randomUUID(),body,sender:'user',createdAt:now};
+   await saveChatFiles(database,env,input,item.id,session.email);
    await database.prepare("INSERT INTO ask_messages (id,user_email,user_name,body,sender,created_at) VALUES (?,?,?,?,?,?)").bind(item.id,session.email,user?.name||session.name||'',body,'user',now).run();
    return json({item:{id:item.id,body:item.body,sender:'user',createdAt:item.createdAt}},201);
   }
@@ -498,10 +525,10 @@ export default {async fetch(request,env){
    if(!canManage(session))return json({error:'Admin access required.'},403);
    const database=db(env);await ensureAskMessages(database);await ensureAccessUserColumns(database);
    const {results}=await database.prepare("SELECT m.id,m.user_email,m.user_name,COALESCE(NULLIF(trim(u.name),''),NULLIF(latest.saved_name,''),m.user_email) AS profile_name,m.body,m.sender,m.created_at,m.read_by_admin_at,m.read_by_user_at FROM ask_messages m JOIN (SELECT user_email,max(created_at) AS last_at,max(NULLIF(trim(user_name),'')) AS saved_name FROM ask_messages GROUP BY user_email) latest ON latest.user_email = m.user_email LEFT JOIN access_users u ON u.email = m.user_email ORDER BY latest.last_at DESC,m.created_at ASC LIMIT 1000").all();
-   const threads=[];const byEmail=new Map();
+   const attachments=await chatAttachments(database);const threads=[];const byEmail=new Map();
    for(const row of results){
     let thread=byEmail.get(row.user_email);if(!thread){thread={email:row.user_email,name:row.profile_name||row.user_email,messages:[],unread:0,lastAt:row.created_at};byEmail.set(row.user_email,thread);threads.push(thread);}
-    thread.messages.push({id:row.id,body:row.body,sender:row.sender,createdAt:row.created_at,readByUserAt:row.read_by_user_at||''});
+    thread.messages.push({id:row.id,attachments:attachments.get(row.id)||[],body:row.body,sender:row.sender,createdAt:row.created_at,readByUserAt:row.read_by_user_at||''});
     thread.lastAt=row.created_at;if(row.sender==='user'&&!row.read_by_admin_at)thread.unread++;
    }
    const cleared=await database.prepare("SELECT t.user_email,t.updated_at,u.name FROM ask_threads t LEFT JOIN access_users u ON u.email=t.user_email ORDER BY t.updated_at DESC").all();
@@ -516,6 +543,7 @@ export default {async fetch(request,env){
    const email=String(input?.email||'').trim().toLowerCase(),action=input?.action;
    if(!emailPattern.test(email)||!['clear','delete'].includes(action))return json({error:'Invalid chat action.'},400);
    const database=db(env);await ensureAskMessages(database);
+   await removeChatFiles(database,env,email);
    const statements=[database.prepare('DELETE FROM ask_messages WHERE user_email=?').bind(email)];
    if(action==='clear')statements.push(database.prepare('INSERT INTO ask_threads(user_email,updated_at) VALUES(?,?) ON CONFLICT(user_email) DO UPDATE SET updated_at=excluded.updated_at').bind(email,new Date().toISOString()));
    else statements.push(database.prepare('DELETE FROM ask_threads WHERE user_email=?').bind(email));
@@ -524,18 +552,19 @@ export default {async fetch(request,env){
   if(url.pathname==='/api/admin/questions/reply'&&request.method==='POST'){
    if(!canManage(session))return json({error:'Admin access required.'},403);
    if(!sameOrigin(request,url))return json({error:'Use Admin to reply.'},403);
-   let input;try{input=await jsonInput(request);}catch{return json({error:'Invalid reply.'},400);}
+   let input;try{input=await chatInput(request);}catch(error){return json({error:error.message||'Invalid reply.'},400);}
    const userEmail=String(input?.email||'').trim().toLowerCase(),body=String(input?.body||'').trim();
-   if(!emailPattern.test(userEmail)||!body||body.length>1200)return json({error:'Enter a valid user and reply.'},400);
+   if(!emailPattern.test(userEmail)||(!body&&!input.files?.length)||body.length>1200)return json({error:'Enter a valid user and reply.'},400);
    const database=db(env);await ensureAskMessages(database);
    const existing=await database.prepare('SELECT user_email FROM ask_messages WHERE user_email = ? LIMIT 1').bind(userEmail).first();
    const recipient=await database.prepare('SELECT name,status FROM access_users WHERE email = ?').bind(userEmail).first();
    const thread=await database.prepare('SELECT user_email FROM ask_threads WHERE user_email = ?').bind(userEmail).first();
    if(!existing&&!thread&&recipient?.status!=='approved')return json({error:'Select an existing approved user.'},404);
-   const now=new Date().toISOString();
+   const now=new Date().toISOString(),messageId=crypto.randomUUID();
+   await saveChatFiles(database,env,input,messageId,userEmail);
    await database.batch([
     database.prepare("UPDATE ask_messages SET read_by_admin_at = COALESCE(read_by_admin_at, ?) WHERE user_email = ? AND sender = 'user'").bind(now,userEmail),
-    database.prepare("INSERT INTO ask_messages (id,user_email,user_name,body,sender,admin_email,created_at) VALUES (?,?,?,?,?,?,?)").bind(crypto.randomUUID(),userEmail,recipient?.name||'',body,'admin',session.email,now)
+    database.prepare("INSERT INTO ask_messages (id,user_email,user_name,body,sender,admin_email,created_at) VALUES (?,?,?,?,?,?,?)").bind(messageId,userEmail,recipient?.name||'',body,'admin',session.email,now)
    ]);
    return json({sent:true});
   }
@@ -566,7 +595,7 @@ export default {async fetch(request,env){
    const email=String(input?.email||'').trim().toLowerCase();
    if(email!==session.email)return json({error:'Enter your own account email to delete access.'},400);
    if(email===adminEmail)return json({error:'The Admin account cannot be deleted here.'},400);
-   const database=db(env);await ensureAskMessages(database);await ensureAutoApply(database);await database.batch([
+   const database=db(env);await ensureAskMessages(database);await ensureAutoApply(database);await removeChatFiles(database,env,email);await database.batch([
     database.prepare('DELETE FROM access_sessions WHERE email = ?').bind(email),
     database.prepare('DELETE FROM user_profiles WHERE email = ?').bind(email),
     database.prepare('DELETE FROM auto_resumes WHERE user_email = ?').bind(email),
