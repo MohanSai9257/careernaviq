@@ -255,7 +255,7 @@ function renderQuestionThreads(){
  for(const thread of visible){
   const button=document.createElement('button');button.type='button';button.className='admin-conversation'+(selectedMessageEmail===thread.email?' is-selected':'');button.setAttribute('aria-label',`Open conversation with ${thread.name||thread.email}`);
   const avatar=document.createElement('span');avatar.className='admin-message-avatar';avatar.textContent=(thread.name||thread.email).trim().charAt(0).toUpperCase();
-  const content=document.createElement('span');content.className='admin-conversation-copy';const name=document.createElement('strong');name.textContent=thread.name||thread.email;const preview=document.createElement('small');preview.textContent=thread.messages.at(-1)?.body||'';content.append(name,preview);
+  const content=document.createElement('span');content.className='admin-conversation-copy';const name=document.createElement('strong');name.textContent=thread.name||thread.email;const email=document.createElement('small');email.textContent=thread.email;const preview=document.createElement('small');preview.textContent=thread.messages.at(-1)?.body||'';content.append(name,email,preview);
   const meta=document.createElement('span');meta.className='admin-conversation-meta';const date=document.createElement('small');date.textContent=thread.lastAt?messageDateLabel(thread.lastAt):'';meta.append(date);if(thread.unread){const count=document.createElement('b');count.textContent=thread.unread;meta.append(count);}
   button.append(avatar,content,meta);button.addEventListener('click',()=>selectMessageThread(thread.email));list.append(button);
  }

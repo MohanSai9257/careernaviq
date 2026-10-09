@@ -495,11 +495,11 @@ export default {async fetch(request,env){
   }
   if(url.pathname==='/api/admin/questions'&&request.method==='GET'){
    if(!canManage(session))return json({error:'Admin access required.'},403);
-   const database=db(env);await ensureAskMessages(database);
-   const {results}=await database.prepare("SELECT m.id,m.user_email,m.user_name,m.body,m.sender,m.created_at,m.read_by_admin_at,m.read_by_user_at FROM ask_messages m JOIN (SELECT user_email,max(created_at) AS last_at FROM ask_messages GROUP BY user_email) latest ON latest.user_email = m.user_email ORDER BY latest.last_at DESC,m.created_at ASC LIMIT 1000").all();
+   const database=db(env);await ensureAskMessages(database);await ensureAccessUserColumns(database);
+   const {results}=await database.prepare("SELECT m.id,m.user_email,m.user_name,COALESCE(NULLIF(trim(u.name),''),NULLIF(latest.saved_name,''),m.user_email) AS profile_name,m.body,m.sender,m.created_at,m.read_by_admin_at,m.read_by_user_at FROM ask_messages m JOIN (SELECT user_email,max(created_at) AS last_at,max(NULLIF(trim(user_name),'')) AS saved_name FROM ask_messages GROUP BY user_email) latest ON latest.user_email = m.user_email LEFT JOIN access_users u ON u.email = m.user_email ORDER BY latest.last_at DESC,m.created_at ASC LIMIT 1000").all();
    const threads=[];const byEmail=new Map();
    for(const row of results){
-    let thread=byEmail.get(row.user_email);if(!thread){thread={email:row.user_email,name:row.user_name||row.user_email,messages:[],unread:0,lastAt:row.created_at};byEmail.set(row.user_email,thread);threads.push(thread);}
+    let thread=byEmail.get(row.user_email);if(!thread){thread={email:row.user_email,name:row.profile_name||row.user_email,messages:[],unread:0,lastAt:row.created_at};byEmail.set(row.user_email,thread);threads.push(thread);}
     thread.messages.push({id:row.id,body:row.body,sender:row.sender,createdAt:row.created_at,readByUserAt:row.read_by_user_at||''});
     thread.lastAt=row.created_at;if(row.sender==='user'&&!row.read_by_admin_at)thread.unread++;
    }
