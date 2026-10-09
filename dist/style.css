@@ -251,3 +251,6 @@ body:has(#career-panel-ask:not([hidden])) .career-page{padding-bottom:16px}#care
 @media(max-width:700px){.has-access .masthead .brand{gap:8px;min-height:72px;padding-top:10px;padding-bottom:10px}.has-access .app-header-title{padding:12px}.has-access .app-header-title h1{font-size:1.05rem!important}.has-access .app-header-wordmark{display:none}.has-access #profile-greeting{font-size:.85rem;padding:9px 10px!important}.has-access .app-header-title .jobs-refresh-hint{display:block;margin:5px 0 0}}
 
 .has-access #employer-content > .intro{display:none!important}
+/* Keep the greeting at the right edge of the shared top bar. */
+.has-access .masthead .app-header-title{order:1}
+.has-access .masthead #profile-greeting{order:2;margin-left:auto!important}
