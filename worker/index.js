@@ -20,9 +20,9 @@ async function sessionFor(request,env){
  const token=requestToken(request);if(!token)return null;
  const session=await db(env).prepare('SELECT email,role FROM access_sessions WHERE token = ?').bind(token).first();
  if(!session)return null;
- if(session.role==='admin'&&session.email===adminEmail)return {...session,status:'approved'};
  const database=db(env);await ensureAccessUserColumns(database);
  const user=await database.prepare('SELECT status,name FROM access_users WHERE email = ?').bind(session.email).first();
+ if(session.role==='admin'&&session.email===adminEmail)return {...session,status:'approved',name:user?.name||''};
  const status=user?.status||'pending';
  const coadmin=status==='approved'?await db(env).prepare('SELECT email FROM coadmins WHERE email = ?').bind(session.email).first():null;
  return {...session,role:coadmin?'coadmin':'user',status,name:user?.name||''};
