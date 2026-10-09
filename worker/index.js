@@ -554,7 +554,8 @@ export default {async fetch(request,env){
    const name=String(input?.name||'').trim().replace(/\s+/g,' ');
    if(!name||name.length>120)return json({error:'Enter your name.'},400);
    const database=db(env);await ensureAccessUserColumns(database);
-   await database.prepare('UPDATE access_users SET name = ?, updated_at = ? WHERE email = ?').bind(name,new Date().toISOString(),session.email).run();
+   const now=new Date().toISOString();
+   await database.prepare("INSERT INTO access_users(email,name,status,requested_at,updated_at) VALUES(?,?,?,?,?) ON CONFLICT(email) DO UPDATE SET name=excluded.name,updated_at=excluded.updated_at").bind(session.email,name,session.status,now,now).run();
    return json({email:session.email,name});
   }
   if(url.pathname==='/api/app-profile'&&request.method==='DELETE'){
