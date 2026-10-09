@@ -2,7 +2,7 @@ const profileElement=id=>document.getElementById(id);
 const onProfilePage=Boolean(profileElement('profile-page'));
 let profileRequest=0,profileResumes=[],profileAccounts=[];
 async function profileApi(url,options){const response=await fetch(url,{cache:'no-store',...options});const body=await response.json();if(!response.ok){const error=Error(body.error||'Could not load your profile.');error.status=response.status;throw error;}return body;}
-function showGreeting(firstName){const greeting=profileElement('profile-greeting');if(!greeting)return;greeting.textContent=firstName?`Hello, ${firstName}`:'';greeting.hidden=!firstName;}
+async function showGreeting(){const greeting=profileElement('profile-greeting');if(!greeting)return;try{const session=await profileApi('/api/session');const name=String(session.name||'').trim().split(/\s+/)[0];greeting.textContent=name?`Hello, ${name}`:'';greeting.hidden=!name||session.status!=='approved';}catch{greeting.textContent='';greeting.hidden=true;}}
 function setValue(id,value){const el=profileElement(id);if(el)el.value=value||'';}
 function value(id){return profileElement(id)?.value||'';}
 
