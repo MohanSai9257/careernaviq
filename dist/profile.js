@@ -1,34 +1,32 @@
 const profileElement=id=>document.getElementById(id);
 const onProfilePage=Boolean(profileElement('profile-page'));
-let profileRequest=0;
+let profileRequest=0,profileResumes=[],profileAccounts=[];
 async function profileApi(url,options){const response=await fetch(url,{cache:'no-store',...options});const body=await response.json();if(!response.ok){const error=Error(body.error||'Could not load your profile.');error.status=response.status;throw error;}return body;}
 function showGreeting(firstName){const greeting=profileElement('profile-greeting');if(!greeting)return;greeting.textContent=firstName?`Hello, ${firstName}`:'';greeting.hidden=!firstName;}
+function setValue(id,value){const el=profileElement(id);if(el)el.value=value||'';}
+function profilePayload(){return {firstName:profileElement('profile-first').value,lastName:profileElement('profile-last').value,mobile:profileElement('profile-mobile').value,visaStatus:profileElement('profile-status').value,location:profileElement('profile-location').value,education:profileElement('profile-education').value,experience:profileElement('profile-experience').value,skills:profileElement('profile-skills').value,certifications:profileElement('profile-certifications').value,workAuthorization:profileElement('profile-work-authorization').value,sponsorshipNeeds:profileElement('profile-sponsorship').value,salaryExpectations:profileElement('profile-salary').value,jobPreferences:profileElement('profile-job-preferences').value,relocationPreferences:profileElement('profile-relocation').value,approvedScreeningAnswers:profileElement('profile-screening').value};}
+function renderProfileResumes(){const list=profileElement('profile-resume-list');if(!list)return;list.innerHTML=profileResumes.map(r=>`<article class="auto-row"><strong>${r.name}</strong><span>${r.file_name}${r.is_default?' · Default':''}</span><small>${new Date(r.created_at).toLocaleString()}</small><div><button data-resume-default="${r.id}">Set default</button><button data-resume-delete="${r.id}" class="danger">Delete</button></div></article>`).join('')||'<p class="management-empty">No resumes uploaded yet.</p>';}
+async function loadProfileExtras(){try{const data=await profileApi('/api/auto-apply/bootstrap');profileResumes=data.resumes||[];profileAccounts=data.accounts||[];renderProfileResumes();for(const provider of ['gmail','linkedin','indeed','dice']){const account=profileAccounts.find(a=>a.provider===provider),meta=account?.metadata?JSON.parse(account.metadata):{};setValue(`account-${provider}`,meta.account||'');}}catch{} }
 async function loadProfile(){
  const current=++profileRequest;
  try{
   const data=await profileApi('/api/profile');if(current!==profileRequest)return;
-  showGreeting(data.profile?.first_name||'');
+  const p=data.profile||{};showGreeting(p.first_name||'');
   if(!onProfilePage)return;
   document.body.classList.add('has-access');
-  profileElement('profile-email').value=data.email;
-  profileElement('profile-first').value=data.profile?.first_name||'';
-  profileElement('profile-last').value=data.profile?.last_name||'';
-  profileElement('profile-mobile').value=data.profile?.mobile||'';
-  profileElement('profile-status').value=data.profile?.visa_status||'';
+  setValue('profile-email',data.email);setValue('profile-first',p.first_name);setValue('profile-last',p.last_name);setValue('profile-mobile',p.mobile);setValue('profile-status',p.visa_status);
+  setValue('profile-location',p.location);setValue('profile-education',p.education);setValue('profile-experience',p.experience);setValue('profile-skills',p.skills);setValue('profile-certifications',p.certifications);setValue('profile-work-authorization',p.work_authorization);setValue('profile-sponsorship',p.sponsorship_needs);setValue('profile-salary',p.salary_expectations);setValue('profile-job-preferences',p.job_preferences);setValue('profile-relocation',p.relocation_preferences);setValue('profile-screening',p.approved_screening_answers);
   profileElement('profile-page').hidden=false;
-  const session=await profileApi('/api/session');
-  profileElement('profile-role').textContent=session.role==='admin'?'Admin':session.role==='coadmin'?'Coadmin':'User';
+  const session=await profileApi('/api/session');profileElement('profile-role').textContent=session.role==='admin'?'Admin':session.role==='coadmin'?'Coadmin':'User';
+  loadProfileExtras();
  }catch(error){if(onProfilePage&&current===profileRequest){if(error.status===403)location.replace('/');else{document.body.classList.add('has-access');profileElement('profile-page').hidden=false;profileElement('profile-message').textContent=error.message;}}else showGreeting('');}
 }
-window.refreshHeaderProfile=loadProfile;
-document.addEventListener('directory-access-ready',loadProfile);
-if(!onProfilePage||document.readyState!=='loading')loadProfile();else document.addEventListener('DOMContentLoaded',loadProfile,{once:true});
+window.refreshHeaderProfile=loadProfile;document.addEventListener('directory-access-ready',loadProfile);if(!onProfilePage||document.readyState!=='loading')loadProfile();else document.addEventListener('DOMContentLoaded',loadProfile,{once:true});
 if(onProfilePage){
- profileElement('profile-form').addEventListener('submit',async event=>{
-  event.preventDefault();const button=event.currentTarget.querySelector('[type="submit"]'),message=profileElement('profile-message');button.disabled=true;message.textContent='Saving…';
-  const input={firstName:profileElement('profile-first').value,lastName:profileElement('profile-last').value,mobile:profileElement('profile-mobile').value,visaStatus:profileElement('profile-status').value};
-  try{const data=await profileApi('/api/profile',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(input)});showGreeting(data.profile.first_name);message.textContent='Profile saved.';window.showAppNotice?.('Profile saved.');}
-  catch(error){message.textContent=error.message;}finally{button.disabled=false;}
- });
+ profileElement('profile-form').addEventListener('submit',async event=>{event.preventDefault();const button=event.currentTarget.querySelector('[type="submit"]'),message=profileElement('profile-message');button.disabled=true;message.textContent='Saving…';try{const data=await profileApi('/api/profile',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(profilePayload())});showGreeting(data.profile.first_name);message.textContent='Profile saved.';window.showAppNotice?.('Profile saved.');}catch(error){message.textContent=error.message;}finally{button.disabled=false;}});
+ profileElement('profile-resume-form').addEventListener('submit',async event=>{event.preventDefault();const button=event.currentTarget.querySelector('[type="submit"]'),message=profileElement('profile-message'),file=profileElement('profile-resume-file').files[0];button.disabled=true;message.textContent='Uploading resume…';const form=new FormData();form.append('name',profileElement('profile-resume-name').value);form.append('isDefault',profileElement('profile-resume-default').checked?'true':'false');form.append('file',file);try{await profileApi('/api/auto-apply/resumes',{method:'POST',body:form});event.currentTarget.reset();await loadProfileExtras();message.textContent='Resume uploaded.';}catch(error){message.textContent=error.message;}finally{button.disabled=false;}});
+ profileElement('profile-resume-list').addEventListener('click',async event=>{const id=event.target.dataset.resumeDefault||event.target.dataset.resumeDelete;if(!id)return;try{await profileApi(`/api/auto-apply/resumes/${encodeURIComponent(id)}`,{method:event.target.dataset.resumeDelete?'DELETE':'PUT',headers:{'Content-Type':'application/json'},body:event.target.dataset.resumeDelete?undefined:JSON.stringify({isDefault:true})});await loadProfileExtras();}catch(error){profileElement('profile-message').textContent=error.message;}});
+ profileElement('profile-app-accounts').addEventListener('click',()=>profileElement('profile-accounts-dialog').showModal());profileElement('profile-accounts-cancel').addEventListener('click',()=>profileElement('profile-accounts-dialog').close());
+ profileElement('profile-accounts-form').addEventListener('submit',async event=>{event.preventDefault();const message=profileElement('profile-accounts-message');message.hidden=true;try{for(const provider of ['gmail','linkedin','indeed','dice']){const account=profileElement(`account-${provider}`).value.trim();if(account)await profileApi('/api/auto-apply/accounts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({provider,action:'connect',account})});}profileElement('profile-accounts-dialog').close();await loadProfileExtras();window.showAppNotice?.('Job account access saved.');}catch(error){message.textContent=error.message;message.hidden=false;}});
  profileElement('profile-logout').addEventListener('click',async()=>{try{await profileApi('/api/logout',{method:'POST'});location.replace('/');}catch(error){profileElement('profile-message').textContent=error.message;}});
 }

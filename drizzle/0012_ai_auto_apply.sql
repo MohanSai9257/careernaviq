@@ -114,3 +114,5 @@ ALTER TABLE `user_profiles` ADD `salary_expectations` text DEFAULT '' NOT NULL;
 ALTER TABLE `user_profiles` ADD `job_preferences` text DEFAULT '' NOT NULL;
 --> statement-breakpoint
 ALTER TABLE `user_profiles` ADD `relocation_preferences` text DEFAULT '' NOT NULL;
+--> statement-breakpoint
+ALTER TABLE `user_profiles` ADD `approved_screening_answers` text DEFAULT '' NOT NULL;

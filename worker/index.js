@@ -31,6 +31,12 @@ async function ensureSectionFavorites(database){await database.prepare("CREATE T
 async function ensureAppSettings(database){await database.prepare("CREATE TABLE IF NOT EXISTS app_settings (key text PRIMARY KEY, value text NOT NULL, updated_at text NOT NULL, updated_by text NOT NULL DEFAULT '')").run();}
 async function ensureAdminAccessRequests(database){await database.prepare("CREATE TABLE IF NOT EXISTS admin_access_requests (email text PRIMARY KEY, status text NOT NULL, requested_at text NOT NULL, reviewed_at text, reviewed_by text)").run();}
 
+
+async function ensureProfileColumns(database){
+ const existing=new Set(((await database.prepare('PRAGMA table_info(user_profiles)').all()).results||[]).map(row=>row.name));
+ const columns=[['location',"ALTER TABLE user_profiles ADD location text DEFAULT '' NOT NULL"],['education',"ALTER TABLE user_profiles ADD education text DEFAULT '' NOT NULL"],['experience',"ALTER TABLE user_profiles ADD experience text DEFAULT '' NOT NULL"],['skills',"ALTER TABLE user_profiles ADD skills text DEFAULT '' NOT NULL"],['certifications',"ALTER TABLE user_profiles ADD certifications text DEFAULT '' NOT NULL"],['work_authorization',"ALTER TABLE user_profiles ADD work_authorization text DEFAULT '' NOT NULL"],['sponsorship_needs',"ALTER TABLE user_profiles ADD sponsorship_needs text DEFAULT '' NOT NULL"],['salary_expectations',"ALTER TABLE user_profiles ADD salary_expectations text DEFAULT '' NOT NULL"],['job_preferences',"ALTER TABLE user_profiles ADD job_preferences text DEFAULT '' NOT NULL"],['relocation_preferences',"ALTER TABLE user_profiles ADD relocation_preferences text DEFAULT '' NOT NULL"],['approved_screening_answers',"ALTER TABLE user_profiles ADD approved_screening_answers text DEFAULT '' NOT NULL"]];
+ for(const [name,sql] of columns)if(!existing.has(name))await database.prepare(sql).run();
+}
 async function ensureAutoApply(database){
  await database.batch([
   database.prepare("CREATE TABLE IF NOT EXISTS auto_resumes (id text PRIMARY KEY, user_email text NOT NULL, name text NOT NULL, file_key text NOT NULL, file_name text NOT NULL, file_type text NOT NULL, file_size integer NOT NULL, extracted_text text NOT NULL DEFAULT '', extraction_status text NOT NULL DEFAULT 'pending_worker', is_default integer NOT NULL DEFAULT 0, created_at text NOT NULL, updated_at text NOT NULL)"),
@@ -73,7 +79,7 @@ async function currentCompany(database,id,old){
 }
 function sameOrigin(request,url){return !request.headers.get('Origin')||request.headers.get('Origin')===url.origin;}
 function escapeLike(value){return String(value||'').replace(/[\\%_]/g,'\\$&');}
-async function jsonInput(request){if(!request.headers.get('Content-Type')?.includes('application/json'))throw Error('JSON required.');const body=await request.text();if(body.length>10000)throw Error('Request too large.');return JSON.parse(body);}
+async function jsonInput(request){if(!request.headers.get('Content-Type')?.includes('application/json'))throw Error('JSON required.');const body=await request.text();if(body.length>30000)throw Error('Request too large.');return JSON.parse(body);}
 export default {async fetch(request,env){
  const url=new URL(request.url);
  try{
@@ -391,7 +397,9 @@ export default {async fetch(request,env){
    if(!sameOrigin(request,url))return json({error:'Use CareerNaviq to manage accounts.'},403);let input;try{input=await jsonInput(request);}catch{return json({error:'Invalid account request.'},400);}const provider=autoProvider(input?.provider),action=input?.action;if(!provider||!['connect','disconnect'].includes(action))return json({error:'Choose LinkedIn, Indeed, Dice, or Gmail.'},400);
    const database=db(env);await ensureAutoApply(database);const now=new Date().toISOString();
    if(action==='disconnect'){await database.prepare('DELETE FROM auto_connected_accounts WHERE user_email=? AND provider=?').bind(session.email,provider).run();await logAuto(database,session.email,'ACCOUNT_DISCONNECTED',`Disconnected ${provider}`);return json({message:`${provider} disconnected.`});}
-   const authType=provider==='gmail'?'oauth_required':'interactive_browser';await database.prepare('INSERT INTO auto_connected_accounts (id,user_email,provider,status,auth_type,last_verified_at,metadata,created_at,updated_at) VALUES (?,?,?,?,?,?,?, ?, ?) ON CONFLICT(user_email,provider) DO UPDATE SET status=excluded.status,auth_type=excluded.auth_type,updated_at=excluded.updated_at').bind(crypto.randomUUID(),session.email,provider,authType==='oauth_required'?'oauth_not_configured':'ready_for_worker_login',authType,null,'{}',now,now).run();
+   const account=String(input?.account||'').trim().slice(0,254);if(account&&provider==='gmail'&&!emailPattern.test(account))return json({error:'Enter a valid Gmail account email.'},400);
+   const authType=provider==='gmail'?'oauth_required':'interactive_browser',metadata=JSON.stringify({account});
+   await database.prepare('INSERT INTO auto_connected_accounts (id,user_email,provider,status,auth_type,last_verified_at,metadata,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?) ON CONFLICT(user_email,provider) DO UPDATE SET status=excluded.status,auth_type=excluded.auth_type,metadata=excluded.metadata,updated_at=excluded.updated_at').bind(crypto.randomUUID(),session.email,provider,authType==='oauth_required'?'oauth_not_configured':'ready_for_worker_login',authType,null,metadata,now,now).run();
    await logAuto(database,session.email,'ACCOUNT_CONNECT_REQUESTED',`Connection prepared for ${provider}`);return json({message:provider==='gmail'?'Gmail OAuth must be configured before connecting.':'Interactive browser sign-in will open in the external worker when configured.'});
   }
   if(url.pathname==='/api/auto-apply/matches'&&request.method==='POST'){
@@ -452,15 +460,17 @@ export default {async fetch(request,env){
   }
   if(['/companies.json','/api/changes','/api/companies','/api/company'].includes(url.pathname)&&!canManage(session)&&!await tabAllowed(env,'employer-directory'))return json({error:restrictedMessage},403);
   if(url.pathname==='/api/profile'&&request.method==='GET'){
-   const profile=await db(env).prepare('SELECT first_name,last_name,mobile,visa_status FROM user_profiles WHERE email = ?').bind(session.email).first();
+   const database=db(env);await ensureProfileColumns(database);const profile=await database.prepare('SELECT * FROM user_profiles WHERE email = ?').bind(session.email).first();
    return json({email:session.email,profile:profile||null});
   }
   if(url.pathname==='/api/profile'&&request.method==='PUT'){
    if(!sameOrigin(request,url))return json({error:'Use the profile page to save changes.'},403);
    let input;try{input=await jsonInput(request);}catch{return json({error:'Invalid profile details.'},400);}
    const firstName=String(input?.firstName||'').trim(),lastName=String(input?.lastName||'').trim(),mobile=String(input?.mobile||'').trim(),visaStatus=String(input?.visaStatus||'').trim();
-   if(firstName.length>80||lastName.length>80||mobile.length>40||(mobile&&!/^[+()\d.\s-]+$/.test(mobile))||!['','OPT','STEMOPT','CPT','H1B','H4'].includes(visaStatus))return json({error:'Check the details you entered. You can leave any profile field blank.'},400);
-   const result=await db(env).prepare('INSERT INTO user_profiles (email,first_name,last_name,mobile,visa_status,updated_at) VALUES (?,?,?,?,?,?) ON CONFLICT(email) DO UPDATE SET first_name = excluded.first_name,last_name = excluded.last_name,mobile = excluded.mobile,visa_status = excluded.visa_status,updated_at = excluded.updated_at RETURNING first_name,last_name,mobile,visa_status').bind(session.email,firstName,lastName,mobile,visaStatus,new Date().toISOString()).first();
+   const location=String(input?.location||'').trim(),education=String(input?.education||'').trim(),experience=String(input?.experience||'').trim(),skills=String(input?.skills||'').trim(),certifications=String(input?.certifications||'').trim(),workAuthorization=String(input?.workAuthorization||'').trim(),sponsorshipNeeds=String(input?.sponsorshipNeeds||'').trim(),salaryExpectations=String(input?.salaryExpectations||'').trim(),jobPreferences=String(input?.jobPreferences||'').trim(),relocationPreferences=String(input?.relocationPreferences||'').trim(),approvedScreeningAnswers=String(input?.approvedScreeningAnswers||'').trim();
+   if(firstName.length>80||lastName.length>80||mobile.length>40||(mobile&&!/^[+()\d.\s-]+$/.test(mobile))||!['','OPT','STEMOPT','CPT','H1B','H4'].includes(visaStatus)||location.length>160||education.length>2000||experience.length>3000||skills.length>3000||certifications.length>2000||workAuthorization.length>2000||sponsorshipNeeds.length>2000||salaryExpectations.length>1000||jobPreferences.length>2000||relocationPreferences.length>2000||approvedScreeningAnswers.length>5000)return json({error:'Check the details you entered. You can leave any profile field blank.'},400);
+   const now=new Date().toISOString();
+   const database=db(env);await ensureProfileColumns(database);const result=await database.prepare('INSERT INTO user_profiles (email,first_name,last_name,mobile,visa_status,location,education,experience,skills,certifications,work_authorization,sponsorship_needs,salary_expectations,job_preferences,relocation_preferences,approved_screening_answers,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(email) DO UPDATE SET first_name=excluded.first_name,last_name=excluded.last_name,mobile=excluded.mobile,visa_status=excluded.visa_status,location=excluded.location,education=excluded.education,experience=excluded.experience,skills=excluded.skills,certifications=excluded.certifications,work_authorization=excluded.work_authorization,sponsorship_needs=excluded.sponsorship_needs,salary_expectations=excluded.salary_expectations,job_preferences=excluded.job_preferences,relocation_preferences=excluded.relocation_preferences,approved_screening_answers=excluded.approved_screening_answers,updated_at=excluded.updated_at RETURNING *').bind(session.email,firstName,lastName,mobile,visaStatus,location,education,experience,skills,certifications,workAuthorization,sponsorshipNeeds,salaryExpectations,jobPreferences,relocationPreferences,approvedScreeningAnswers,now).first();
    return json({email:session.email,profile:result});
   }
   if(url.pathname==='/api/section-items'&&request.method==='GET'){
