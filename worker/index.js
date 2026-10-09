@@ -32,6 +32,7 @@ async function ensureSectionFavorites(database){await database.prepare("CREATE T
 async function ensureAppSettings(database){await database.prepare("CREATE TABLE IF NOT EXISTS app_settings (key text PRIMARY KEY, value text NOT NULL, updated_at text NOT NULL, updated_by text NOT NULL DEFAULT '')").run();}
 async function ensureAdminAccessRequests(database){await database.prepare("CREATE TABLE IF NOT EXISTS admin_access_requests (email text PRIMARY KEY, status text NOT NULL, requested_at text NOT NULL, reviewed_at text, reviewed_by text)").run();}
 async function ensureAskMessages(database){await database.batch([
+ database.prepare("CREATE TABLE IF NOT EXISTS ask_threads (user_email text PRIMARY KEY NOT NULL,updated_at text NOT NULL)"),
  database.prepare("CREATE TABLE IF NOT EXISTS ask_messages (id text PRIMARY KEY NOT NULL, user_email text NOT NULL, user_name text DEFAULT '' NOT NULL, body text NOT NULL, sender text NOT NULL, admin_email text DEFAULT '' NOT NULL, created_at text NOT NULL, read_by_admin_at text, read_by_user_at text)"),
  database.prepare("CREATE INDEX IF NOT EXISTS ask_messages_user_created ON ask_messages (user_email,created_at)"),
  database.prepare("CREATE INDEX IF NOT EXISTS ask_messages_created ON ask_messages (created_at)")
@@ -503,7 +504,22 @@ export default {async fetch(request,env){
     thread.messages.push({id:row.id,body:row.body,sender:row.sender,createdAt:row.created_at,readByUserAt:row.read_by_user_at||''});
     thread.lastAt=row.created_at;if(row.sender==='user'&&!row.read_by_admin_at)thread.unread++;
    }
+   const cleared=await database.prepare("SELECT t.user_email,t.updated_at,u.name FROM ask_threads t LEFT JOIN access_users u ON u.email=t.user_email ORDER BY t.updated_at DESC").all();
+   for(const row of cleared.results||[])if(!byEmail.has(row.user_email))threads.push({email:row.user_email,name:row.name||row.user_email,messages:[],unread:0,lastAt:row.updated_at});
+   threads.sort((a,b)=>b.lastAt.localeCompare(a.lastAt));
    return json({items:threads});
+  }
+  if(url.pathname==='/api/admin/questions/manage'&&request.method==='POST'){
+   if(!canManage(session))return json({error:'Admin access required.'},403);
+   if(!sameOrigin(request,url))return json({error:'Use Admin to manage chats.'},403);
+   let input;try{input=await jsonInput(request);}catch{return json({error:'Invalid chat action.'},400);}
+   const email=String(input?.email||'').trim().toLowerCase(),action=input?.action;
+   if(!emailPattern.test(email)||!['clear','delete'].includes(action))return json({error:'Invalid chat action.'},400);
+   const database=db(env);await ensureAskMessages(database);
+   const statements=[database.prepare('DELETE FROM ask_messages WHERE user_email=?').bind(email)];
+   if(action==='clear')statements.push(database.prepare('INSERT INTO ask_threads(user_email,updated_at) VALUES(?,?) ON CONFLICT(user_email) DO UPDATE SET updated_at=excluded.updated_at').bind(email,new Date().toISOString()));
+   else statements.push(database.prepare('DELETE FROM ask_threads WHERE user_email=?').bind(email));
+   await database.batch(statements);return json({success:true});
   }
   if(url.pathname==='/api/admin/questions/reply'&&request.method==='POST'){
    if(!canManage(session))return json({error:'Admin access required.'},403);
