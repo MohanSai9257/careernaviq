@@ -69,3 +69,14 @@ const appNoticeText=document.createElement('span');appNoticeText.setAttribute('r
 const appNoticeClose=document.createElement('button');appNoticeClose.type='button';appNoticeClose.textContent='×';appNoticeClose.setAttribute('aria-label','Dismiss notification');appNoticeClose.addEventListener('click',()=>{appNotice.hidden=true;});
 appNotice.append(appNoticeText,appNoticeClose);document.body.append(appNotice);
 window.showAppNotice=message=>{appNotice.hidden=false;appNoticeText.textContent=message;};
+
+// Share one compact page heading in the masthead across application pages.
+const mastheadBrand=document.querySelector('.masthead .brand');
+if(mastheadBrand){
+ const mainTitle=location.pathname.startsWith('/admin')?null:document.querySelector('main > .page-title-block h1,main > .career-hero h1,main > .auto-apply-hero h1,main #employer-content > .intro h1');
+ const titleBar=document.createElement('div');titleBar.className='app-header-title';
+ const title=mainTitle||document.createElement('h1');
+ if(!mainTitle)title.textContent=location.pathname.startsWith('/admin')?'Admin':'CareerNaviq';
+ titleBar.append(title);const wordmark=document.createElement('span');wordmark.className='app-header-wordmark';wordmark.textContent='CAREERNAVIQ';titleBar.append(wordmark);
+ mastheadBrand.append(titleBar);
+}
