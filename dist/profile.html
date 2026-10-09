@@ -11,10 +11,16 @@
 </head>
 <body>
   <header class="masthead">
-    <div class="wrap brand"><img class="brand-logo" src="/logo.svg" alt=""><span>CareerNaviq</span><div id="profile-greeting" class="profile-greeting" hidden></div><div class="role-control"><button id="profile-app-accounts" class="profile-app-icon" type="button" aria-label="Job account access">▣</button><span id="profile-role" class="public-label">User</span><button id="profile-logout" type="button">Logout</button></div></div>
+    <div class="wrap brand"><img class="brand-logo" src="/logo.svg" alt=""><span>CareerNaviq</span><div id="profile-greeting" class="profile-greeting" hidden></div><div class="role-control"><span id="profile-role" class="public-label">User</span><button id="profile-logout" type="button">Logout</button></div></div>
   </header>
   <main id="profile-page" class="wrap" hidden>
-    <h1 class="recruiter-heading">Profile</h1>
+    <div class="profile-heading-row"><h1 class="recruiter-heading">Profile</h1><div class="profile-account-icons" aria-label="Job account connections"><button type="button" class="profile-provider-icon gmail" data-provider="gmail" aria-label="Connect Gmail"><span class="icon-gmail">M</span></button><button type="button" class="profile-provider-icon linkedin" data-provider="linkedin" aria-label="Connect LinkedIn">in</button><button type="button" class="profile-provider-icon indeed" data-provider="indeed" aria-label="Connect Indeed">i</button><button type="button" class="profile-provider-icon dice" data-provider="dice" aria-label="Connect Dice">Dice</button></div></div>
+    <section class="profile-card profile-resume-card">
+      <h2>Resume Manager</h2>
+      <p class="form-hint">Upload resume versions here. AI Auto Apply will use the selected/default resume from your Profile.</p>
+      <form id="profile-resume-form" class="auto-form inline"><label>Resume Name<input id="profile-resume-name" maxlength="120" placeholder="Java full stack resume"></label><label>Resume File<input id="profile-resume-file" type="file" accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" required></label><label class="check-row"><input id="profile-resume-default" type="checkbox"> Default</label><button type="submit" class="primary">Upload resume</button></form>
+      <div id="profile-resume-list" class="auto-list"></div>
+    </section>
     <section class="profile-card">
       <form id="profile-form">
         <p class="form-hint">CareerNaviq uses this profile for AI Auto Apply. Share only verified details. Leave anything blank if you do not want it used.</p>
@@ -57,22 +63,17 @@
         <button type="submit" class="primary">Save profile</button>
       </form>
     </section>
-    <section class="profile-card profile-resume-card">
-      <h2>Resume Manager</h2>
-      <p class="form-hint">Upload resume versions here. AI Auto Apply will use the selected/default resume from your Profile.</p>
-      <form id="profile-resume-form" class="auto-form inline"><label>Resume Name<input id="profile-resume-name" maxlength="120" placeholder="Java full stack resume"></label><label>Resume File<input id="profile-resume-file" type="file" accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" required></label><label class="check-row"><input id="profile-resume-default" type="checkbox"> Default</label><button type="submit" class="primary">Upload resume</button></form>
-      <div id="profile-resume-list" class="auto-list"></div>
-    </section>
   </main>
-  <dialog id="profile-accounts-dialog" aria-labelledby="profile-accounts-title">
+  <dialog id="profile-accounts-dialog" class="connect-dialog" aria-labelledby="profile-accounts-title">
     <form id="profile-accounts-form">
-      <h2 id="profile-accounts-title">Job account access</h2>
-      <p class="form-hint">Save only account email or username. CareerNaviq does not store Gmail, LinkedIn, Indeed, or Dice passwords. Sign-in must use OAuth or an isolated browser session.</p>
-      <label>LinkedIn email / username<input id="account-linkedin" autocomplete="off"></label>
-      <label>Indeed email / username<input id="account-indeed" autocomplete="off"></label>
-      <label>Dice email / username<input id="account-dice" autocomplete="off"></label>
+      <div class="connect-header"><div id="connect-provider-logo" class="connect-logo">M</div><div><h2 id="profile-accounts-title">Connect Gmail</h2><p id="connect-provider-subtitle">Job account</p><strong id="connect-provider-name">Gmail</strong></div></div>
+      <p class="connect-note">Only you can access and manage this connection. Passwords are not stored in CareerNaviq; secure sign-in will use OAuth or an isolated browser session when the automation worker is enabled.</p>
+      <input id="account-provider" type="hidden" value="gmail">
+      <label>Email ID<input id="account-email" type="email" autocomplete="username" placeholder="you@company.com"></label>
+      <label>Password<div class="password-shell"><input id="account-password" type="password" autocomplete="current-password" placeholder="••••••••"><button id="account-password-toggle" type="button" aria-label="Show password">◉</button></div></label>
+      <label>Vendor<select id="account-vendor"><option value="gmail">Gmail</option><option value="linkedin">LinkedIn</option><option value="indeed">Indeed</option><option value="dice">Dice</option></select></label>
       <p id="profile-accounts-message" role="alert" hidden></p>
-      <div class="dialog-actions"><button id="profile-accounts-cancel" type="button">Cancel</button><button type="submit" class="primary">Save accounts</button></div>
+      <div class="dialog-actions"><button id="profile-accounts-cancel" type="button">Cancel</button><button type="submit" class="primary">Connect</button></div>
     </form>
   </dialog>
 </body>
