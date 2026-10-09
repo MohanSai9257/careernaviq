@@ -42,7 +42,8 @@ function run(saved, systemDark) {
 }
 const dark = run(null, true);
 assert.equal(dark.dataset.theme, 'dark');
-dark.button.click();
+dark.select.value = 'light';
+dark.select.change();
 assert.equal(dark.dataset.theme, 'light');
 assert.equal(dark.store.get('careernaviq-theme'), 'light');
 const remembered = run('dark', false);
