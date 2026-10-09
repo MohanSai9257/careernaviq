@@ -15,6 +15,7 @@ export const addedCompanies=sqliteTable('added_companies',{
 });
 export const accessUsers=sqliteTable('access_users',{
  email:text('email').primaryKey(),
+ name:text('name').notNull().default(''),
  status:text('status').notNull().default('pending'),
  requestedAt:text('requested_at').notNull(),
  updatedAt:text('updated_at').notNull(),

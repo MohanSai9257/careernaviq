@@ -21,15 +21,20 @@ async function sessionFor(request,env){
  const session=await db(env).prepare('SELECT email,role FROM access_sessions WHERE token = ?').bind(token).first();
  if(!session)return null;
  if(session.role==='admin'&&session.email===adminEmail)return {...session,status:'approved'};
- const user=await db(env).prepare('SELECT status FROM access_users WHERE email = ?').bind(session.email).first();
+ const database=db(env);await ensureAccessUserColumns(database);
+ const user=await database.prepare('SELECT status,name FROM access_users WHERE email = ?').bind(session.email).first();
  const status=user?.status||'pending';
  const coadmin=status==='approved'?await db(env).prepare('SELECT email FROM coadmins WHERE email = ?').bind(session.email).first():null;
- return {...session,role:coadmin?'coadmin':'user',status};
+ return {...session,role:coadmin?'coadmin':'user',status,name:user?.name||''};
 }
 function canManage(session){return session?.status==='approved'&&['admin','coadmin'].includes(session.role);}
 async function ensureSectionFavorites(database){await database.prepare("CREATE TABLE IF NOT EXISTS section_favorites (user_email text NOT NULL, item_id text NOT NULL, created_at text NOT NULL, PRIMARY KEY (user_email,item_id))").run();}
 async function ensureAppSettings(database){await database.prepare("CREATE TABLE IF NOT EXISTS app_settings (key text PRIMARY KEY, value text NOT NULL, updated_at text NOT NULL, updated_by text NOT NULL DEFAULT '')").run();}
 async function ensureAdminAccessRequests(database){await database.prepare("CREATE TABLE IF NOT EXISTS admin_access_requests (email text PRIMARY KEY, status text NOT NULL, requested_at text NOT NULL, reviewed_at text, reviewed_by text)").run();}
+async function ensureAccessUserColumns(database){
+ const existing=new Set(((await database.prepare('PRAGMA table_info(access_users)').all()).results||[]).map(row=>row.name));
+ if(!existing.has('name'))await database.prepare("ALTER TABLE access_users ADD name text DEFAULT '' NOT NULL").run();
+}
 
 
 async function ensureProfileColumns(database){
@@ -101,35 +106,38 @@ export default {async fetch(request,env){
   }
 
   if(url.pathname==='/api/session'&&request.method==='GET'){
-   const session=await sessionFor(request,env);return json(session?{email:session.email,role:session.role,status:session.status}:{role:'guest',status:'none'});
+   const session=await sessionFor(request,env);return json(session?{email:session.email,role:session.role,status:session.status,name:session.name||''}:{role:'guest',status:'none'});
   }
   if(url.pathname==='/api/access/request'&&request.method==='POST'){
    if(!sameOrigin(request,url))return json({error:'Use the directory to request access.'},403);
    let input;try{input=await jsonInput(request);}catch{return json({error:'Enter a valid Gmail address.'},400);}
    const email=String(input?.email||'').trim().toLowerCase();
+   const name=String(input?.name||'').trim().replace(/\s+/g,' ');
    if(email.length>254||!email.endsWith('@gmail.com')||!emailPattern.test(email)||email===adminEmail)return json({error:'Enter a valid Gmail address.'},400);
-   const database=db(env),now=new Date().toISOString();
+   if(!name||name.length>120)return json({error:'Enter your name to request access.'},400);
+   const database=db(env),now=new Date().toISOString();await ensureAccessUserColumns(database);
    const autoApprove=await autoApproveAccess(database),initialStatus=autoApprove?'approved':'pending';
-   await database.prepare('INSERT INTO access_users (email,status,requested_at,updated_at) VALUES (?,?,?,?) ON CONFLICT(email) DO NOTHING').bind(email,initialStatus,now,now).run();
-   const user=await database.prepare('SELECT status FROM access_users WHERE email = ?').bind(email).first();
+   await database.prepare("INSERT INTO access_users (email,name,status,requested_at,updated_at) VALUES (?,?,?,?,?) ON CONFLICT(email) DO UPDATE SET name = CASE WHEN excluded.name <> '' THEN excluded.name ELSE access_users.name END, updated_at = excluded.updated_at").bind(email,name,initialStatus,now,now).run();
+   const user=await database.prepare('SELECT status,name FROM access_users WHERE email = ?').bind(email).first();
    if(user.status==='blocked')return json({error:'This Gmail is blocked. Contact the Admin.'},403);
    const token=crypto.randomUUID()+crypto.randomUUID();
    await database.prepare('INSERT INTO access_sessions (token,email,role,created_at) VALUES (?,?,?,?)').bind(token,email,'user',now).run();
-   return Response.json({email,role:'user',status:user.status},{headers:{'Set-Cookie':sessionCookie(token),'Cache-Control':'no-store'}});
+   return Response.json({email,role:'user',status:user.status,name:user.name||name},{headers:{'Set-Cookie':sessionCookie(token),'Cache-Control':'no-store'}});
   }
   if(url.pathname==='/api/access/login'&&request.method==='POST'){
    if(!sameOrigin(request,url))return json({error:'Use the directory to log in.'},403);
    let input;try{input=await jsonInput(request);}catch{return json({error:'Enter a valid Gmail address.'},400);}
    const email=String(input?.email||'').trim().toLowerCase();
    if(email.length>254||!email.endsWith('@gmail.com')||!emailPattern.test(email))return json({error:'Enter a valid Gmail address.'},400);
-   const user=await db(env).prepare('SELECT status FROM access_users WHERE email = ?').bind(email).first();
+   const database=db(env);await ensureAccessUserColumns(database);
+   const user=await database.prepare('SELECT status,name FROM access_users WHERE email = ?').bind(email).first();
    if(!user)return json({error:'No access request found. Use Request access first.'},404);
    if(user.status==='pending')return json({error:'Your request is awaiting Admin approval.'},403);
    if(user.status==='blocked')return json({error:'This Gmail is blocked. Contact the Admin.'},403);
    const token=crypto.randomUUID()+crypto.randomUUID();
-   await db(env).prepare('INSERT INTO access_sessions (token,email,role,created_at) VALUES (?,?,?,?)').bind(token,email,'user',new Date().toISOString()).run();
-   const coadmin=await db(env).prepare('SELECT email FROM coadmins WHERE email = ?').bind(email).first();
-   return Response.json({email,role:coadmin?'coadmin':'user',status:'approved'},{headers:{'Set-Cookie':sessionCookie(token),'Cache-Control':'no-store'}});
+   await database.prepare('INSERT INTO access_sessions (token,email,role,created_at) VALUES (?,?,?,?)').bind(token,email,'user',new Date().toISOString()).run();
+   const coadmin=await database.prepare('SELECT email FROM coadmins WHERE email = ?').bind(email).first();
+   return Response.json({email,role:coadmin?'coadmin':'user',status:'approved',name:user.name||''},{headers:{'Set-Cookie':sessionCookie(token),'Cache-Control':'no-store'}});
   }
   if(url.pathname==='/api/admin/login'&&request.method==='POST'){
    if(!sameOrigin(request,url))return json({error:'Use the directory to open Admin mode.'},403);
@@ -226,7 +234,8 @@ export default {async fetch(request,env){
   }
   if(url.pathname==='/api/access/users'&&request.method==='GET'){
    if(!canManage(session))return json({error:'Admin access required.'},403);
-   const {results}=await db(env).prepare('SELECT email,status,requested_at,updated_at FROM access_users ORDER BY requested_at DESC').all();
+   const database=db(env);await ensureAccessUserColumns(database);
+   const {results}=await database.prepare('SELECT email,name,status,requested_at,updated_at FROM access_users ORDER BY requested_at DESC').all();
    return json({items:results});
   }
   if(url.pathname==='/api/access/users'&&request.method==='PUT'){
@@ -268,9 +277,9 @@ export default {async fetch(request,env){
    let input;try{input=await jsonInput(request);}catch{return json({error:'Enter a valid Gmail address.'},400);}
    const email=String(input?.email||'').trim().toLowerCase();
    if(email.length>254||!email.endsWith('@gmail.com')||!emailPattern.test(email)||email===adminEmail)return json({error:'Enter a valid Gmail address other than the Admin Gmail.'},400);
-   const database=db(env),now=new Date().toISOString();
+   const database=db(env),now=new Date().toISOString();await ensureAccessUserColumns(database);
    if(await database.prepare('SELECT email FROM deleted_users WHERE email = ?').bind(email).first())return json({error:'This Gmail was permanently removed.'},403);
-   await database.prepare("INSERT INTO access_users (email,status,requested_at,updated_at) VALUES (?,'approved',?,?) ON CONFLICT(email) DO UPDATE SET status = 'approved', updated_at = excluded.updated_at").bind(email,now,now).run();
+   await database.prepare("INSERT INTO access_users (email,name,status,requested_at,updated_at) VALUES (?,'','approved',?,?) ON CONFLICT(email) DO UPDATE SET status = 'approved', updated_at = excluded.updated_at").bind(email,now,now).run();
    const result=await database.prepare('INSERT INTO coadmins (email,granted_at) VALUES (?,?) ON CONFLICT(email) DO NOTHING RETURNING email,granted_at').bind(email,now).first();
    if(!result)return json({error:'This Gmail already has Coadmin access.'},409);
    return json(result,201);
@@ -460,8 +469,8 @@ export default {async fetch(request,env){
   }
   if(['/companies.json','/api/changes','/api/companies','/api/company'].includes(url.pathname)&&!canManage(session)&&!await tabAllowed(env,'employer-directory'))return json({error:restrictedMessage},403);
   if(url.pathname==='/api/profile'&&request.method==='GET'){
-   const database=db(env);await ensureProfileColumns(database);const profile=await database.prepare('SELECT * FROM user_profiles WHERE email = ?').bind(session.email).first();
-   return json({email:session.email,profile:profile||null});
+   const database=db(env);await ensureProfileColumns(database);await ensureAccessUserColumns(database);const profile=await database.prepare('SELECT * FROM user_profiles WHERE email = ?').bind(session.email).first();const accessUser=await database.prepare('SELECT name FROM access_users WHERE email = ?').bind(session.email).first();
+   return json({email:session.email,name:accessUser?.name||session.name||'',profile:profile||null});
   }
   if(url.pathname==='/api/profile'&&request.method==='PUT'){
    if(!sameOrigin(request,url))return json({error:'Use the profile page to save changes.'},403);

@@ -49,7 +49,7 @@ function showAccessState(){
  const pending=accessSession.status==='pending',blocked=accessSession.status==='blocked';
  accessEl('access-form').hidden=pending||blocked;
  accessEl('access-change').hidden=!pending&&!blocked;
- accessEl('access-message').textContent=pending?`Awaiting access from Admin for ${accessSession.email}. This page will open after approval.`:blocked?`Access has been denied for ${accessSession.email}. Contact the Admin if you think this is a mistake.`:'Enter your Gmail to request access or log in if approved.';
+ accessEl('access-message').textContent=pending?`Awaiting access from Admin for ${accessSession.email}. This page will open after approval.`:blocked?`Access has been denied for ${accessSession.email}. Contact the Admin if you think this is a mistake.`:'Enter your name and Gmail to request access. If already approved, use Gmail and click Login.';
 }
 async function checkAccess(){
  if(checking)return;checking=true;
@@ -85,8 +85,8 @@ function renderAccessUsers(){
  accessEl('access-count-'+status).textContent=people.length;list.replaceChildren();
  if(!people.length){const empty=document.createElement('p');empty.className='management-empty';empty.textContent=status==='pending'?'No access requests.':status==='approved'?'No approved users yet.':'No blocked users.';list.append(empty);continue;}
  for(const user of people){
-  const row=document.createElement('div'),email=document.createElement('strong'),actions=document.createElement('div');
-  row.className='access-user';email.textContent=user.email;actions.className='access-user-actions';
+  const row=document.createElement('div'),identity=document.createElement('div'),email=document.createElement('strong'),actions=document.createElement('div');
+  row.className='access-user';identity.className='access-user-identity';email.textContent=user.name?`${user.name} · ${user.email}`:user.email;identity.append(email);actions.className='access-user-actions';
   const choices=status==='pending'?[['approve','Approve'],['deny','Deny']]:status==='approved'?[['block','Block'],...(accessSession.role==='admin'?[['delete','Delete']]:[])]:[['unblock','Unblock']];
   for(const [action,label] of choices){const button=document.createElement('button');button.type='button';button.dataset.action=action;button.textContent=label;button.addEventListener('click',async()=>{
    if(action==='delete'){deletingUserEmail=user.email;accessEl('user-delete-description').textContent=`Delete ${user.email} permanently?`;accessError('user-delete-error','');accessEl('user-delete-dialog').showModal();return;}
@@ -94,7 +94,7 @@ function renderAccessUsers(){
    try{const updated=await accessJson('/api/access/users',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:user.email,action})});user.status=updated.status;renderAccessUsers();}
    catch(error){accessError('admin-access-error',error.message);button.disabled=false;}
   });actions.append(button);}
-  row.append(email,actions);list.append(row);
+  row.append(identity,actions);list.append(row);
  }
  }
 }
@@ -132,7 +132,7 @@ function renderAdminAccessRequests(){
    try{await accessJson('/api/admin-access-requests',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:request.email,action})});adminAccessRequests=adminAccessRequests.filter(item=>item.email!==request.email);renderAdminAccessRequests();if(action==='approve')loadCoadmins();}
    catch(error){accessError('admin-request-error',error.message);for(const control of actions.querySelectorAll('button'))control.disabled=false;}
   });actions.append(button);}
-  row.append(email,actions);list.append(row);
+  row.append(identity,actions);list.append(row);
  }
 }
 async function loadAdminAccessRequests(){
@@ -177,7 +177,7 @@ function renderCoadmins(){
   button.addEventListener('click',async()=>{button.disabled=true;accessError('coadmin-error','');
    try{await accessJson('/api/coadmins',{method:'DELETE',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:user.email})});coadmins=coadmins.filter(u=>u.email!==user.email);renderCoadmins();}
    catch(error){accessError('coadmin-error',error.message);button.disabled=false;}
-  });actions.append(button);row.append(email,actions);list.append(row);
+  });actions.append(button);row.append(identity,actions);list.append(row);
  }
 }
 async function loadCoadmins(){
@@ -260,7 +260,7 @@ accessEl('coadmin-form').addEventListener('submit',async event=>{
 });
 accessEl('access-form').addEventListener('submit',async event=>{
  event.preventDefault();const submit=accessEl('access-form').querySelector('[type=submit]');submit.disabled=true;accessEl('access-login').disabled=true;accessError('access-error','');
- try{accessSession=await accessJson('/api/access/request',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:accessEl('access-email').value.trim()})});showAccessState();}
+ try{const name=accessEl('access-name').value.trim().replace(/\s+/g,' ');if(!name){accessEl('access-name').focus();throw Error('Enter your name to request access.');}accessSession=await accessJson('/api/access/request',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,email:accessEl('access-email').value.trim()})});showAccessState();}
  catch(error){accessError('access-error',error.message);}finally{submit.disabled=false;accessEl('access-login').disabled=false;}
 });
 accessEl('access-login').addEventListener('click',async()=>{
@@ -270,7 +270,7 @@ accessEl('access-login').addEventListener('click',async()=>{
  catch(error){accessError('access-error',error.message);}finally{button.disabled=false;accessEl('access-form').querySelector('[type=submit]').disabled=false;}
 });
 accessEl('access-change').addEventListener('click',async()=>{
- try{await accessJson('/api/logout',{method:'POST'});accessSession={role:'guest',status:'none'};accessEl('access-email').value='';showAccessState();accessEl('access-email').focus();}
+ try{await accessJson('/api/logout',{method:'POST'});accessSession={role:'guest',status:'none'};accessEl('access-email').value='';accessEl('access-name').value='';showAccessState();accessEl('access-name').focus();}
  catch(error){accessError('access-error',error.message);}
 });
 accessEl('user-logout').addEventListener('click',async()=>{
