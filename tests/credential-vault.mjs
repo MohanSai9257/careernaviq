@@ -1,0 +1,16 @@
+import fs from 'node:fs';
+import vm from 'node:vm';
+import assert from 'node:assert/strict';
+import {randomBytes} from 'node:crypto';
+const source=fs.readFileSync('worker/index.js','utf8');
+const context=vm.createContext({crypto:globalThis.crypto,TextEncoder,TextDecoder,Uint8Array,atob,btoa,JSON,Error,Object});
+vm.runInContext(source.slice(source.indexOf('async function vaultCrypto'),source.indexOf('async function ensureAccessUserColumns')),context);
+const env={CREDENTIAL_VAULT_KEY:randomBytes(32).toString('base64')};const account={account:'test@example.com',password:'test-only-password'};
+const encrypted=await context.vaultCrypto(env,'user@example.com','gmail',account);
+assert(!encrypted.includes(account.password));assert(!encrypted.includes(account.account));
+const decrypted=await context.vaultCrypto(env,'user@example.com','gmail',encrypted);assert.equal(decrypted.password,account.password);
+await assert.rejects(()=>context.vaultCrypto(env,'another@example.com','gmail',encrypted));
+await assert.rejects(()=>context.vaultCrypto(env,'user@example.com','dice',encrypted));
+await assert.rejects(()=>context.vaultCrypto({},'user@example.com','gmail',account),/not configured/);
+const html=fs.readFileSync('dist/ai-auto-apply.html','utf8');assert(!html.includes('profile-heading-row'));assert(html.includes('data-panel="vault"'));const ids=[...html.matchAll(/\bid="([^"]+)"/g)].map(m=>m[1]);assert.equal(ids.length,new Set(ids).size);
+console.log('Vault encryption round trip, account/provider isolation, missing-key failure, and UI structure checks passed.');

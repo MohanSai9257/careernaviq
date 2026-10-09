@@ -58,6 +58,16 @@ async function saveChatFiles(database,env,input,messageId,email){
 async function chatAttachments(database){const data=await database.prepare('SELECT id,message_id,file_name,file_size FROM ask_attachments').all();const map=new Map();for(const f of data.results||[]){if(!map.has(f.message_id))map.set(f.message_id,[]);map.get(f.message_id).push({id:f.id,name:f.file_name,size:f.file_size,url:'/api/ask/attachments/'+f.id});}return map;}
 async function removeChatFiles(database,env,email){const data=await database.prepare('SELECT file_key FROM ask_attachments WHERE user_email=?').bind(email).all();await Promise.all((data.results||[]).map(f=>bucket(env).delete(f.file_key)));await database.prepare('DELETE FROM ask_attachments WHERE user_email=?').bind(email).run();}
 
+async function ensureVault(database){await database.prepare("CREATE TABLE IF NOT EXISTS credential_vault (user_email text NOT NULL,provider text NOT NULL,encrypted_value text NOT NULL,updated_at text NOT NULL,PRIMARY KEY(user_email,provider))").run();}
+async function vaultCrypto(env,email,provider,value){
+ if(!env.CREDENTIAL_VAULT_KEY)throw Object.assign(Error('Secure vault storage is not configured.'),{status:503});
+ const raw=Uint8Array.from(atob(env.CREDENTIAL_VAULT_KEY),c=>c.charCodeAt(0));
+ const key=await crypto.subtle.importKey('raw',raw,'AES-GCM',false,['encrypt','decrypt']);
+ const aad=new TextEncoder().encode(email+'|'+provider);
+ if(typeof value==='string'){const data=JSON.parse(value);const plain=await crypto.subtle.decrypt({name:'AES-GCM',iv:Uint8Array.from(atob(data.iv),c=>c.charCodeAt(0)),additionalData:aad},key,Uint8Array.from(atob(data.data),c=>c.charCodeAt(0)));return JSON.parse(new TextDecoder().decode(plain));}
+ const iv=crypto.getRandomValues(new Uint8Array(12));const encrypted=await crypto.subtle.encrypt({name:'AES-GCM',iv,additionalData:aad},key,new TextEncoder().encode(JSON.stringify(value)));
+ return JSON.stringify({iv:btoa(String.fromCharCode(...iv)),data:btoa(String.fromCharCode(...new Uint8Array(encrypted)))});
+}
 async function ensureAccessUserColumns(database){
  const existing=new Set(((await database.prepare('PRAGMA table_info(access_users)').all()).results||[]).map(row=>row.name));
  if(!existing.has('name'))await database.prepare("ALTER TABLE access_users ADD name text DEFAULT '' NOT NULL").run();
@@ -429,6 +439,27 @@ export default {async fetch(request,env){
    if(request.method==='DELETE'){await bucket(env).delete(row.file_key);await database.prepare('DELETE FROM auto_resumes WHERE id=? AND user_email=?').bind(id,session.email).run();await logAuto(database,session.email,'RESUME_DELETED',`Deleted resume ${row.name}`);return json({deleted:true});}
    await database.prepare('UPDATE auto_resumes SET is_default=0 WHERE user_email=?').bind(session.email).run();await database.prepare('UPDATE auto_resumes SET is_default=1,updated_at=? WHERE id=? AND user_email=?').bind(new Date().toISOString(),id,session.email).run();return json({id,isDefault:true});
   }
+  if(url.pathname==='/api/auto-apply/vault'&&request.method==='GET'){
+   const database=db(env);await ensureVault(database);const rows=await database.prepare('SELECT provider,encrypted_value,updated_at FROM credential_vault WHERE user_email=?').bind(session.email).all();const items=[];
+   for(const row of rows.results||[]){const saved=await vaultCrypto(env,session.email,row.provider,row.encrypted_value);items.push({provider:row.provider,account:saved.account,passwordSaved:Boolean(saved.password),updatedAt:row.updated_at});}
+   return json({items});
+  }
+  if(url.pathname==='/api/auto-apply/vault'&&['PUT','DELETE'].includes(request.method)){
+   if(!sameOrigin(request,url))return json({error:'Use CareerNaviq to manage your vault.'},403);
+   let input;try{input=await jsonInput(request);}catch{return json({error:'Invalid vault request.'},400);}
+   const provider=autoProvider(input?.provider);if(!provider)return json({error:'Choose a supported account.'},400);
+   const database=db(env);await ensureVault(database);
+   if(request.method==='DELETE'){await database.prepare('DELETE FROM credential_vault WHERE user_email=? AND provider=?').bind(session.email,provider).run();return json({saved:false});}
+   const account=String(input.account||'').trim(),password=String(input.password||'');if(!account||account.length>254||password.length>2048)return json({error:'Enter a valid email or username.'},400);
+   if(provider==='gmail'&&!emailPattern.test(account))return json({error:'Enter a valid email.'},400);
+   const old=await database.prepare('SELECT encrypted_value FROM credential_vault WHERE user_email=? AND provider=?').bind(session.email,provider).first();
+   const previous=old?await vaultCrypto(env,session.email,provider,old.encrypted_value):null;
+   if(!password&&!previous?.password)return json({error:'Enter a password to save this account.'},400);
+   if(!password&&previous.account!==account)return json({error:'Enter the password for the changed account.'},400);
+   const encrypted=await vaultCrypto(env,session.email,provider,{account,password:password||previous.password});const now=new Date().toISOString();
+   await database.prepare('INSERT INTO credential_vault(user_email,provider,encrypted_value,updated_at) VALUES(?,?,?,?) ON CONFLICT(user_email,provider) DO UPDATE SET encrypted_value=excluded.encrypted_value,updated_at=excluded.updated_at').bind(session.email,provider,encrypted,now).run();
+   return json({saved:true,updatedAt:now});
+  }
   if(url.pathname==='/api/auto-apply/accounts'&&request.method==='POST'){
    if(!sameOrigin(request,url))return json({error:'Use CareerNaviq to manage accounts.'},403);let input;try{input=await jsonInput(request);}catch{return json({error:'Invalid account request.'},400);}const provider=autoProvider(input?.provider),action=input?.action;if(!provider||!['connect','disconnect'].includes(action))return json({error:'Choose LinkedIn, Indeed, Dice, or Gmail.'},400);
    const database=db(env);await ensureAutoApply(database);const now=new Date().toISOString();
@@ -595,7 +626,8 @@ export default {async fetch(request,env){
    const email=String(input?.email||'').trim().toLowerCase();
    if(email!==session.email)return json({error:'Enter your own account email to delete access.'},400);
    if(email===adminEmail)return json({error:'The Admin account cannot be deleted here.'},400);
-   const database=db(env);await ensureAskMessages(database);await ensureAutoApply(database);await removeChatFiles(database,env,email);await database.batch([
+   const database=db(env);await ensureAskMessages(database);await ensureAutoApply(database);await ensureVault(database);await removeChatFiles(database,env,email);await database.batch([
+    database.prepare('DELETE FROM credential_vault WHERE user_email=?').bind(email),
     database.prepare('DELETE FROM access_sessions WHERE email = ?').bind(email),
     database.prepare('DELETE FROM user_profiles WHERE email = ?').bind(email),
     database.prepare('DELETE FROM auto_resumes WHERE user_email = ?').bind(email),
