@@ -1,2 +1,9 @@
 node_modules/
 .sites-runtime/
+
+# Local deployment packages and generated Worker bundle
+/careernaviq*.tar.gz
+/dist/server/
+.env
+.env.*
+!.env.example

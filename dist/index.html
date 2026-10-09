@@ -1,184 +1,614 @@
 <!doctype html>
 <html lang="en">
-<head>
-  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>CareerNaviq — Your career hub</title>
-  <meta name="description" content="Explore employers, recruiters, jobs, study materials, and interview support in one career hub.">
-  <link rel="icon" type="image/svg+xml" href="/logo.svg">
-  <link rel="stylesheet" href="style.css">
-  <script src="/chat-files.js" defer></script>
-  <script src="access.js" defer></script>
-  <script src="sidebar.js" defer></script>
-  <script src="profile.js" defer></script>
-</head>
-<body>
-  <header class="masthead">
-    <div class="wrap brand">
-      <img class="brand-logo" src="/logo.svg" alt=""><span>CareerNaviq</span>
-      <div id="profile-greeting" class="profile-greeting" hidden></div>
-      <div class="role-control">
-        <span id="role-label" class="public-label">User</span>
-        <button id="admin-open" type="button">Admin</button>
-        <button id="user-logout" type="button" hidden>Logout</button>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>CarrerNaviq — Your career hub</title>
+    <meta
+      name="description"
+      content="Explore employers, recruiters, jobs, study materials, and interview support in one career hub."
+    />
+    <link rel="icon" type="image/svg+xml" href="/logo.svg" />
+    <link rel="stylesheet" href="style.css" />
+    <script src="/chat-files.js" defer></script>
+    <script src="access.js" defer></script>
+    <script src="sidebar.js" defer></script>
+    <script src="profile.js" defer></script>
+  </head>
+  <body>
+    <header class="masthead">
+      <div class="wrap brand">
+        <img class="brand-logo" src="/logo.svg" alt="" /><span
+          >CarrerNaviq</span
+        >
+        <div id="profile-greeting" class="profile-greeting" hidden></div>
+        <div class="role-control">
+          <span id="role-label" class="public-label">User</span>
+          <button id="admin-open" type="button">Admin</button>
+          <button id="user-logout" type="button" hidden>Logout</button>
+        </div>
       </div>
-    </div>
-  </header>
-  <div id="access-gate" class="access-gate wrap" hidden>
-    <div class="access-card">
-      <p class="eyebrow">CAREERNAVIQ</p>
-      <h1>Request access</h1>
-      <p id="access-message" class="description">Enter your name and Gmail to request access. If already approved, use Gmail and click Login.</p>
-      <form id="access-form"><label for="access-name">Name</label><input id="access-name" type="text" autocomplete="name" maxlength="120" placeholder="Your full name"><label for="access-email">Gmail</label><input id="access-email" type="email" autocomplete="email" required><div class="access-form-actions"><button type="submit" class="primary">Request access</button><button id="access-login" type="button">Login</button></div></form>
-      <p id="access-error" role="alert" hidden></p>
-      <button id="access-change" type="button" hidden>Use a different Gmail</button>
-    </div>
-  </div>
-  <main id="directory-app" class="wrap" hidden>
-    <nav id="admin-tabs" class="admin-tabs" aria-label="Admin sections" hidden>
-      <button type="button" data-admin-tab="analytics-dashboard" aria-selected="true"><span aria-hidden="true">▥</span> Admin Analytics</button>
-      <button type="button" data-admin-tab="admin-dashboard" aria-selected="false"><span aria-hidden="true">♙</span> Access Management</button>
-      <button type="button" data-admin-tab="data-dashboard" aria-selected="false"><span aria-hidden="true">▤</span> Data Access</button>
-      <button type="button" data-admin-tab="messages-dashboard" aria-selected="false"><span aria-hidden="true">♧</span> Messages <span id="messages-tab-count" class="admin-tab-count" hidden></span></button>
-    </nav>
-    <details id="analytics-dashboard" class="admin-dashboard" hidden>
-      <summary>Admin analytics</summary>
-      <div class="admin-dashboard-content">
-        <p id="analytics-error" role="alert" hidden></p>
-        <div id="analytics-summary" class="analytics-grid"></div>
-      </div>
-    </details>
-    <details id="admin-dashboard" class="admin-dashboard" hidden>
-      <summary>Access management</summary>
-      <div class="admin-dashboard-content">
-      <p id="admin-access-error" role="alert" hidden></p>
-      <div class="access-management-grid">
-      <details class="management-panel" id="access-settings-panel"><summary><span>Auto Access</span><span id="auto-approve-state" class="management-count">Off</span></summary><div class="management-body">
-        <div class="tab-access-row"><div><strong>Auto approve new users</strong><span id="auto-approve-label" class="tab-access-state is-restricted">Off</span></div><button id="auto-approve-toggle" type="button">Turn on</button></div>
-        <p class="form-hint">When this is on, new Gmail access requests are approved immediately without Admin review.</p>
-        <p id="access-settings-error" role="alert" hidden></p>
-      </div></details>
-      <details class="management-panel" id="users-pending"><summary><span>Access Requests</span><span id="access-count-pending" class="management-count">0</span></summary><div id="access-users-pending" class="management-body access-users"></div></details>
-      <details class="management-panel" id="admin-access-panel"><summary><span>Admin access requests</span><span id="admin-request-count" class="management-count">0</span></summary><div class="management-body">
-        <p id="admin-request-error" role="alert" hidden></p>
-        <div id="admin-request-list" class="access-users"></div>
-      </div></details>
-      <details id="coadmin-section" class="management-panel" hidden><summary><span>Coadmin access</span><span id="coadmin-count" class="management-count">0</span></summary><div class="management-body">
-        <form id="coadmin-form" class="coadmin-form"><label for="coadmin-email">Gmail</label><input id="coadmin-email" type="email" autocomplete="off" required><button type="submit" class="primary">Grant Coadmin access</button></form>
-        <p id="coadmin-error" role="alert" hidden></p>
-        <div id="coadmin-list" class="access-users"></div>
-      </div></details>
-      <details class="management-panel" id="users-approved"><summary><span>Existing Users</span><span id="access-count-approved" class="management-count">0</span></summary><div id="access-users-approved" class="management-body access-users"></div></details>
-      <details class="management-panel" id="users-blocked"><summary><span>Blocked users</span><span id="access-count-blocked" class="management-count">0</span></summary><div id="access-users-blocked" class="management-body access-users"></div></details>
-      <details class="management-panel" id="company-change-panel"><summary><span>Company change requests</span><span id="change-count" class="management-count">0</span></summary><div class="management-body">
-        <p id="change-error" role="alert" hidden></p>
-        <div id="change-requests" class="change-requests"></div>
-      </div></details>
-      <details class="management-panel" id="section-item-panel"><summary><span>New section submissions</span><span id="section-review-count" class="management-count">0</span></summary><div class="management-body">
-        <p id="section-review-error" role="alert" hidden></p>
-        <div id="section-review-list" class="change-requests"></div>
-      </div></details>
-      <details class="management-panel" id="section-change-panel"><summary><span>Section Edit/Move/Delete requests</span><span id="section-change-count" class="management-count">0</span></summary><div class="management-body">
-        <p id="section-change-error" role="alert" hidden></p>
-        <div id="section-change-list" class="change-requests"></div>
-      </div></details>
-      </div>
-      </div>
-    </details>
-    <section id="messages-dashboard" class="admin-messages" hidden aria-label="Messages">
-      <button id="messages-list-toggle" class="messages-list-toggle" type="button" aria-expanded="true" aria-controls="questions-list" aria-label="Collapse conversation list">‹</button>
-      <div class="admin-inbox">
-        <div class="admin-inbox-tools"><label class="sr-only" for="messages-search">Search conversations</label><input id="messages-search" type="search" placeholder="Search conversations..."><div class="admin-message-filters" role="group" aria-label="Conversation filter"><button type="button" data-message-filter="all" aria-pressed="true">All</button><button type="button" data-message-filter="unread" aria-pressed="false">Unread</button></div></div>
-        <div id="questions-list" class="admin-conversation-list"></div>
-      </div>
-      <div class="admin-chat-pane"><div id="messages-chat-header" class="admin-chat-header">Select a conversation</div><div id="messages-chat" class="admin-chat-history"><p class="management-empty">Choose a conversation to read and reply.</p></div><form id="messages-reply-form" class="admin-chat-compose" hidden><label class="sr-only" for="messages-reply">Message</label><textarea id="messages-reply" rows="2" maxlength="1200" placeholder="Type a message..."></textarea><button class="primary" type="submit" aria-label="Send reply">Send</button></form><p id="questions-error" role="alert" hidden></p></div>
-    </section>
-    
-    <details id="data-dashboard" class="admin-dashboard" hidden>
-      <summary>Data access</summary>
-      <div class="admin-dashboard-content">
-        <details id="tab-access-panel" class="management-panel">
-          <summary><span>Tab access</span><span id="tab-access-count" class="management-count">6 open</span></summary>
-          <div class="management-body">
-            <p class="form-hint">Restrict a tab temporarily for regular users. Admins and Coadmins can still open it.</p>
-            <p id="tab-access-error" role="alert" hidden></p>
-            <div id="tab-access-list" class="tab-access-list"></div>
+    </header>
+    <div id="access-gate" class="access-gate wrap" hidden>
+      <div class="access-card">
+        <p class="eyebrow">CARRERNAVIQ</p>
+        <h1>Request access</h1>
+        <p id="access-message" class="description">
+          Enter your name and Gmail to request access. If already approved, use
+          Gmail and click Login.
+        </p>
+        <form id="access-form">
+          <label for="access-name">Name</label
+          ><input
+            id="access-name"
+            type="text"
+            autocomplete="name"
+            maxlength="120"
+            placeholder="Your full name"
+          /><label for="access-email">Gmail</label
+          ><input
+            id="access-email"
+            type="email"
+            autocomplete="email"
+            required
+          />
+          <div class="access-form-actions">
+            <button type="submit" class="primary">Request access</button
+            ><button id="access-login" type="button">Login</button>
           </div>
-        </details>
+        </form>
+        <p id="access-error" role="alert" hidden></p>
+        <button id="access-change" type="button" hidden>
+          Use a different Gmail
+        </button>
       </div>
-    </details>
-    <div id="employer-content">
-    <div class="intro"><div><p class="eyebrow">CAREERNAVIQ</p><h1>Employer Directory</h1></div><div class="total is-loading" id="total-card" aria-live="polite"><strong id="total">—</strong><span id="total-label">Loading companies</span></div></div>
-    <nav class="category-tabs" role="tablist" aria-label="Company categories">
-      <button type="button" role="tab" id="tab-client" data-category="client" aria-selected="true" aria-controls="directory-panel"><span aria-hidden="true">▦</span> Client <span class="badge is-loading" id="count-client">—</span></button>
-      <button type="button" role="tab" id="tab-implementation" data-category="implementation" aria-selected="false" aria-controls="directory-panel" tabindex="-1"><span aria-hidden="true">⚙</span> Implementation <span class="badge is-loading" id="count-implementation">—</span></button>
-      <button type="button" role="tab" id="tab-vendor" data-category="vendor" aria-selected="false" aria-controls="directory-panel" tabindex="-1"><span aria-hidden="true"><svg viewBox="0 0 24 24" class="tab-icon"><circle cx="9" cy="7" r="3"/><path d="M3 21v-3a6 6 0 0 1 12 0v3zM16 4a3 3 0 0 1 0 6m2 4a5 5 0 0 1 3 4v3h-3"/></svg></span> Vendor <span class="badge is-loading" id="count-vendor">—</span></button>
-      <button type="button" role="tab" id="tab-mylist" data-category="mylist" aria-selected="false" aria-controls="directory-panel" tabindex="-1"><span aria-hidden="true">☆</span> My List <span class="badge is-loading" id="count-mylist">—</span></button>
-    </nav>
-    <p id="save-status" class="save-status" role="status" aria-live="polite" hidden></p>
-    <section id="directory-panel" role="tabpanel" aria-labelledby="tab-client">
-      <div class="toolbar"><label class="search"><svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"></circle><path d="m16 16 5 5"></path></svg><span class="sr-only">Search companies</span><input id="search" type="search" placeholder="Search by company name" autocomplete="off"></label><button id="add-company" type="button" class="primary">+ Add company</button><span id="results" role="status" aria-live="polite">Loading companies…</span></div>
-      <div class="table-wrap"><table><thead><tr><th scope="col">Company name</th><th scope="col">LinkedIn</th><th scope="col">Careers portal</th><th scope="col" class="actions-heading"><span class="sr-only">Company actions</span></th></tr></thead><tbody id="companies"></tbody></table><p id="empty" hidden>No companies found. Try another name.</p></div>
-      <div class="pagination"><span id="range"></span><div><button id="previous" type="button" disabled>Previous</button><span id="page">Page 1</span><button id="next" type="button" disabled>Next</button></div></div>
-      <noscript><p>Enable JavaScript to view and search the company directory.</p></noscript>
-    </section>
     </div>
-  </main>
-  <div id="company-menu" class="company-menu" role="menu" aria-label="Company actions" hidden>
-    <button id="menu-edit" type="button" role="menuitem">Edit</button>
-    <button id="menu-move" type="button" role="menuitem" aria-haspopup="menu" aria-expanded="false" aria-controls="move-menu">Move to <span aria-hidden="true">›</span></button>
-    <div id="move-menu" role="menu" aria-label="Move company to" hidden></div>
-    <button id="menu-delete" type="button" role="menuitem" hidden>Delete</button>
-  </div>
-  <dialog id="delete-dialog" aria-labelledby="delete-title">
-    <form id="delete-form">
-      <h2 id="delete-title">Delete company?</h2>
-      <p id="delete-description" class="edit-scope"></p>
-      <p id="delete-error" role="alert" hidden></p>
-      <div class="dialog-actions"><button type="button" id="delete-cancel">Cancel</button><button type="submit" class="danger">Delete company</button></div>
-    </form>
-  </dialog>
-  <dialog id="edit-dialog" aria-labelledby="edit-title">
-    <form id="edit-form">
-      <h2 id="edit-title">Edit company</h2>
-      <p class="edit-scope">User edits need Admin approval before they appear for everyone.</p>
-      <label for="edit-name">Company name</label><input id="edit-name" name="company" required maxlength="250">
-      <label for="edit-linkedin">LinkedIn link</label><input id="edit-linkedin" name="linkedin" type="url" placeholder="https://www.linkedin.com/company/…">
-      <label for="edit-careers">Careers portal link</label><input id="edit-careers" name="careers" type="url" placeholder="https://company.com/careers">
-      <p class="form-hint">Leave a link blank if it is not available.</p>
-      <p id="edit-error" role="alert" hidden></p>
-      <div class="dialog-actions"><button type="button" id="edit-cancel">Cancel</button><button type="submit" class="primary">Save changes</button></div>
-    </form>
-  </dialog>
-  <dialog id="add-dialog" aria-labelledby="add-title">
-    <form id="add-form">
-      <h2 id="add-title">Add company</h2>
-      <p class="edit-scope">User additions need Admin approval before they appear for everyone.</p>
-      <label for="add-name">Company name</label><input id="add-name" name="company" required maxlength="250" autocomplete="organization">
-      <label for="add-category">Category</label><select id="add-category" name="category" required><option value="client">Client</option><option value="implementation">Implementation</option><option value="vendor">Vendor</option></select>
-      <label for="add-linkedin">LinkedIn link</label><input id="add-linkedin" name="linkedin" type="url" placeholder="https://www.linkedin.com/company/…">
-      <label for="add-careers">Careers portal link</label><input id="add-careers" name="careers" type="url" placeholder="https://company.com/careers">
-      <p class="form-hint">Links are optional. Check them before sharing.</p>
-      <p id="add-error" role="alert" hidden></p>
-      <div class="dialog-actions"><button type="button" id="add-cancel">Cancel</button><button type="submit" class="primary">Add company</button></div>
-    </form>
-  </dialog>
-  <dialog id="admin-dialog" aria-labelledby="admin-title">
-    <form id="admin-form">
-      <h2 id="admin-title">Admin login</h2>
-      <p class="edit-scope">Enter the admin Gmail to open Admin mode.</p>
-      <label for="admin-email">Gmail</label><input id="admin-email" name="email" type="email" autocomplete="off" required>
-      <p id="admin-error" role="alert" hidden></p>
-      <div class="dialog-actions"><button type="button" id="admin-cancel">Cancel</button><button type="submit" class="primary">Login</button></div>
-    </form>
-  </dialog>
-  <dialog id="user-delete-dialog" aria-labelledby="user-delete-title">
-    <form id="user-delete-form">
-      <h2 id="user-delete-title">Delete user permanently?</h2>
-      <p id="user-delete-description" class="edit-scope"></p>
-      <p class="edit-scope">Their access, profile, and active sessions will be removed. They can request access again later.</p>
-      <p id="user-delete-error" role="alert" hidden></p>
-      <div class="dialog-actions"><button id="user-delete-cancel" type="button">Cancel</button><button type="submit" class="danger">Delete user</button></div>
-    </form>
-  </dialog>
-</body>
+    <main id="directory-app" class="wrap" hidden>
+      <nav
+        id="admin-tabs"
+        class="admin-tabs"
+        aria-label="Admin sections"
+        hidden
+      >
+        <button
+          type="button"
+          data-admin-tab="analytics-dashboard"
+          aria-selected="true"
+        >
+          <span aria-hidden="true">▥</span> Admin Analytics
+        </button>
+        <button
+          type="button"
+          data-admin-tab="admin-dashboard"
+          aria-selected="false"
+        >
+          <span aria-hidden="true">♙</span> Access Management
+        </button>
+        <button
+          type="button"
+          data-admin-tab="data-dashboard"
+          aria-selected="false"
+        >
+          <span aria-hidden="true">▤</span> Data Access
+        </button>
+        <button
+          type="button"
+          data-admin-tab="messages-dashboard"
+          aria-selected="false"
+        >
+          <span aria-hidden="true">♧</span> Messages
+          <span id="messages-tab-count" class="admin-tab-count" hidden></span>
+        </button>
+      </nav>
+      <details id="analytics-dashboard" class="admin-dashboard" hidden>
+        <summary>Admin analytics</summary>
+        <div class="admin-dashboard-content">
+          <p id="analytics-error" role="alert" hidden></p>
+          <div id="analytics-summary" class="analytics-grid"></div>
+        </div>
+      </details>
+      <details id="admin-dashboard" class="admin-dashboard" hidden>
+        <summary>Access management</summary>
+        <div class="admin-dashboard-content">
+          <p id="admin-access-error" role="alert" hidden></p>
+          <div class="access-management-grid">
+            <details class="management-panel" id="access-settings-panel">
+              <summary>
+                <span>Auto Access</span
+                ><span id="auto-approve-state" class="management-count"
+                  >Off</span
+                >
+              </summary>
+              <div class="management-body">
+                <div class="tab-access-row">
+                  <div>
+                    <strong>Auto approve new users</strong
+                    ><span
+                      id="auto-approve-label"
+                      class="tab-access-state is-restricted"
+                      >Off</span
+                    >
+                  </div>
+                  <button id="auto-approve-toggle" type="button">
+                    Turn on
+                  </button>
+                </div>
+                <p class="form-hint">
+                  When this is on, new Gmail access requests are approved
+                  immediately without Admin review.
+                </p>
+                <p id="access-settings-error" role="alert" hidden></p>
+              </div>
+            </details>
+            <details class="management-panel" id="users-pending">
+              <summary>
+                <span>Access Requests</span
+                ><span id="access-count-pending" class="management-count"
+                  >0</span
+                >
+              </summary>
+              <div
+                id="access-users-pending"
+                class="management-body access-users"
+              ></div>
+            </details>
+            <details class="management-panel" id="admin-access-panel">
+              <summary>
+                <span>Admin access requests</span
+                ><span id="admin-request-count" class="management-count"
+                  >0</span
+                >
+              </summary>
+              <div class="management-body">
+                <p id="admin-request-error" role="alert" hidden></p>
+                <div id="admin-request-list" class="access-users"></div>
+              </div>
+            </details>
+            <details id="coadmin-section" class="management-panel" hidden>
+              <summary>
+                <span>Coadmin access</span
+                ><span id="coadmin-count" class="management-count">0</span>
+              </summary>
+              <div class="management-body">
+                <form id="coadmin-form" class="coadmin-form">
+                  <label for="coadmin-email">Gmail</label
+                  ><input
+                    id="coadmin-email"
+                    type="email"
+                    autocomplete="off"
+                    required
+                  /><button type="submit" class="primary">
+                    Grant Coadmin access
+                  </button>
+                </form>
+                <p id="coadmin-error" role="alert" hidden></p>
+                <div id="coadmin-list" class="access-users"></div>
+              </div>
+            </details>
+            <details class="management-panel" id="users-approved">
+              <summary>
+                <span>Existing Users</span
+                ><span id="access-count-approved" class="management-count"
+                  >0</span
+                >
+              </summary>
+              <div
+                id="access-users-approved"
+                class="management-body access-users"
+              ></div>
+            </details>
+            <details class="management-panel" id="users-blocked">
+              <summary>
+                <span>Blocked users</span
+                ><span id="access-count-blocked" class="management-count"
+                  >0</span
+                >
+              </summary>
+              <div
+                id="access-users-blocked"
+                class="management-body access-users"
+              ></div>
+            </details>
+            <details class="management-panel" id="company-change-panel">
+              <summary>
+                <span>Company change requests</span
+                ><span id="change-count" class="management-count">0</span>
+              </summary>
+              <div class="management-body">
+                <p id="change-error" role="alert" hidden></p>
+                <div id="change-requests" class="change-requests"></div>
+              </div>
+            </details>
+            <details class="management-panel" id="section-item-panel">
+              <summary>
+                <span>New section submissions</span
+                ><span id="section-review-count" class="management-count"
+                  >0</span
+                >
+              </summary>
+              <div class="management-body">
+                <p id="section-review-error" role="alert" hidden></p>
+                <div id="section-review-list" class="change-requests"></div>
+              </div>
+            </details>
+            <details class="management-panel" id="section-change-panel">
+              <summary>
+                <span>Section Edit/Move/Delete requests</span
+                ><span id="section-change-count" class="management-count"
+                  >0</span
+                >
+              </summary>
+              <div class="management-body">
+                <p id="section-change-error" role="alert" hidden></p>
+                <div id="section-change-list" class="change-requests"></div>
+              </div>
+            </details>
+          </div>
+        </div>
+      </details>
+      <section
+        id="messages-dashboard"
+        class="admin-messages"
+        hidden
+        aria-label="Messages"
+      >
+        <button
+          id="messages-list-toggle"
+          class="messages-list-toggle"
+          type="button"
+          aria-expanded="true"
+          aria-controls="questions-list"
+          aria-label="Collapse conversation list"
+        >
+          ‹
+        </button>
+        <div class="admin-inbox">
+          <div class="admin-inbox-tools">
+            <label class="sr-only" for="messages-search"
+              >Search conversations</label
+            ><input
+              id="messages-search"
+              type="search"
+              placeholder="Search conversations..."
+            />
+            <div
+              class="admin-message-filters"
+              role="group"
+              aria-label="Conversation filter"
+            >
+              <button
+                type="button"
+                data-message-filter="all"
+                aria-pressed="true"
+              >
+                All</button
+              ><button
+                type="button"
+                data-message-filter="unread"
+                aria-pressed="false"
+              >
+                Unread
+              </button>
+            </div>
+          </div>
+          <div id="questions-list" class="admin-conversation-list"></div>
+        </div>
+        <div class="admin-chat-pane">
+          <div id="messages-chat-header" class="admin-chat-header">
+            Select a conversation
+          </div>
+          <div id="messages-chat" class="admin-chat-history">
+            <p class="management-empty">
+              Choose a conversation to read and reply.
+            </p>
+          </div>
+          <form id="messages-reply-form" class="admin-chat-compose" hidden>
+            <label class="sr-only" for="messages-reply">Message</label
+            ><textarea
+              id="messages-reply"
+              rows="2"
+              maxlength="1200"
+              placeholder="Type a message..."
+            ></textarea
+            ><button class="primary" type="submit" aria-label="Send reply">
+              Send
+            </button>
+          </form>
+          <p id="questions-error" role="alert" hidden></p>
+        </div>
+      </section>
+
+      <details id="data-dashboard" class="admin-dashboard" hidden>
+        <summary>Data access</summary>
+        <div class="admin-dashboard-content">
+          <details id="tab-access-panel" class="management-panel">
+            <summary>
+              <span>Tab access</span
+              ><span id="tab-access-count" class="management-count"
+                >6 open</span
+              >
+            </summary>
+            <div class="management-body">
+              <p class="form-hint">
+                Restrict a tab temporarily for regular users. Admins and
+                Coadmins can still open it.
+              </p>
+              <p id="tab-access-error" role="alert" hidden></p>
+              <div id="tab-access-list" class="tab-access-list"></div>
+            </div>
+          </details>
+        </div>
+      </details>
+      <div id="employer-content">
+        <div class="intro">
+          <div>
+            <p class="eyebrow">CARRERNAVIQ</p>
+            <h1>Employer Directory</h1>
+          </div>
+          <div class="total is-loading" id="total-card" aria-live="polite">
+            <strong id="total">—</strong
+            ><span id="total-label">Loading companies</span>
+          </div>
+        </div>
+        <nav
+          class="category-tabs"
+          role="tablist"
+          aria-label="Company categories"
+        >
+          <button
+            type="button"
+            role="tab"
+            id="tab-client"
+            data-category="client"
+            aria-selected="true"
+            aria-controls="directory-panel"
+          >
+            <span aria-hidden="true">▦</span> Client
+            <span class="badge is-loading" id="count-client">—</span>
+          </button>
+          <button
+            type="button"
+            role="tab"
+            id="tab-implementation"
+            data-category="implementation"
+            aria-selected="false"
+            aria-controls="directory-panel"
+            tabindex="-1"
+          >
+            <span aria-hidden="true">⚙</span> Implementation
+            <span class="badge is-loading" id="count-implementation">—</span>
+          </button>
+          <button
+            type="button"
+            role="tab"
+            id="tab-vendor"
+            data-category="vendor"
+            aria-selected="false"
+            aria-controls="directory-panel"
+            tabindex="-1"
+          >
+            <span aria-hidden="true"
+              ><svg viewBox="0 0 24 24" class="tab-icon">
+                <circle cx="9" cy="7" r="3" />
+                <path
+                  d="M3 21v-3a6 6 0 0 1 12 0v3zM16 4a3 3 0 0 1 0 6m2 4a5 5 0 0 1 3 4v3h-3"
+                /></svg
+            ></span>
+            Vendor <span class="badge is-loading" id="count-vendor">—</span>
+          </button>
+          <button
+            type="button"
+            role="tab"
+            id="tab-mylist"
+            data-category="mylist"
+            aria-selected="false"
+            aria-controls="directory-panel"
+            tabindex="-1"
+          >
+            <span aria-hidden="true">☆</span> My List
+            <span class="badge is-loading" id="count-mylist">—</span>
+          </button>
+        </nav>
+        <p
+          id="save-status"
+          class="save-status"
+          role="status"
+          aria-live="polite"
+          hidden
+        ></p>
+        <section
+          id="directory-panel"
+          role="tabpanel"
+          aria-labelledby="tab-client"
+        >
+          <div class="toolbar">
+            <label class="search"
+              ><svg aria-hidden="true" viewBox="0 0 24 24">
+                <circle cx="10.5" cy="10.5" r="6.5"></circle>
+                <path d="m16 16 5 5"></path></svg
+              ><span class="sr-only">Search companies</span
+              ><input
+                id="search"
+                type="search"
+                placeholder="Search by company name"
+                autocomplete="off" /></label
+            ><button id="add-company" type="button" class="primary">
+              + Add company</button
+            ><span id="results" role="status" aria-live="polite"
+              >Loading companies…</span
+            >
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">Company name</th>
+                  <th scope="col">LinkedIn</th>
+                  <th scope="col">Careers portal</th>
+                  <th scope="col" class="actions-heading">
+                    <span class="sr-only">Company actions</span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody id="companies"></tbody>
+            </table>
+            <p id="empty" hidden>No companies found. Try another name.</p>
+          </div>
+          <div class="pagination">
+            <span id="range"></span>
+            <div>
+              <button id="previous" type="button" disabled>Previous</button
+              ><span id="page">Page 1</span
+              ><button id="next" type="button" disabled>Next</button>
+            </div>
+          </div>
+          <noscript
+            ><p>
+              Enable JavaScript to view and search the company directory.
+            </p></noscript
+          >
+        </section>
+      </div>
+    </main>
+    <div
+      id="company-menu"
+      class="company-menu"
+      role="menu"
+      aria-label="Company actions"
+      hidden
+    >
+      <button id="menu-edit" type="button" role="menuitem">Edit</button>
+      <button
+        id="menu-move"
+        type="button"
+        role="menuitem"
+        aria-haspopup="menu"
+        aria-expanded="false"
+        aria-controls="move-menu"
+      >
+        Move to <span aria-hidden="true">›</span>
+      </button>
+      <div id="move-menu" role="menu" aria-label="Move company to" hidden></div>
+      <button id="menu-delete" type="button" role="menuitem" hidden>
+        Delete
+      </button>
+    </div>
+    <dialog id="delete-dialog" aria-labelledby="delete-title">
+      <form id="delete-form">
+        <h2 id="delete-title">Delete company?</h2>
+        <p id="delete-description" class="edit-scope"></p>
+        <p id="delete-error" role="alert" hidden></p>
+        <div class="dialog-actions">
+          <button type="button" id="delete-cancel">Cancel</button
+          ><button type="submit" class="danger">Delete company</button>
+        </div>
+      </form>
+    </dialog>
+    <dialog id="edit-dialog" aria-labelledby="edit-title">
+      <form id="edit-form">
+        <h2 id="edit-title">Edit company</h2>
+        <p class="edit-scope">
+          User edits need Admin approval before they appear for everyone.
+        </p>
+        <label for="edit-name">Company name</label
+        ><input id="edit-name" name="company" required maxlength="250" />
+        <label for="edit-linkedin">LinkedIn link</label
+        ><input
+          id="edit-linkedin"
+          name="linkedin"
+          type="url"
+          placeholder="https://www.linkedin.com/company/…"
+        />
+        <label for="edit-careers">Careers portal link</label
+        ><input
+          id="edit-careers"
+          name="careers"
+          type="url"
+          placeholder="https://company.com/careers"
+        />
+        <p class="form-hint">Leave a link blank if it is not available.</p>
+        <p id="edit-error" role="alert" hidden></p>
+        <div class="dialog-actions">
+          <button type="button" id="edit-cancel">Cancel</button
+          ><button type="submit" class="primary">Save changes</button>
+        </div>
+      </form>
+    </dialog>
+    <dialog id="add-dialog" aria-labelledby="add-title">
+      <form id="add-form">
+        <h2 id="add-title">Add company</h2>
+        <p class="edit-scope">
+          User additions need Admin approval before they appear for everyone.
+        </p>
+        <label for="add-name">Company name</label
+        ><input
+          id="add-name"
+          name="company"
+          required
+          maxlength="250"
+          autocomplete="organization"
+        />
+        <label for="add-category">Category</label
+        ><select id="add-category" name="category" required>
+          <option value="client">Client</option>
+          <option value="implementation">Implementation</option>
+          <option value="vendor">Vendor</option>
+        </select>
+        <label for="add-linkedin">LinkedIn link</label
+        ><input
+          id="add-linkedin"
+          name="linkedin"
+          type="url"
+          placeholder="https://www.linkedin.com/company/…"
+        />
+        <label for="add-careers">Careers portal link</label
+        ><input
+          id="add-careers"
+          name="careers"
+          type="url"
+          placeholder="https://company.com/careers"
+        />
+        <p class="form-hint">Links are optional. Check them before sharing.</p>
+        <p id="add-error" role="alert" hidden></p>
+        <div class="dialog-actions">
+          <button type="button" id="add-cancel">Cancel</button
+          ><button type="submit" class="primary">Add company</button>
+        </div>
+      </form>
+    </dialog>
+    <dialog id="admin-dialog" aria-labelledby="admin-title">
+      <form id="admin-form">
+        <h2 id="admin-title">Admin login</h2>
+        <p class="edit-scope">Enter the admin Gmail to open Admin mode.</p>
+        <label for="admin-email">Gmail</label
+        ><input
+          id="admin-email"
+          name="email"
+          type="email"
+          autocomplete="off"
+          required
+        />
+        <p id="admin-error" role="alert" hidden></p>
+        <div class="dialog-actions">
+          <button type="button" id="admin-cancel">Cancel</button
+          ><button type="submit" class="primary">Login</button>
+        </div>
+      </form>
+    </dialog>
+    <dialog id="user-delete-dialog" aria-labelledby="user-delete-title">
+      <form id="user-delete-form">
+        <h2 id="user-delete-title">Delete user permanently?</h2>
+        <p id="user-delete-description" class="edit-scope"></p>
+        <p class="edit-scope">
+          Their access, profile, and active sessions will be removed. They can
+          request access again later.
+        </p>
+        <p id="user-delete-error" role="alert" hidden></p>
+        <div class="dialog-actions">
+          <button id="user-delete-cancel" type="button">Cancel</button
+          ><button type="submit" class="danger">Delete user</button>
+        </div>
+      </form>
+    </dialog>
+  </body>
 </html>

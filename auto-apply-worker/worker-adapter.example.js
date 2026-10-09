@@ -9,4 +9,4 @@ http.createServer(async(req,res)=>{
   // Production implementation: call Skyvern task API here, pass task.application.job_url,
   // task.profile, task.resume, and task.instructions. Pause before final submit.
   res.writeHead(501,{'content-type':'application/json'}).end(JSON.stringify({error:'Connect this adapter to Skyvern before enabling live automation.'}));
-}).listen(port,()=>console.log(`CareerNaviq worker adapter listening on ${port}`));
+}).listen(port,()=>console.log(`CarrerNaviq worker adapter listening on ${port}`));

@@ -1,36 +1,48 @@
-# CareerNaviq
+# CarrerNaviq
 
-CareerNaviq is a career directory and job search site with employer, recruiter, study material, interview preparation, interview support, and latest-jobs sections. The live site is [CareerNaviq](https://employer-directory.groovy-ghost-2604.chatgpt.site/).
+Career workspace for employers, recruiters, jobs, study materials, interview support, user/admin messages, and AI Auto Apply. [Live application](https://employer-directory.groovy-ghost-2604.chatgpt.site/).
 
-## Architecture
+## Project structure
 
-- **Frontend:** HTML, CSS, and browser JavaScript in `dist/`. The initial employer directory is `dist/companies.json`.
-- **Backend:** A Cloudflare Worker in `worker/index.js`, with job-source connectors in `worker/job-feeds.js`. `scripts/build.mjs` packages the frontend assets with the Worker as `dist/server/index.js`.
-- **Hosting:** OpenAI Sites, which deploys the Worker and static assets. `.openai/hosting.json` contains the Sites project ID and logical resource bindings.
-- **Database:** A Sites-managed Cloudflare D1 SQLite database, bound to the Worker as `DB`. `db/schema.ts` and `drizzle/` define and migrate its tables. The actual production database and its records are **not** stored in this repository.
-- **File storage:** A Sites-managed Cloudflare R2 bucket, bound as `BUCKET`, for uploaded PDF/Word materials. The actual uploaded files are **not** stored in this repository.
-- **Job sources:** Employer careers pages and public recruiting-board feeds (including Amazon careers, SmartRecruiters, Greenhouse, Lever, Ashby, and some careers RSS feeds). The user starts a source check with **Generate**; imported listings are stored in D1 and filtered by category, employer page, posted date, and experience.
-
-## Data stored in D1
-
-The schema includes employer edits and additions; access requests, user status and sessions; co-admins; review requests; recruiter/material/interview entries; user profiles; tab access settings; imported jobs; and job-source check results. Uploaded document metadata is in D1 while the file bytes are in R2. The 23,000-plus initial employer rows are a versioned JSON asset, while subsequent changes are in D1.
+- `dist/`: editable HTML, CSS, and browser JavaScript. Despite its name, this folder contains the frontend source. `companies.json` provides the initial employer directory.
+- `worker/index.js`: authenticated API routes and application services.
+- `worker/job-feeds.js`: job-source connectors and category matching.
+- `worker/chat.js`: message attachment parsing and private R2 storage helpers.
+- `worker/vault.js`: AES-GCM credential encryption and Vault table initialization.
+- `db/schema.ts` and `drizzle/`: D1 schema definitions and SQL migrations.
+- `auto-apply-worker/`: separate automation worker configuration and deployment instructions. Browser automation requires that external service; saving credentials does not connect or authenticate job accounts.
+- `scripts/build.mjs`: embeds frontend assets and backend helpers into the generated `dist/server/index.js` Worker entrypoint.
+- `tests/`: job feeds/import, attachment, and Vault verification.
 
 ## Development
 
 ```sh
 npm ci
-npm run build
-node tests/job-feeds.mjs
-node tests/job-import.mjs
+npm test
+npm run format:check
 ```
 
-Deployment uses the existing Sites project specified in `.openai/hosting.json`. A fresh deployment needs its own Sites project, D1 and R2 bindings, and all `drizzle/` migrations applied. Pushing to GitHub alone does **not** deploy the site or copy its production data.
+Use `npm run format` to apply consistent source formatting. Run `npm run build` before packaging a deployment. Generated Worker bundles and local deployment archives are excluded from Git.
 
-## Security note
+## Hosting and data
 
-The current application identifies users and its administrator by an email address entered in the UI; it does **not** verify ownership of that address. The admin email is present in the source code. This is not strong authentication and should be replaced with verified login before storing sensitive user data or treating admin access as secure. The GitHub repository should be kept private until this is fixed. Do not commit passwords, tokens, production database exports, or uploaded user documents.
+OpenAI Sites deploys the existing Worker, with Cloudflare D1 bound as `DB` and R2 bound as `BUCKET`. `.openai/hosting.json` identifies the existing Sites project. GitHub pushes do not publish the site or copy production database records, uploaded documents, or credentials.
 
-## Elite Technical job source
-Latest Posted Jobs now reads the fixed public Elite Technical listing page, not Employer Directory company pages. POST `/api/jobs/generate` refreshes all matching categories and POST `/api/jobs/query` applies category/search/date/experience filters. A three-minute database cooldown limits overlapping requests. Listings use stable Elite job IDs, source-provided calendar dates, and original detail/apply URLs. Dates have no time-of-day: the 24-hour option uses an inclusive calendar-date cutoff. Missing experience stays unknown. Failed source parsing preserves previous jobs. Refreshes close removed listings only after a successfully parsed complete listing page.
+Employer edits, access requests, profiles, messages, attachments metadata, job records, and Auto Apply state persist in D1. File bytes persist in R2. The Vault stores encrypted credentials in D1, scoped to the account email and provider. Runtime secrets are configured in Sites, never in source or frontend assets.
 
-The browser displays saved jobs immediately and can refresh stale data on opening. This alone is not an unattended schedule. The Site exposes authenticated MCP tools `refresh_elite_jobs` and `elite_jobs_status` for a cloud updater. Connect the Site plugin with a verified platform identity whose email is the directory administrator or a configured coadmin. Each scheduled run should call refresh_elite_jobs, then elite_jobs_status and verify saved counts/status; do not republish the website for data refreshes. Scheduling must be activated only after the connected tool is verified. Never put access credentials in schedule instructions.
+For a fresh installation, apply the SQL files in `drizzle/` in order and configure the D1/R2 bindings. Existing installations also initialize newer messaging and Vault tables idempotently at runtime.
+
+## Runtime configuration
+
+- `CREDENTIAL_VAULT_KEY`: secret, base64-encoded 32-byte AES key. Preserve it across deployments; changing it without re-encryption makes saved Vault entries unreadable.
+- `SKYVERN_WORKER_URL` and `AUTO_APPLY_WORKER_SECRET`: external automation service configuration. See `auto-apply-worker/README.md` for additional requirements.
+
+Passwords are never returned by the Vault API. Attachments require the conversation owner or an authorized admin. Upload limits are five files, 10 MB per file, and 25 MB per message.
+
+## Job refreshes
+
+Latest Posted Jobs displays saved listings. Double-clicking a technology tab requests a refresh; jobs are ordered by posting date, with 25 listings per page. Source failures preserve previously saved jobs. A database cooldown prevents overlapping refreshes. An unattended refresh requires a separately configured schedule; opening the page is not an unattended scheduler.
+
+## Authentication limitation
+
+The current access workflow identifies accounts by an entered email address and does not verify ownership of that address. Replace this with verified authentication before relying on it to protect sensitive production data. Encryption does not fix identity verification. Keep the repository private and never commit secrets, database exports, or user uploads.

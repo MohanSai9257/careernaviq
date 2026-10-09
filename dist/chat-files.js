@@ -1,7 +1,89 @@
-window.ChatFiles={
- bind(form){const textarea=form.querySelector('textarea'),submit=form.querySelector('[type=submit]');const picker=document.createElement('input');picker.type='file';picker.multiple=true;picker.hidden=true;const attach=document.createElement('button');attach.type='button';attach.className='chat-attach';attach.setAttribute('aria-label','Attach files');attach.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m8 13 6-6a3 3 0 0 1 4 4l-8 8a5 5 0 0 1-7-7l9-9a7 7 0 0 1 10 10l-9 9"/></svg>';form.prepend(attach,picker);const tray=document.createElement('div');tray.className='chat-file-tray';form.before(tray);let files=[];
- const render=()=>{tray.replaceChildren();for(const file of files){const chip=document.createElement('button');chip.type='button';chip.textContent=file.name+' ×';chip.title='Remove attachment';chip.onclick=()=>{files=files.filter(f=>f!==file);render();};tray.append(chip);}tray.hidden=!files.length;};
- const add=incoming=>{const next=[...files,...incoming];if(next.length>5||next.some(f=>f.size>10*1024*1024)||next.reduce((n,f)=>n+f.size,0)>25*1024*1024){alert('Choose up to 5 files, 10 MB each and 25 MB total.');return;}files=next;render();};attach.onclick=()=>picker.click();picker.onchange=()=>{add([...picker.files]);picker.value='';};textarea.addEventListener('paste',event=>{const pasted=[...(event.clipboardData?.files||[])];if(pasted.length){event.preventDefault();add(pasted);}});render();
- return {hasFiles:()=>files.length>0,body(text,email){const data=new FormData();data.append('body',text);if(email)data.append('email',email);for(const file of files)data.append('files',file,file.name);return data;},clear(){files=[];render();}};
- },render(container,attachments=[]){if(!attachments.length)return;const group=document.createElement('div');group.className='chat-attachments';for(const file of attachments){const link=document.createElement('a');link.href=file.url;link.textContent='📎 '+file.name;link.download=file.name;group.append(link);}container.append(group);}
+window.ChatFiles = {
+  bind(form) {
+    const textarea = form.querySelector('textarea'),
+      submit = form.querySelector('[type=submit]');
+    const picker = document.createElement('input');
+    picker.type = 'file';
+    picker.multiple = true;
+    picker.hidden = true;
+    const attach = document.createElement('button');
+    attach.type = 'button';
+    attach.className = 'chat-attach';
+    attach.setAttribute('aria-label', 'Attach files');
+    attach.innerHTML =
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m8 13 6-6a3 3 0 0 1 4 4l-8 8a5 5 0 0 1-7-7l9-9a7 7 0 0 1 10 10l-9 9"/></svg>';
+    form.prepend(attach, picker);
+    const tray = document.createElement('div');
+    tray.className = 'chat-file-tray';
+    form.before(tray);
+    let files = [];
+    const render = () => {
+      tray.replaceChildren();
+      for (const file of files) {
+        const chip = document.createElement('button');
+        chip.type = 'button';
+        chip.textContent = file.name + ' ×';
+        chip.title = 'Remove attachment';
+        chip.onclick = () => {
+          files = files.filter((f) => f !== file);
+          render();
+        };
+        tray.append(chip);
+      }
+      tray.hidden = !files.length;
+    };
+    const add = (incoming) => {
+      const next = [...files, ...incoming];
+      if (
+        next.length > 5 ||
+        next.some((f) => f.size > 10 * 1024 * 1024) ||
+        next.reduce((n, f) => n + f.size, 0) > 25 * 1024 * 1024
+      ) {
+        alert('Choose up to 5 files, 10 MB each and 25 MB total.');
+        return;
+      }
+      files = next;
+      render();
+    };
+    attach.onclick = () => picker.click();
+    picker.onchange = () => {
+      add([...picker.files]);
+      picker.value = '';
+    };
+    textarea.addEventListener('paste', (event) => {
+      const pasted = [...(event.clipboardData?.files || [])];
+      if (pasted.length) {
+        event.preventDefault();
+        add(pasted);
+      }
+    });
+    render();
+    return {
+      hasFiles: () => files.length > 0,
+      body(text, email) {
+        const data = new FormData();
+        data.append('body', text);
+        if (email) data.append('email', email);
+        for (const file of files) data.append('files', file, file.name);
+        return data;
+      },
+      clear() {
+        files = [];
+        render();
+      },
+    };
+  },
+  render(container, attachments = []) {
+    if (!attachments.length) return;
+    const group = document.createElement('div');
+    group.className = 'chat-attachments';
+    for (const file of attachments) {
+      const link = document.createElement('a');
+      link.href = file.url;
+      link.textContent = '📎 ' + file.name;
+      link.download = file.name;
+      group.append(link);
+    }
+    container.append(group);
+  },
 };

@@ -1,129 +1,625 @@
 <!doctype html>
 <html lang="en">
-<head>
-  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta name="description" content="AI Auto Apply for CareerNaviq.">
-  <title>AI Auto Apply — CareerNaviq</title>
-  <link rel="icon" type="image/svg+xml" href="/logo.svg">
-  <link rel="stylesheet" href="/style.css">
-  <script src="/sidebar.js" defer></script>
-  <script src="/ai-auto-apply.js" defer></script>
-  <script src="/profile.js" defer></script>
-  <script src="/vault.js" defer></script>
-</head>
-<body>
-  <header class="masthead">
-    <div class="wrap brand"><img class="brand-logo" src="/logo.svg" alt=""><span>CareerNaviq</span><div id="profile-greeting" class="profile-greeting" hidden></div><div class="role-control"><span id="section-role" class="public-label">User</span><button id="section-logout" type="button">Logout</button></div></div>
-  </header>
-  <main id="auto-apply-page" class="wrap auto-apply-page" hidden>
-    <div class="auto-apply-hero">
-      <div><p class="eyebrow">CAREERNAVIQ</p><h1>AI Auto Apply</h1></div>
-    </div>
-    <nav class="auto-tabs" role="tablist" aria-label="AI Auto Apply sections">
-      <button type="button" role="tab" data-panel="dashboard" aria-selected="true">Dashboard</button>
-      <button type="button" role="tab" data-panel="apply-profile">AI Apply Profile</button>
-      <button type="button" role="tab" data-panel="vault">Vault</button>
-      <button type="button" role="tab" data-panel="agent">AI Agent</button>
-      <button type="button" role="tab" data-panel="blockers">Blockers</button>
-      <button type="button" role="tab" data-panel="tracker">Application Tracker</button>
-      <button type="button" role="tab" data-panel="settings">Agent Settings</button>
-    </nav>
-    <section id="panel-apply-profile" class="auto-panel" role="tabpanel" hidden><div id="profile-page" hidden>
-    
-    <section class="profile-card profile-resume-card">
-      <h2>Resume Manager</h2>
-      <p class="form-hint">Upload resume versions here. AI Auto Apply will use the selected/default resume from your Profile.</p>
-      <form id="profile-resume-form" class="auto-form inline"><label>Resume Name<input id="profile-resume-name" maxlength="120" placeholder="Java full stack resume"></label><label>Resume File<input id="profile-resume-file" type="file" accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" required></label><label class="check-row"><input id="profile-resume-default" type="checkbox"> Default</label><button type="submit" class="primary">Upload resume</button></form>
-      <div id="profile-resume-list" class="auto-list"></div>
-    </section>
-    <section class="profile-card">
-      <form id="profile-form">
-        <p class="form-hint">CareerNaviq uses this profile for AI Auto Apply. Share only verified details. Leave anything blank if you do not want it used.</p>
-        <div class="profile-fields profile-fields-wide">
-          <label>First Name<input id="profile-first" name="firstName" maxlength="80" autocomplete="given-name"></label>
-          <label>Last Name<input id="profile-last" name="lastName" maxlength="80" autocomplete="family-name"></label>
-          <label>Legal Name<input id="profile-legal-name" name="legalName" maxlength="180" placeholder="Full legal name used on applications"></label>
-          <label>Job Application Gmail<input id="profile-application-email" name="applicationEmail" type="email" maxlength="254" placeholder="Email to use on job applications"></label>
-          <div class="profile-phone-field"><span>Mobile Number</span><div class="phone-combo"><select id="profile-mobile-country" name="mobileCountryCode" aria-label="Country code"><option value="+1">🇺🇸 +1</option><option value="+91">🇮🇳 +91</option><option value="+44">🇬🇧 +44</option><option value="+1-CA">🇨🇦 +1</option><option value="+61">🇦🇺 +61</option><option value="+49">🇩🇪 +49</option><option value="+33">🇫🇷 +33</option><option value="+65">🇸🇬 +65</option><option value="+971">🇦🇪 +971</option><option value="+81">🇯🇵 +81</option></select><input id="profile-mobile" name="mobile" type="tel" maxlength="40" autocomplete="tel-national" placeholder="Phone number"></div></div>
-          <label>Work Authorization<select id="profile-work-authorization"><option value="">Select authorization</option><option>U.S. Citizen</option><option>Green Card / Permanent Resident</option><option>H1B</option><option>H4 EAD</option><option>L2 EAD</option><option>OPT</option><option>STEM OPT</option><option>CPT</option><option>TN Visa</option><option>Requires sponsorship now</option><option>Requires sponsorship in the future</option><option>Other work authorization</option></select></label>
-          <label>Address Line<input id="profile-address" maxlength="240" placeholder="Street address"></label>
-          <label>City<input id="profile-city" maxlength="100"></label>
-          <label>State<input id="profile-state" maxlength="80"></label>
-          <label>ZIP Code<input id="profile-zip" maxlength="20"></label>
-          <label>Current Location<input id="profile-location" name="location" maxlength="160" placeholder="City, State"></label>
-          <label>LinkedIn URL<input id="profile-linkedin" type="url" maxlength="500" placeholder="https://www.linkedin.com/in/..."></label>
-          <label>Portfolio URL<input id="profile-portfolio" type="url" maxlength="500" placeholder="https://..."></label>
-          <label>GitHub URL<input id="profile-github" type="url" maxlength="500" placeholder="https://github.com/..."></label>
-          <label>University<input id="profile-university" maxlength="200" placeholder="University name"></label>
-          <label>Degree<input id="profile-degree" maxlength="200" placeholder="Master's in Computer Science"></label>
-          <label>Education Start Month<select id="profile-edu-start-month"><option value="">Month</option><option>January</option><option>February</option><option>March</option><option>April</option><option>May</option><option>June</option><option>July</option><option>August</option><option>September</option><option>October</option><option>November</option><option>December</option></select></label>
-          <label>Education Start Year<input id="profile-edu-start-year" type="number" min="1950" max="2100" placeholder="2020"></label>
-          <label>Education Completed Month<select id="profile-edu-end-month"><option value="">Month</option><option>January</option><option>February</option><option>March</option><option>April</option><option>May</option><option>June</option><option>July</option><option>August</option><option>September</option><option>October</option><option>November</option><option>December</option></select></label>
-          <label>Education Completed Year<input id="profile-edu-end-year" type="number" min="1950" max="2100" placeholder="2024"></label>
-          <label>Earliest Start Date<input id="profile-start-date" type="date"></label>
-          <label>Employment Type<select id="profile-employment-type"><option value="">Any / Not specified</option><option>Full-time</option><option>Contract - W2</option><option>Contract - C2C</option><option>Contract - 1099</option><option>Contract-to-hire</option><option>Part-time</option><option>Internship</option></select></label>
-          <label>Relocation Preference<select id="profile-relocation"><option value="">Select preference</option><option>Open to relocate</option><option>Not open to relocate</option><option>Remote only</option><option>Hybrid only</option><option>On-site only</option><option>Within current city</option><option>Within current state</option><option>Anywhere in the U.S.</option><option>Specific locations only</option></select></label>
-          <label>Minimum Salary<input id="profile-salary-min" type="number" min="0" step="1000" placeholder="Minimum annual salary"></label>
-          <label>Maximum Salary<input id="profile-salary-max" type="number" min="0" step="1000" placeholder="Maximum annual salary"></label>
-          <label>Minimum Hourly Rate<input id="profile-hourly-min" type="number" min="0" step="1" placeholder="Minimum hourly"></label>
-          <label>Maximum Hourly Rate<input id="profile-hourly-max" type="number" min="0" step="1" placeholder="Maximum hourly"></label>
-          <label>Experience<textarea id="profile-experience" rows="3" maxlength="3000" placeholder="Years of experience, recent roles, domains"></textarea></label>
-          <label>Skills<textarea id="profile-skills" rows="3" maxlength="3000" placeholder="Java, Spring Boot, AWS, SQL..."></textarea></label>
-          <label>Certifications<textarea id="profile-certifications" rows="3" maxlength="2000"></textarea></label>
-          <label>Sponsorship Details<textarea id="profile-sponsorship" rows="3" maxlength="2000" placeholder="Only if needed. Example: will need H1B transfer / future sponsorship."></textarea></label>
-          <label>Job Preferences Notes<textarea id="profile-job-preferences" rows="3" maxlength="2000" placeholder="Preferred titles, industries, shifts, locations"></textarea></label>
-          <label>Approved Screening Answers<textarea id="profile-screening" rows="4" maxlength="5000" placeholder="Only answers you approve the agent to reuse. Sensitive answers are revalidated before use."></textarea></label>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="description" content="AI Auto Apply for CarrerNaviq." />
+    <title>AI Auto Apply — CarrerNaviq</title>
+    <link rel="icon" type="image/svg+xml" href="/logo.svg" />
+    <link rel="stylesheet" href="/style.css" />
+    <script src="/sidebar.js" defer></script>
+    <script src="/ai-auto-apply.js" defer></script>
+    <script src="/profile.js" defer></script>
+    <script src="/vault.js" defer></script>
+  </head>
+  <body>
+    <header class="masthead">
+      <div class="wrap brand">
+        <img class="brand-logo" src="/logo.svg" alt="" /><span
+          >CarrerNaviq</span
+        >
+        <div id="profile-greeting" class="profile-greeting" hidden></div>
+        <div class="role-control">
+          <span id="section-role" class="public-label">User</span
+          ><button id="section-logout" type="button">Logout</button>
         </div>
-        <p id="profile-message" role="status" aria-live="polite"></p>
-        <button type="submit" class="primary">Save profile</button>
+      </div>
+    </header>
+    <main id="auto-apply-page" class="wrap auto-apply-page" hidden>
+      <div class="auto-apply-hero">
+        <div>
+          <p class="eyebrow">CARRERNAVIQ</p>
+          <h1>AI Auto Apply</h1>
+        </div>
+      </div>
+      <nav class="auto-tabs" role="tablist" aria-label="AI Auto Apply sections">
+        <button
+          type="button"
+          role="tab"
+          data-panel="dashboard"
+          aria-selected="true"
+        >
+          Dashboard
+        </button>
+        <button type="button" role="tab" data-panel="apply-profile">
+          AI Apply Profile
+        </button>
+        <button type="button" role="tab" data-panel="vault">Vault</button>
+        <button type="button" role="tab" data-panel="agent">AI Agent</button>
+        <button type="button" role="tab" data-panel="blockers">Blockers</button>
+        <button type="button" role="tab" data-panel="tracker">
+          Application Tracker
+        </button>
+        <button type="button" role="tab" data-panel="settings">
+          Agent Settings
+        </button>
+      </nav>
+      <section
+        id="panel-apply-profile"
+        class="auto-panel"
+        role="tabpanel"
+        hidden
+      >
+        <div id="profile-page" hidden>
+          <section class="profile-card profile-resume-card">
+            <h2>Resume Manager</h2>
+            <p class="form-hint">
+              Upload resume versions here. AI Auto Apply will use the
+              selected/default resume from your Profile.
+            </p>
+            <form id="profile-resume-form" class="auto-form inline">
+              <label
+                >Resume Name<input
+                  id="profile-resume-name"
+                  maxlength="120"
+                  placeholder="Java full stack resume" /></label
+              ><label
+                >Resume File<input
+                  id="profile-resume-file"
+                  type="file"
+                  accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                  required /></label
+              ><label class="check-row"
+                ><input id="profile-resume-default" type="checkbox" />
+                Default</label
+              ><button type="submit" class="primary">Upload resume</button>
+            </form>
+            <div id="profile-resume-list" class="auto-list"></div>
+          </section>
+          <section class="profile-card">
+            <form id="profile-form">
+              <p class="form-hint">
+                CarrerNaviq uses this profile for AI Auto Apply. Share only
+                verified details. Leave anything blank if you do not want it
+                used.
+              </p>
+              <div class="profile-fields profile-fields-wide">
+                <label
+                  >First Name<input
+                    id="profile-first"
+                    name="firstName"
+                    maxlength="80"
+                    autocomplete="given-name"
+                /></label>
+                <label
+                  >Last Name<input
+                    id="profile-last"
+                    name="lastName"
+                    maxlength="80"
+                    autocomplete="family-name"
+                /></label>
+                <label
+                  >Legal Name<input
+                    id="profile-legal-name"
+                    name="legalName"
+                    maxlength="180"
+                    placeholder="Full legal name used on applications"
+                /></label>
+                <label
+                  >Job Application Gmail<input
+                    id="profile-application-email"
+                    name="applicationEmail"
+                    type="email"
+                    maxlength="254"
+                    placeholder="Email to use on job applications"
+                /></label>
+                <div class="profile-phone-field">
+                  <span>Mobile Number</span>
+                  <div class="phone-combo">
+                    <select
+                      id="profile-mobile-country"
+                      name="mobileCountryCode"
+                      aria-label="Country code"
+                    >
+                      <option value="+1">🇺🇸 +1</option>
+                      <option value="+91">🇮🇳 +91</option>
+                      <option value="+44">🇬🇧 +44</option>
+                      <option value="+1-CA">🇨🇦 +1</option>
+                      <option value="+61">🇦🇺 +61</option>
+                      <option value="+49">🇩🇪 +49</option>
+                      <option value="+33">🇫🇷 +33</option>
+                      <option value="+65">🇸🇬 +65</option>
+                      <option value="+971">🇦🇪 +971</option>
+                      <option value="+81">🇯🇵 +81</option></select
+                    ><input
+                      id="profile-mobile"
+                      name="mobile"
+                      type="tel"
+                      maxlength="40"
+                      autocomplete="tel-national"
+                      placeholder="Phone number"
+                    />
+                  </div>
+                </div>
+                <label
+                  >Work Authorization<select id="profile-work-authorization">
+                    <option value="">Select authorization</option>
+                    <option>U.S. Citizen</option>
+                    <option>Green Card / Permanent Resident</option>
+                    <option>H1B</option>
+                    <option>H4 EAD</option>
+                    <option>L2 EAD</option>
+                    <option>OPT</option>
+                    <option>STEM OPT</option>
+                    <option>CPT</option>
+                    <option>TN Visa</option>
+                    <option>Requires sponsorship now</option>
+                    <option>Requires sponsorship in the future</option>
+                    <option>Other work authorization</option>
+                  </select></label
+                >
+                <label
+                  >Address Line<input
+                    id="profile-address"
+                    maxlength="240"
+                    placeholder="Street address"
+                /></label>
+                <label>City<input id="profile-city" maxlength="100" /></label>
+                <label>State<input id="profile-state" maxlength="80" /></label>
+                <label>ZIP Code<input id="profile-zip" maxlength="20" /></label>
+                <label
+                  >Current Location<input
+                    id="profile-location"
+                    name="location"
+                    maxlength="160"
+                    placeholder="City, State"
+                /></label>
+                <label
+                  >LinkedIn URL<input
+                    id="profile-linkedin"
+                    type="url"
+                    maxlength="500"
+                    placeholder="https://www.linkedin.com/in/..."
+                /></label>
+                <label
+                  >Portfolio URL<input
+                    id="profile-portfolio"
+                    type="url"
+                    maxlength="500"
+                    placeholder="https://..."
+                /></label>
+                <label
+                  >GitHub URL<input
+                    id="profile-github"
+                    type="url"
+                    maxlength="500"
+                    placeholder="https://github.com/..."
+                /></label>
+                <label
+                  >University<input
+                    id="profile-university"
+                    maxlength="200"
+                    placeholder="University name"
+                /></label>
+                <label
+                  >Degree<input
+                    id="profile-degree"
+                    maxlength="200"
+                    placeholder="Master's in Computer Science"
+                /></label>
+                <label
+                  >Education Start Month<select id="profile-edu-start-month">
+                    <option value="">Month</option>
+                    <option>January</option>
+                    <option>February</option>
+                    <option>March</option>
+                    <option>April</option>
+                    <option>May</option>
+                    <option>June</option>
+                    <option>July</option>
+                    <option>August</option>
+                    <option>September</option>
+                    <option>October</option>
+                    <option>November</option>
+                    <option>December</option>
+                  </select></label
+                >
+                <label
+                  >Education Start Year<input
+                    id="profile-edu-start-year"
+                    type="number"
+                    min="1950"
+                    max="2100"
+                    placeholder="2020"
+                /></label>
+                <label
+                  >Education Completed Month<select id="profile-edu-end-month">
+                    <option value="">Month</option>
+                    <option>January</option>
+                    <option>February</option>
+                    <option>March</option>
+                    <option>April</option>
+                    <option>May</option>
+                    <option>June</option>
+                    <option>July</option>
+                    <option>August</option>
+                    <option>September</option>
+                    <option>October</option>
+                    <option>November</option>
+                    <option>December</option>
+                  </select></label
+                >
+                <label
+                  >Education Completed Year<input
+                    id="profile-edu-end-year"
+                    type="number"
+                    min="1950"
+                    max="2100"
+                    placeholder="2024"
+                /></label>
+                <label
+                  >Earliest Start Date<input
+                    id="profile-start-date"
+                    type="date"
+                /></label>
+                <label
+                  >Employment Type<select id="profile-employment-type">
+                    <option value="">Any / Not specified</option>
+                    <option>Full-time</option>
+                    <option>Contract - W2</option>
+                    <option>Contract - C2C</option>
+                    <option>Contract - 1099</option>
+                    <option>Contract-to-hire</option>
+                    <option>Part-time</option>
+                    <option>Internship</option>
+                  </select></label
+                >
+                <label
+                  >Relocation Preference<select id="profile-relocation">
+                    <option value="">Select preference</option>
+                    <option>Open to relocate</option>
+                    <option>Not open to relocate</option>
+                    <option>Remote only</option>
+                    <option>Hybrid only</option>
+                    <option>On-site only</option>
+                    <option>Within current city</option>
+                    <option>Within current state</option>
+                    <option>Anywhere in the U.S.</option>
+                    <option>Specific locations only</option>
+                  </select></label
+                >
+                <label
+                  >Minimum Salary<input
+                    id="profile-salary-min"
+                    type="number"
+                    min="0"
+                    step="1000"
+                    placeholder="Minimum annual salary"
+                /></label>
+                <label
+                  >Maximum Salary<input
+                    id="profile-salary-max"
+                    type="number"
+                    min="0"
+                    step="1000"
+                    placeholder="Maximum annual salary"
+                /></label>
+                <label
+                  >Minimum Hourly Rate<input
+                    id="profile-hourly-min"
+                    type="number"
+                    min="0"
+                    step="1"
+                    placeholder="Minimum hourly"
+                /></label>
+                <label
+                  >Maximum Hourly Rate<input
+                    id="profile-hourly-max"
+                    type="number"
+                    min="0"
+                    step="1"
+                    placeholder="Maximum hourly"
+                /></label>
+                <label
+                  >Experience<textarea
+                    id="profile-experience"
+                    rows="3"
+                    maxlength="3000"
+                    placeholder="Years of experience, recent roles, domains"
+                  ></textarea>
+                </label>
+                <label
+                  >Skills<textarea
+                    id="profile-skills"
+                    rows="3"
+                    maxlength="3000"
+                    placeholder="Java, Spring Boot, AWS, SQL..."
+                  ></textarea>
+                </label>
+                <label
+                  >Certifications<textarea
+                    id="profile-certifications"
+                    rows="3"
+                    maxlength="2000"
+                  ></textarea>
+                </label>
+                <label
+                  >Sponsorship Details<textarea
+                    id="profile-sponsorship"
+                    rows="3"
+                    maxlength="2000"
+                    placeholder="Only if needed. Example: will need H1B transfer / future sponsorship."
+                  ></textarea>
+                </label>
+                <label
+                  >Job Preferences Notes<textarea
+                    id="profile-job-preferences"
+                    rows="3"
+                    maxlength="2000"
+                    placeholder="Preferred titles, industries, shifts, locations"
+                  ></textarea>
+                </label>
+                <label
+                  >Approved Screening Answers<textarea
+                    id="profile-screening"
+                    rows="4"
+                    maxlength="5000"
+                    placeholder="Only answers you approve the agent to reuse. Sensitive answers are revalidated before use."
+                  ></textarea>
+                </label>
+              </div>
+              <p id="profile-message" role="status" aria-live="polite"></p>
+              <button type="submit" class="primary">Save profile</button>
+            </form>
+          </section>
+        </div>
+      </section>
+      <section id="panel-vault" class="auto-panel" role="tabpanel" hidden>
+        <div class="auto-card">
+          <h2>Vault</h2>
+          <p class="form-hint">
+            Your credentials are encrypted and private. Saving does not sign you
+            in.
+          </p>
+          <div id="vault-accounts" class="vault-accounts"></div>
+        </div>
+      </section>
+      <p
+        id="auto-message"
+        class="section-status"
+        role="status"
+        aria-live="polite"
+      ></p>
+
+      <section id="panel-dashboard" class="auto-panel" role="tabpanel">
+        <div id="worker-status" class="auto-status-card">Checking worker…</div>
+        <div id="dashboard-cards" class="analytics-grid"></div>
+        <div class="auto-controls">
+          <button id="start-agent" class="primary" type="button">
+            Start Agent</button
+          ><button id="pause-agent" type="button">Pause Agent</button
+          ><button id="resume-agent" type="button">Resume Agent</button
+          ><button id="stop-agent" class="danger" type="button">
+            Stop Agent</button
+          ><button id="refresh-auto" type="button">View Activity</button>
+        </div>
+        <div class="auto-card">
+          <h2>Recent activity</h2>
+          <div id="activity-list" class="auto-list"></div>
+        </div>
+      </section>
+
+      <section id="panel-resumes" class="auto-panel" role="tabpanel" hidden>
+        <div class="auto-card">
+          <h2>Upload resume</h2>
+          <form id="resume-form" class="auto-form">
+            <label
+              >Name<input
+                id="resume-name"
+                maxlength="120"
+                placeholder="Java backend resume" /></label
+            ><label
+              >Resume file<input
+                id="resume-file"
+                type="file"
+                accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                required /></label
+            ><label class="check-row"
+              ><input id="resume-default" type="checkbox" /> Make default
+              resume</label
+            ><button class="primary" type="submit">Upload resume</button>
+          </form>
+        </div>
+        <div class="auto-card">
+          <h2>Resume versions</h2>
+          <div id="resume-list" class="auto-list"></div>
+        </div>
+      </section>
+
+      <section id="panel-matching" class="auto-panel" role="tabpanel" hidden>
+        <div class="auto-card">
+          <h2>Job Matching</h2>
+          <form id="match-form" class="auto-form inline">
+            <label
+              >Category<select id="match-category">
+                <option value="java">Java</option>
+                <option value="data">Data</option>
+                <option value="devops">DevOps</option>
+                <option value="validation">Validation</option>
+              </select></label
+            ><label
+              >Minimum score<input
+                id="match-min"
+                type="number"
+                min="0"
+                max="100"
+                value="60" /></label
+            ><label>Resume<select id="match-resume"></select></label
+            ><button class="primary" type="submit">Find matches</button>
+          </form>
+          <div id="match-list" class="auto-list"></div>
+        </div>
+      </section>
+
+      <section id="panel-agent" class="auto-panel" role="tabpanel" hidden>
+        <div class="auto-card">
+          <h2>AI Agent</h2>
+          <p class="form-hint">
+            The agent prepares applications and pauses for final approval before
+            submission. Actual browser automation requires the Skyvern/Ollama
+            worker to be configured.
+          </p>
+          <form id="agent-form" class="auto-form">
+            <label
+              >Natural-language instructions<textarea
+                id="agent-instructions"
+                rows="4"
+                placeholder="Use my default resume. Stop before final submit. Do not answer sponsorship/legal questions unless saved in my answer library."
+              ></textarea></label
+            ><label
+              >Application ID<input
+                id="agent-application-id"
+                placeholder="Paste an application ID from the tracker" /></label
+            ><button class="primary" type="submit">
+              Start selected application
+            </button>
+          </form>
+        </div>
+      </section>
+
+      <section id="panel-blockers" class="auto-panel" role="tabpanel" hidden>
+        <div class="auto-card">
+          <h2>Blockers</h2>
+          <div id="blocker-list" class="auto-list"></div>
+        </div>
+      </section>
+
+      <section id="panel-tracker" class="auto-panel" role="tabpanel" hidden>
+        <div class="auto-card">
+          <h2>Application Tracker</h2>
+          <div class="auto-filter">
+            <select id="tracker-status">
+              <option value="">All statuses</option>
+              <option>MATCHED</option>
+              <option>QUEUED</option>
+              <option>IN_PROGRESS</option>
+              <option>BLOCKED</option>
+              <option>READY_FOR_REVIEW</option>
+              <option>SUBMITTED</option>
+              <option>FAILED</option>
+              <option>SKIPPED</option>
+            </select>
+          </div>
+          <div id="tracker-list" class="auto-list"></div>
+        </div>
+      </section>
+
+      <section id="panel-settings" class="auto-panel" role="tabpanel" hidden>
+        <div class="auto-card">
+          <h2>Agent Settings</h2>
+          <form id="settings-form" class="auto-form inline">
+            <label
+              >Daily limit<input
+                id="daily-limit"
+                type="number"
+                min="0"
+                max="100"
+                value="10" /></label
+            ><label
+              >Minimum match score<input
+                id="minimum-score"
+                type="number"
+                min="0"
+                max="100"
+                value="70" /></label
+            ><label class="check-row"
+              ><input id="require-review" type="checkbox" checked /> Require
+              final approval before submit</label
+            ><button class="primary" type="submit">Save settings</button>
+          </form>
+          <p class="form-hint">
+            Skyvern worker URL, shared secret, OAuth client IDs, and Ollama
+            model are configured as server-side environment values, not in the
+            browser.
+          </p>
+        </div>
+      </section>
+    </main>
+    <dialog
+      id="profile-accounts-dialog"
+      class="connect-dialog"
+      aria-labelledby="profile-accounts-title"
+    >
+      <form id="profile-accounts-form">
+        <div class="connect-header">
+          <div id="connect-provider-logo" class="connect-logo">M</div>
+          <div>
+            <h2 id="profile-accounts-title">Connect Gmail</h2>
+            <p id="connect-provider-subtitle">Job account</p>
+            <strong id="connect-provider-name">Gmail</strong>
+          </div>
+        </div>
+        <p class="connect-note">
+          Your credentials stay private and secure. Only you can manage this
+          connection.
+        </p>
+        <input id="account-provider" type="hidden" value="gmail" />
+        <label
+          >Email ID<input
+            id="account-email"
+            type="email"
+            autocomplete="username"
+            placeholder="you@company.com"
+        /></label>
+        <label
+          >Password
+          <div class="password-shell">
+            <input
+              id="account-password"
+              type="password"
+              autocomplete="current-password"
+              placeholder="••••••••"
+            /><button
+              id="account-password-toggle"
+              type="button"
+              aria-label="Show password"
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path
+                  d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.8"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+                <circle
+                  cx="12"
+                  cy="12"
+                  r="3"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.8"
+                />
+              </svg>
+            </button></div
+        ></label>
+        <p id="profile-accounts-message" role="alert" hidden></p>
+        <div class="dialog-actions">
+          <button id="profile-accounts-cancel" type="button">Cancel</button
+          ><button type="submit" class="primary">Connect</button>
+        </div>
       </form>
-    </section>
-  </div></section>
-    <section id="panel-vault" class="auto-panel" role="tabpanel" hidden><div class="auto-card"><h2>Vault</h2><p class="form-hint">Your credentials are encrypted and private. Saving does not sign you in.</p><div id="vault-accounts" class="vault-accounts"></div></div></section>
-    <p id="auto-message" class="section-status" role="status" aria-live="polite"></p>
-
-    <section id="panel-dashboard" class="auto-panel" role="tabpanel">
-      <div id="worker-status" class="auto-status-card">Checking worker…</div>
-      <div id="dashboard-cards" class="analytics-grid"></div>
-      <div class="auto-controls"><button id="start-agent" class="primary" type="button">Start Agent</button><button id="pause-agent" type="button">Pause Agent</button><button id="resume-agent" type="button">Resume Agent</button><button id="stop-agent" class="danger" type="button">Stop Agent</button><button id="refresh-auto" type="button">View Activity</button></div>
-      <div class="auto-card"><h2>Recent activity</h2><div id="activity-list" class="auto-list"></div></div>
-    </section>
-
-<section id="panel-resumes" class="auto-panel" role="tabpanel" hidden>
-      <div class="auto-card"><h2>Upload resume</h2><form id="resume-form" class="auto-form"><label>Name<input id="resume-name" maxlength="120" placeholder="Java backend resume"></label><label>Resume file<input id="resume-file" type="file" accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" required></label><label class="check-row"><input id="resume-default" type="checkbox"> Make default resume</label><button class="primary" type="submit">Upload resume</button></form></div>
-      <div class="auto-card"><h2>Resume versions</h2><div id="resume-list" class="auto-list"></div></div>
-    </section>
-
-<section id="panel-matching" class="auto-panel" role="tabpanel" hidden>
-      <div class="auto-card"><h2>Job Matching</h2><form id="match-form" class="auto-form inline"><label>Category<select id="match-category"><option value="java">Java</option><option value="data">Data</option><option value="devops">DevOps</option><option value="validation">Validation</option></select></label><label>Minimum score<input id="match-min" type="number" min="0" max="100" value="60"></label><label>Resume<select id="match-resume"></select></label><button class="primary" type="submit">Find matches</button></form><div id="match-list" class="auto-list"></div></div>
-    </section>
-
-    <section id="panel-agent" class="auto-panel" role="tabpanel" hidden>
-      <div class="auto-card"><h2>AI Agent</h2><p class="form-hint">The agent prepares applications and pauses for final approval before submission. Actual browser automation requires the Skyvern/Ollama worker to be configured.</p><form id="agent-form" class="auto-form"><label>Natural-language instructions<textarea id="agent-instructions" rows="4" placeholder="Use my default resume. Stop before final submit. Do not answer sponsorship/legal questions unless saved in my answer library."></textarea></label><label>Application ID<input id="agent-application-id" placeholder="Paste an application ID from the tracker"></label><button class="primary" type="submit">Start selected application</button></form></div>
-    </section>
-
-    <section id="panel-blockers" class="auto-panel" role="tabpanel" hidden>
-      <div class="auto-card"><h2>Blockers</h2><div id="blocker-list" class="auto-list"></div></div>
-    </section>
-
-<section id="panel-tracker" class="auto-panel" role="tabpanel" hidden>
-      <div class="auto-card"><h2>Application Tracker</h2><div class="auto-filter"><select id="tracker-status"><option value="">All statuses</option><option>MATCHED</option><option>QUEUED</option><option>IN_PROGRESS</option><option>BLOCKED</option><option>READY_FOR_REVIEW</option><option>SUBMITTED</option><option>FAILED</option><option>SKIPPED</option></select></div><div id="tracker-list" class="auto-list"></div></div>
-    </section>
-
-    <section id="panel-settings" class="auto-panel" role="tabpanel" hidden>
-      <div class="auto-card"><h2>Agent Settings</h2><form id="settings-form" class="auto-form inline"><label>Daily limit<input id="daily-limit" type="number" min="0" max="100" value="10"></label><label>Minimum match score<input id="minimum-score" type="number" min="0" max="100" value="70"></label><label class="check-row"><input id="require-review" type="checkbox" checked> Require final approval before submit</label><button class="primary" type="submit">Save settings</button></form><p class="form-hint">Skyvern worker URL, shared secret, OAuth client IDs, and Ollama model are configured as server-side environment values, not in the browser.</p></div>
-    </section>
-  </main>
-  <dialog id="profile-accounts-dialog" class="connect-dialog" aria-labelledby="profile-accounts-title">
-    <form id="profile-accounts-form">
-      <div class="connect-header"><div id="connect-provider-logo" class="connect-logo">M</div><div><h2 id="profile-accounts-title">Connect Gmail</h2><p id="connect-provider-subtitle">Job account</p><strong id="connect-provider-name">Gmail</strong></div></div>
-      <p class="connect-note">Your credentials stay private and secure. Only you can manage this connection.</p>
-      <input id="account-provider" type="hidden" value="gmail">
-      <label>Email ID<input id="account-email" type="email" autocomplete="username" placeholder="you@company.com"></label>
-      <label>Password<div class="password-shell"><input id="account-password" type="password" autocomplete="current-password" placeholder="••••••••"><button id="account-password-toggle" type="button" aria-label="Show password"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="1.8"/></svg></button></div></label>
-      <p id="profile-accounts-message" role="alert" hidden></p>
-      <div class="dialog-actions"><button id="profile-accounts-cancel" type="button">Cancel</button><button type="submit" class="primary">Connect</button></div>
-    </form>
-  </dialog>
-</body>
+    </dialog>
+  </body>
 </html>

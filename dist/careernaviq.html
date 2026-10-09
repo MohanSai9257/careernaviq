@@ -1,52 +1,254 @@
 <!doctype html>
 <html lang="en">
-<head>
-  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta name="description" content="CareerNaviq home and user profile.">
-  <title>CareerNaviq — Home</title>
-  <link rel="icon" type="image/svg+xml" href="/logo.svg">
-  <link rel="stylesheet" href="/style.css">
-  <script src="/chat-files.js" defer></script>
-  <script src="/sidebar.js" defer></script>
-  <script src="/careernaviq.js" defer></script>
-  <script src="/profile.js" defer></script>
-</head>
-<body>
-  <header class="masthead">
-    <div class="wrap brand"><img class="brand-logo" src="/logo.svg" alt=""><span>CareerNaviq</span><div id="profile-greeting" class="profile-greeting" hidden></div><div class="role-control"><span id="career-role" class="public-label">User</span><button id="career-logout" type="button">Logout</button></div></div>
-  </header>
-  <main id="career-page" class="wrap career-page" hidden>
-    <div class="career-hero">
-      <div><p class="eyebrow">CAREERNAVIQ</p><h1>Home</h1></div>
-      <div class="career-profile-chip"><img src="/logo.svg" alt=""><div><span id="career-chip-name">CareerNaviq User</span><small id="career-chip-email">Loading account…</small></div></div>
-    </div>
-    <nav class="career-tabs" role="tablist" aria-label="CareerNaviq home sections">
-      <button type="button" role="tab" data-career-panel="home" aria-selected="true"><span class="career-tab-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 10v6"/><path d="M12 7h.01"/></svg></span><span>About</span></button>
-      <button type="button" role="tab" data-career-panel="notifications" aria-selected="false"><span aria-hidden="true">🔔</span><span>Notifications</span></button>
-      <button type="button" role="tab" data-career-panel="ask" aria-selected="false"><span class="career-tab-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 8.8 8.8 0 0 1-3.8-.9L3 20l1.2-4.2A8.2 8.2 0 0 1 3 11.5 8.5 8.5 0 0 1 12 3a8.5 8.5 0 0 1 9 8.5Z"/><path d="M8 10h8M8 14h5"/></svg></span><span>Ask</span></button>
-      <button type="button" role="tab" data-career-panel="user-profile" aria-selected="false"><span aria-hidden="true">☻</span><span>User Profile</span></button>
-    </nav>
-    <p id="career-message" class="section-status" role="status" aria-live="polite"></p>
-    <section id="career-panel-home" class="career-panel" role="tabpanel">
-      <div class="career-card career-welcome"><h2>Welcome to CareerNaviq</h2><p>CareerNaviq helps you organize your job search across employers, recruiters, jobs, learning, interview support, and AI-assisted applications.</p></div>
-      <div class="career-feature-grid">
-        <article><h3>Employer Directory</h3><p>Find companies, LinkedIn pages, and career portals. Save companies to My List and help improve links over time.</p></article>
-        <article><h3>Recruiter Directory</h3><p>Browse recruiters by Java, Data, DevOps, Validation, or Multi-Role. Star useful recruiters for quick follow-up.</p></article>
-        <article><h3>Latest Posted Jobs</h3><p>Open the job tab and double-click a technology category to refresh recent jobs from connected job sources.</p></article>
-        <article><h3>AI Auto Apply</h3><p>Use your AI profile, resumes, saved answers, and blockers to prepare applications with approval before submission.</p></article>
-        <article><h3>Study Materials</h3><p>Keep learning documents organized by technology so users can study step by step.</p></article>
-        <article><h3>Interview Support</h3><p>Store interview support contacts and details for quick access when users need help.</p></article>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="description" content="CarrerNaviq home and user profile." />
+    <title>CarrerNaviq — Home</title>
+    <link rel="icon" type="image/svg+xml" href="/logo.svg" />
+    <link rel="stylesheet" href="/style.css" />
+    <script src="/chat-files.js" defer></script>
+    <script src="/sidebar.js" defer></script>
+    <script src="/careernaviq.js" defer></script>
+    <script src="/profile.js" defer></script>
+  </head>
+  <body>
+    <header class="masthead">
+      <div class="wrap brand">
+        <img class="brand-logo" src="/logo.svg" alt="" /><span
+          >CarrerNaviq</span
+        >
+        <div id="profile-greeting" class="profile-greeting" hidden></div>
+        <div class="role-control">
+          <span id="career-role" class="public-label">User</span
+          ><button id="career-logout" type="button">Logout</button>
+        </div>
       </div>
-    </section>
-    <section id="career-panel-notifications" class="career-panel" role="tabpanel" hidden>
-      <div class="career-card"><h2>Notifications</h2><p class="form-hint">Important app updates will appear here.</p><div id="career-notifications" class="career-list"></div></div>
-    </section>
-    <section id="career-panel-ask" class="career-panel" role="tabpanel" hidden>
-      <div class="career-card career-chat-card"><div class="career-chat-shell"><div class="career-chat-header"><div class="career-chat-avatar">N</div><div><strong>ADMIN</strong></div></div><div id="career-chat-messages" class="career-chat-messages" aria-live="polite"></div><form id="career-question-form" class="career-question-form chat-compose"><label class="sr-only" for="career-question">Message</label><textarea id="career-question" rows="3" maxlength="1200" placeholder="Type your message"></textarea><button type="submit" class="primary">Send</button></form></div>
-    </section>
-    <section id="career-panel-user-profile" class="career-panel" role="tabpanel" hidden>
-      <div class="career-card"><h2>User Profile</h2><p class="form-hint">This is your main CareerNaviq account profile. AI Auto Apply has its own detailed application profile.</p><form id="career-user-form" class="career-user-form"><label>Name<input id="career-name" maxlength="120" autocomplete="name" placeholder="Your full name"></label><label>Email<input id="career-email" type="email" readonly></label><button type="submit" class="primary">Save user profile</button></form><form id="career-delete-profile-form" class="career-delete-profile-form"><h3>Delete account access</h3><p class="form-hint">Enter your account email to delete your CareerNaviq access. You will need to request access again if you want to use the app later.</p><label>Email confirmation<input id="career-delete-email" type="email" placeholder="Enter your email"></label><button type="submit" class="danger">Delete access</button></form></div>
-    </section>
-  </main>
-</body>
+    </header>
+    <main id="career-page" class="wrap career-page" hidden>
+      <div class="career-hero">
+        <div>
+          <p class="eyebrow">CARRERNAVIQ</p>
+          <h1>Home</h1>
+        </div>
+        <div class="career-profile-chip">
+          <img src="/logo.svg" alt="" />
+          <div>
+            <span id="career-chip-name">CarrerNaviq User</span
+            ><small id="career-chip-email">Loading account…</small>
+          </div>
+        </div>
+      </div>
+      <nav
+        class="career-tabs"
+        role="tablist"
+        aria-label="CarrerNaviq home sections"
+      >
+        <button
+          type="button"
+          role="tab"
+          data-career-panel="home"
+          aria-selected="true"
+        >
+          <span class="career-tab-icon" aria-hidden="true"
+            ><svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <circle cx="12" cy="12" r="9" />
+              <path d="M12 10v6" />
+              <path d="M12 7h.01" /></svg></span
+          ><span>About</span>
+        </button>
+        <button
+          type="button"
+          role="tab"
+          data-career-panel="notifications"
+          aria-selected="false"
+        >
+          <span aria-hidden="true">🔔</span><span>Notifications</span>
+        </button>
+        <button
+          type="button"
+          role="tab"
+          data-career-panel="ask"
+          aria-selected="false"
+        >
+          <span class="career-tab-icon" aria-hidden="true"
+            ><svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path
+                d="M21 11.5a8.4 8.4 0 0 1-9 8.4 8.8 8.8 0 0 1-3.8-.9L3 20l1.2-4.2A8.2 8.2 0 0 1 3 11.5 8.5 8.5 0 0 1 12 3a8.5 8.5 0 0 1 9 8.5Z"
+              />
+              <path d="M8 10h8M8 14h5" /></svg></span
+          ><span>Ask</span>
+        </button>
+        <button
+          type="button"
+          role="tab"
+          data-career-panel="user-profile"
+          aria-selected="false"
+        >
+          <span aria-hidden="true">☻</span><span>User Profile</span>
+        </button>
+      </nav>
+      <p
+        id="career-message"
+        class="section-status"
+        role="status"
+        aria-live="polite"
+      ></p>
+      <section id="career-panel-home" class="career-panel" role="tabpanel">
+        <div class="career-card career-welcome">
+          <h2>Welcome to CarrerNaviq</h2>
+          <p>
+            CarrerNaviq helps you organize your job search across employers,
+            recruiters, jobs, learning, interview support, and AI-assisted
+            applications.
+          </p>
+        </div>
+        <div class="career-feature-grid">
+          <article>
+            <h3>Employer Directory</h3>
+            <p>
+              Find companies, LinkedIn pages, and career portals. Save companies
+              to My List and help improve links over time.
+            </p>
+          </article>
+          <article>
+            <h3>Recruiter Directory</h3>
+            <p>
+              Browse recruiters by Java, Data, DevOps, Validation, or
+              Multi-Role. Star useful recruiters for quick follow-up.
+            </p>
+          </article>
+          <article>
+            <h3>Latest Posted Jobs</h3>
+            <p>
+              Open the job tab and double-click a technology category to refresh
+              recent jobs from connected job sources.
+            </p>
+          </article>
+          <article>
+            <h3>AI Auto Apply</h3>
+            <p>
+              Use your AI profile, resumes, saved answers, and blockers to
+              prepare applications with approval before submission.
+            </p>
+          </article>
+          <article>
+            <h3>Study Materials</h3>
+            <p>
+              Keep learning documents organized by technology so users can study
+              step by step.
+            </p>
+          </article>
+          <article>
+            <h3>Interview Support</h3>
+            <p>
+              Store interview support contacts and details for quick access when
+              users need help.
+            </p>
+          </article>
+        </div>
+      </section>
+      <section
+        id="career-panel-notifications"
+        class="career-panel"
+        role="tabpanel"
+        hidden
+      >
+        <div class="career-card">
+          <h2>Notifications</h2>
+          <p class="form-hint">Important app updates will appear here.</p>
+          <div id="career-notifications" class="career-list"></div>
+        </div>
+      </section>
+      <section
+        id="career-panel-ask"
+        class="career-panel"
+        role="tabpanel"
+        hidden
+      >
+        <div class="career-card career-chat-card">
+          <div class="career-chat-shell">
+            <div class="career-chat-header">
+              <div class="career-chat-avatar">N</div>
+              <div><strong>ADMIN</strong></div>
+            </div>
+            <div
+              id="career-chat-messages"
+              class="career-chat-messages"
+              aria-live="polite"
+            ></div>
+            <form
+              id="career-question-form"
+              class="career-question-form chat-compose"
+            >
+              <label class="sr-only" for="career-question">Message</label
+              ><textarea
+                id="career-question"
+                rows="3"
+                maxlength="1200"
+                placeholder="Type your message"
+              ></textarea
+              ><button type="submit" class="primary">Send</button>
+            </form>
+          </div>
+        </div>
+      </section>
+      <section
+        id="career-panel-user-profile"
+        class="career-panel"
+        role="tabpanel"
+        hidden
+      >
+        <div class="career-card">
+          <h2>User Profile</h2>
+          <p class="form-hint">
+            This is your main CarrerNaviq account profile. AI Auto Apply has its
+            own detailed application profile.
+          </p>
+          <form id="career-user-form" class="career-user-form">
+            <label
+              >Name<input
+                id="career-name"
+                maxlength="120"
+                autocomplete="name"
+                placeholder="Your full name" /></label
+            ><label
+              >Email<input id="career-email" type="email" readonly /></label
+            ><button type="submit" class="primary">Save user profile</button>
+          </form>
+          <form
+            id="career-delete-profile-form"
+            class="career-delete-profile-form"
+          >
+            <h3>Delete account access</h3>
+            <p class="form-hint">
+              Enter your account email to delete your CarrerNaviq access. You
+              will need to request access again if you want to use the app
+              later.
+            </p>
+            <label
+              >Email confirmation<input
+                id="career-delete-email"
+                type="email"
+                placeholder="Enter your email" /></label
+            ><button type="submit" class="danger">Delete access</button>
+          </form>
+        </div>
+      </section>
+    </main>
+  </body>
 </html>

@@ -1,920 +1,4284 @@
-const baseRows=JSON.parse(ASSETS['/companies.json']);
-const known=new Map(baseRows.map(r=>[r[0],r]));
-const baseNames=new Set(baseRows.map(r=>r[0].trim().replace(/\s+/g,' ').toLocaleLowerCase()));
-const json=(body,status=200)=>Response.json(body,{status,headers:{'Cache-Control':'no-store','X-Content-Type-Options':'nosniff'}});
-function db(env){if(!env.DB)throw Error('Database unavailable');return env.DB;}
-function bucket(env){if(!env.BUCKET)throw Error('Document storage unavailable');return env.BUCKET;}
-function link(value){if(typeof value!=='string'||value.length>2048)return false;if(!value)return true;try{const u=new URL(value);return ['http:','https:'].includes(u.protocol)&&!u.username&&!u.password;}catch{return false;}}
-function normalizedName(value){return value.trim().replace(/\s+/g,' ').toLocaleLowerCase();}
-const sectionNames=new Set(['recruiter-directory','latest-posted-jobs','study-materials','interview-support']);
-const tabNames=new Map([['employer-directory','Employer Directory'],['recruiter-directory','Recruiter Directory'],['latest-posted-jobs','Latest Posted Jobs'],['ai-auto-apply','AI Auto Apply'],['study-materials','Study Materials'],['interview-support','Interview Support']]);
-const restrictedMessage='Access restricted temporarily by the Admin.';
-const sectionCategories=new Set(['java','data','devops','validation']);
-const adminEmail='chatgpt3577@gmail.com';
-const cookieName='directory_session';
-const emailPattern=/^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-function sessionCookie(token){return `${cookieName}=${token}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=31536000`;}
-function clearSessionCookie(){return `${cookieName}=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`;}
-function requestToken(request){return (request.headers.get('Cookie')||'').split(';').map(part=>part.trim()).find(part=>part.startsWith(cookieName+'='))?.slice(cookieName.length+1)||'';}
-async function sessionFor(request,env){
- const token=requestToken(request);if(!token)return null;
- const session=await db(env).prepare('SELECT email,role FROM access_sessions WHERE token = ?').bind(token).first();
- if(!session)return null;
- const database=db(env);await ensureAccessUserColumns(database);
- const user=await database.prepare('SELECT status,name FROM access_users WHERE email = ?').bind(session.email).first();
- if(session.role==='admin'&&session.email===adminEmail)return {...session,status:'approved',name:user?.name||''};
- const status=user?.status||'pending';
- const coadmin=status==='approved'?await db(env).prepare('SELECT email FROM coadmins WHERE email = ?').bind(session.email).first():null;
- return {...session,role:coadmin?'coadmin':'user',status,name:user?.name||''};
+const baseRows = JSON.parse(ASSETS['/companies.json']);
+const known = new Map(baseRows.map((r) => [r[0], r]));
+const baseNames = new Set(
+  baseRows.map((r) => r[0].trim().replace(/\s+/g, ' ').toLocaleLowerCase()),
+);
+const json = (body, status = 200) =>
+  Response.json(body, {
+    status,
+    headers: {
+      'Cache-Control': 'no-store',
+      'X-Content-Type-Options': 'nosniff',
+    },
+  });
+function db(env) {
+  if (!env.DB) throw Error('Database unavailable');
+  return env.DB;
 }
-function canManage(session){return session?.status==='approved'&&['admin','coadmin'].includes(session.role);}
-async function ensureSectionFavorites(database){await database.prepare("CREATE TABLE IF NOT EXISTS section_favorites (user_email text NOT NULL, item_id text NOT NULL, created_at text NOT NULL, PRIMARY KEY (user_email,item_id))").run();}
-async function ensureAppSettings(database){await database.prepare("CREATE TABLE IF NOT EXISTS app_settings (key text PRIMARY KEY, value text NOT NULL, updated_at text NOT NULL, updated_by text NOT NULL DEFAULT '')").run();}
-async function ensureAdminAccessRequests(database){await database.prepare("CREATE TABLE IF NOT EXISTS admin_access_requests (email text PRIMARY KEY, status text NOT NULL, requested_at text NOT NULL, reviewed_at text, reviewed_by text)").run();}
-async function ensureAskMessages(database){await database.batch([
- database.prepare("CREATE TABLE IF NOT EXISTS ask_attachments (id text PRIMARY KEY,message_id text NOT NULL,user_email text NOT NULL,file_key text NOT NULL,file_name text NOT NULL,file_size integer NOT NULL)"),
- database.prepare("CREATE INDEX IF NOT EXISTS ask_attachments_message ON ask_attachments(message_id)"),
- database.prepare("CREATE TABLE IF NOT EXISTS ask_threads (user_email text PRIMARY KEY NOT NULL,updated_at text NOT NULL)"),
- database.prepare("CREATE TABLE IF NOT EXISTS ask_messages (id text PRIMARY KEY NOT NULL, user_email text NOT NULL, user_name text DEFAULT '' NOT NULL, body text NOT NULL, sender text NOT NULL, admin_email text DEFAULT '' NOT NULL, created_at text NOT NULL, read_by_admin_at text, read_by_user_at text)"),
- database.prepare("CREATE INDEX IF NOT EXISTS ask_messages_user_created ON ask_messages (user_email,created_at)"),
- database.prepare("CREATE INDEX IF NOT EXISTS ask_messages_created ON ask_messages (created_at)")
-]);}
+function bucket(env) {
+  if (!env.BUCKET) throw Error('Document storage unavailable');
+  return env.BUCKET;
+}
+function link(value) {
+  if (typeof value !== 'string' || value.length > 2048) return false;
+  if (!value) return true;
+  try {
+    const u = new URL(value);
+    return (
+      ['http:', 'https:'].includes(u.protocol) && !u.username && !u.password
+    );
+  } catch {
+    return false;
+  }
+}
+function normalizedName(value) {
+  return value.trim().replace(/\s+/g, ' ').toLocaleLowerCase();
+}
+const sectionNames = new Set([
+  'recruiter-directory',
+  'latest-posted-jobs',
+  'study-materials',
+  'interview-support',
+]);
+const tabNames = new Map([
+  ['employer-directory', 'Employer Directory'],
+  ['recruiter-directory', 'Recruiter Directory'],
+  ['latest-posted-jobs', 'Latest Posted Jobs'],
+  ['ai-auto-apply', 'AI Auto Apply'],
+  ['study-materials', 'Study Materials'],
+  ['interview-support', 'Interview Support'],
+]);
+const restrictedMessage = 'Access restricted temporarily by the Admin.';
+const sectionCategories = new Set(['java', 'data', 'devops', 'validation']);
+const adminEmail = 'chatgpt3577@gmail.com';
+const cookieName = 'directory_session';
+const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+function sessionCookie(token) {
+  return `${cookieName}=${token}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=31536000`;
+}
+function clearSessionCookie() {
+  return `${cookieName}=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`;
+}
+function requestToken(request) {
+  return (
+    (request.headers.get('Cookie') || '')
+      .split(';')
+      .map((part) => part.trim())
+      .find((part) => part.startsWith(cookieName + '='))
+      ?.slice(cookieName.length + 1) || ''
+  );
+}
+async function sessionFor(request, env) {
+  const token = requestToken(request);
+  if (!token) return null;
+  const session = await db(env)
+    .prepare('SELECT email,role FROM access_sessions WHERE token = ?')
+    .bind(token)
+    .first();
+  if (!session) return null;
+  const database = db(env);
+  await ensureAccessUserColumns(database);
+  const user = await database
+    .prepare('SELECT status,name FROM access_users WHERE email = ?')
+    .bind(session.email)
+    .first();
+  if (session.role === 'admin' && session.email === adminEmail)
+    return { ...session, status: 'approved', name: user?.name || '' };
+  const status = user?.status || 'pending';
+  const coadmin =
+    status === 'approved'
+      ? await db(env)
+          .prepare('SELECT email FROM coadmins WHERE email = ?')
+          .bind(session.email)
+          .first()
+      : null;
+  return {
+    ...session,
+    role: coadmin ? 'coadmin' : 'user',
+    status,
+    name: user?.name || '',
+  };
+}
+function canManage(session) {
+  return (
+    session?.status === 'approved' &&
+    ['admin', 'coadmin'].includes(session.role)
+  );
+}
+async function ensureSectionFavorites(database) {
+  await database
+    .prepare(
+      'CREATE TABLE IF NOT EXISTS section_favorites (user_email text NOT NULL, item_id text NOT NULL, created_at text NOT NULL, PRIMARY KEY (user_email,item_id))',
+    )
+    .run();
+}
+async function ensureAppSettings(database) {
+  await database
+    .prepare(
+      "CREATE TABLE IF NOT EXISTS app_settings (key text PRIMARY KEY, value text NOT NULL, updated_at text NOT NULL, updated_by text NOT NULL DEFAULT '')",
+    )
+    .run();
+}
+async function ensureAdminAccessRequests(database) {
+  await database
+    .prepare(
+      'CREATE TABLE IF NOT EXISTS admin_access_requests (email text PRIMARY KEY, status text NOT NULL, requested_at text NOT NULL, reviewed_at text, reviewed_by text)',
+    )
+    .run();
+}
+async function ensureAccessUserColumns(database) {
+  const existing = new Set(
+    (
+      (await database.prepare('PRAGMA table_info(access_users)').all())
+        .results || []
+    ).map((row) => row.name),
+  );
+  if (!existing.has('name'))
+    await database
+      .prepare("ALTER TABLE access_users ADD name text DEFAULT '' NOT NULL")
+      .run();
+}
 
-async function chatInput(request){
- if(!(request.headers.get('content-type')||'').includes('multipart/form-data'))return {...await jsonInput(request),files:[]};
- if(Number(request.headers.get('content-length')||0)>27*1024*1024)throw Error('Attachments are too large.');
- const form=await request.formData();const files=form.getAll('files').filter(f=>typeof f!=='string'&&f.size);
- if(files.length>5||files.some(f=>f.size>10*1024*1024)||files.reduce((n,f)=>n+f.size,0)>25*1024*1024)throw Error('Choose up to 5 files, 10 MB each and 25 MB total.');
- return {body:form.get('body'),email:form.get('email'),files};
+async function ensureProfileColumns(database) {
+  const existing = new Set(
+    (
+      (await database.prepare('PRAGMA table_info(user_profiles)').all())
+        .results || []
+    ).map((row) => row.name),
+  );
+  const columns = [
+    [
+      'application_email',
+      "ALTER TABLE user_profiles ADD application_email text DEFAULT '' NOT NULL",
+    ],
+    [
+      'mobile_country_code',
+      "ALTER TABLE user_profiles ADD mobile_country_code text DEFAULT '' NOT NULL",
+    ],
+    [
+      'legal_name',
+      "ALTER TABLE user_profiles ADD legal_name text DEFAULT '' NOT NULL",
+    ],
+    [
+      'address',
+      "ALTER TABLE user_profiles ADD address text DEFAULT '' NOT NULL",
+    ],
+    ['city', "ALTER TABLE user_profiles ADD city text DEFAULT '' NOT NULL"],
+    ['state', "ALTER TABLE user_profiles ADD state text DEFAULT '' NOT NULL"],
+    ['zip', "ALTER TABLE user_profiles ADD zip text DEFAULT '' NOT NULL"],
+    [
+      'linkedin_url',
+      "ALTER TABLE user_profiles ADD linkedin_url text DEFAULT '' NOT NULL",
+    ],
+    [
+      'portfolio_url',
+      "ALTER TABLE user_profiles ADD portfolio_url text DEFAULT '' NOT NULL",
+    ],
+    [
+      'github_url',
+      "ALTER TABLE user_profiles ADD github_url text DEFAULT '' NOT NULL",
+    ],
+    [
+      'start_date',
+      "ALTER TABLE user_profiles ADD start_date text DEFAULT '' NOT NULL",
+    ],
+    [
+      'employment_type_preferences',
+      "ALTER TABLE user_profiles ADD employment_type_preferences text DEFAULT '' NOT NULL",
+    ],
+    [
+      'location',
+      "ALTER TABLE user_profiles ADD location text DEFAULT '' NOT NULL",
+    ],
+    [
+      'education',
+      "ALTER TABLE user_profiles ADD education text DEFAULT '' NOT NULL",
+    ],
+    [
+      'education_university',
+      "ALTER TABLE user_profiles ADD education_university text DEFAULT '' NOT NULL",
+    ],
+    [
+      'education_degree',
+      "ALTER TABLE user_profiles ADD education_degree text DEFAULT '' NOT NULL",
+    ],
+    [
+      'education_start_month',
+      "ALTER TABLE user_profiles ADD education_start_month text DEFAULT '' NOT NULL",
+    ],
+    [
+      'education_start_year',
+      "ALTER TABLE user_profiles ADD education_start_year text DEFAULT '' NOT NULL",
+    ],
+    [
+      'education_end_month',
+      "ALTER TABLE user_profiles ADD education_end_month text DEFAULT '' NOT NULL",
+    ],
+    [
+      'education_end_year',
+      "ALTER TABLE user_profiles ADD education_end_year text DEFAULT '' NOT NULL",
+    ],
+    [
+      'experience',
+      "ALTER TABLE user_profiles ADD experience text DEFAULT '' NOT NULL",
+    ],
+    ['skills', "ALTER TABLE user_profiles ADD skills text DEFAULT '' NOT NULL"],
+    [
+      'certifications',
+      "ALTER TABLE user_profiles ADD certifications text DEFAULT '' NOT NULL",
+    ],
+    [
+      'work_authorization',
+      "ALTER TABLE user_profiles ADD work_authorization text DEFAULT '' NOT NULL",
+    ],
+    [
+      'sponsorship_needs',
+      "ALTER TABLE user_profiles ADD sponsorship_needs text DEFAULT '' NOT NULL",
+    ],
+    [
+      'salary_expectations',
+      "ALTER TABLE user_profiles ADD salary_expectations text DEFAULT '' NOT NULL",
+    ],
+    [
+      'salary_min',
+      "ALTER TABLE user_profiles ADD salary_min text DEFAULT '' NOT NULL",
+    ],
+    [
+      'salary_max',
+      "ALTER TABLE user_profiles ADD salary_max text DEFAULT '' NOT NULL",
+    ],
+    [
+      'hourly_min',
+      "ALTER TABLE user_profiles ADD hourly_min text DEFAULT '' NOT NULL",
+    ],
+    [
+      'hourly_max',
+      "ALTER TABLE user_profiles ADD hourly_max text DEFAULT '' NOT NULL",
+    ],
+    [
+      'job_preferences',
+      "ALTER TABLE user_profiles ADD job_preferences text DEFAULT '' NOT NULL",
+    ],
+    [
+      'relocation_preferences',
+      "ALTER TABLE user_profiles ADD relocation_preferences text DEFAULT '' NOT NULL",
+    ],
+    [
+      'approved_screening_answers',
+      "ALTER TABLE user_profiles ADD approved_screening_answers text DEFAULT '' NOT NULL",
+    ],
+  ];
+  for (const [name, sql] of columns)
+    if (!existing.has(name)) await database.prepare(sql).run();
 }
-async function saveChatFiles(database,env,input,messageId,email){
- const saved=[];
- try{for(const file of input.files||[]){const id=crypto.randomUUID(),key='chat/'+id,name=file.name.replace(/[\\/\x00-\x1f]/g,'_').slice(0,180)||'attachment';
- await bucket(env).put(key,await file.arrayBuffer(),{httpMetadata:{contentType:'application/octet-stream'}});
- saved.push({id,key,name,size:file.size});}
- if(saved.length)await database.batch(saved.map(f=>database.prepare('INSERT INTO ask_attachments VALUES(?,?,?,?,?,?)').bind(f.id,messageId,email,f.key,f.name,f.size)));
- }catch(error){await Promise.all(saved.map(f=>bucket(env).delete(f.key)));await database.prepare('DELETE FROM ask_attachments WHERE message_id=?').bind(messageId).run();throw error;}
+async function ensureAutoApply(database) {
+  await database.batch([
+    database.prepare(
+      "CREATE TABLE IF NOT EXISTS auto_resumes (id text PRIMARY KEY, user_email text NOT NULL, name text NOT NULL, file_key text NOT NULL, file_name text NOT NULL, file_type text NOT NULL, file_size integer NOT NULL, extracted_text text NOT NULL DEFAULT '', extraction_status text NOT NULL DEFAULT 'pending_worker', is_default integer NOT NULL DEFAULT 0, created_at text NOT NULL, updated_at text NOT NULL)",
+    ),
+    database.prepare(
+      "CREATE TABLE IF NOT EXISTS auto_connected_accounts (id text PRIMARY KEY, user_email text NOT NULL, provider text NOT NULL, status text NOT NULL, auth_type text NOT NULL DEFAULT 'interactive_browser', last_verified_at text, metadata text NOT NULL DEFAULT '{}', created_at text NOT NULL, updated_at text NOT NULL)",
+    ),
+    database.prepare(
+      'CREATE UNIQUE INDEX IF NOT EXISTS auto_connected_accounts_user_provider ON auto_connected_accounts (user_email,provider)',
+    ),
+    database.prepare(
+      'CREATE TABLE IF NOT EXISTS auto_agent_settings (user_email text PRIMARY KEY, daily_limit integer NOT NULL DEFAULT 10, minimum_score integer NOT NULL DEFAULT 70, require_review integer NOT NULL DEFAULT 1, updated_at text NOT NULL)',
+    ),
+    database.prepare(
+      "CREATE TABLE IF NOT EXISTS auto_applications (id text PRIMARY KEY, user_email text NOT NULL, imported_job_id text, company_name text NOT NULL, job_title text NOT NULL, job_url text NOT NULL, resume_id text, match_score integer, match_reasons text NOT NULL DEFAULT '[]', status text NOT NULL DEFAULT 'MATCHED', blocker_status text NOT NULL DEFAULT '', worker_task_id text NOT NULL DEFAULT '', last_activity_at text NOT NULL, created_at text NOT NULL, updated_at text NOT NULL)",
+    ),
+    database.prepare(
+      'CREATE UNIQUE INDEX IF NOT EXISTS auto_applications_user_job ON auto_applications (user_email,job_url)',
+    ),
+    database.prepare(
+      "CREATE TABLE IF NOT EXISTS auto_blockers (id text PRIMARY KEY, user_email text NOT NULL, application_id text NOT NULL, company_name text NOT NULL, job_title text NOT NULL, question text NOT NULL DEFAULT '', reason text NOT NULL, status text NOT NULL DEFAULT 'OPEN', answer text NOT NULL DEFAULT '', created_at text NOT NULL, updated_at text NOT NULL)",
+    ),
+    database.prepare(
+      "CREATE TABLE IF NOT EXISTS auto_saved_answers (id text PRIMARY KEY, user_email text NOT NULL, normalized_question text NOT NULL, question text NOT NULL, answer text NOT NULL, answer_type text NOT NULL DEFAULT 'general', source text NOT NULL DEFAULT 'user', approved_at text NOT NULL, expires_at text, updated_at text NOT NULL)",
+    ),
+    database.prepare(
+      'CREATE UNIQUE INDEX IF NOT EXISTS auto_saved_answers_user_question ON auto_saved_answers (user_email,normalized_question)',
+    ),
+    database.prepare(
+      "CREATE TABLE IF NOT EXISTS auto_activity_logs (id text PRIMARY KEY, user_email text NOT NULL, application_id text, event_type text NOT NULL, message text NOT NULL, metadata text NOT NULL DEFAULT '{}', created_at text NOT NULL)",
+    ),
+  ]);
 }
-async function chatAttachments(database){const data=await database.prepare('SELECT id,message_id,file_name,file_size FROM ask_attachments').all();const map=new Map();for(const f of data.results||[]){if(!map.has(f.message_id))map.set(f.message_id,[]);map.get(f.message_id).push({id:f.id,name:f.file_name,size:f.file_size,url:'/api/ask/attachments/'+f.id});}return map;}
-async function removeChatFiles(database,env,email){const data=await database.prepare('SELECT file_key FROM ask_attachments WHERE user_email=?').bind(email).all();await Promise.all((data.results||[]).map(f=>bucket(env).delete(f.file_key)));await database.prepare('DELETE FROM ask_attachments WHERE user_email=?').bind(email).run();}
-
-async function ensureVault(database){await database.prepare("CREATE TABLE IF NOT EXISTS credential_vault (user_email text NOT NULL,provider text NOT NULL,encrypted_value text NOT NULL,updated_at text NOT NULL,PRIMARY KEY(user_email,provider))").run();}
-async function vaultCrypto(env,email,provider,value){
- if(!env.CREDENTIAL_VAULT_KEY)throw Object.assign(Error('Secure vault storage is not configured.'),{status:503});
- const raw=Uint8Array.from(atob(env.CREDENTIAL_VAULT_KEY),c=>c.charCodeAt(0));
- const key=await crypto.subtle.importKey('raw',raw,'AES-GCM',false,['encrypt','decrypt']);
- const aad=new TextEncoder().encode(email+'|'+provider);
- if(typeof value==='string'){const data=JSON.parse(value);const plain=await crypto.subtle.decrypt({name:'AES-GCM',iv:Uint8Array.from(atob(data.iv),c=>c.charCodeAt(0)),additionalData:aad},key,Uint8Array.from(atob(data.data),c=>c.charCodeAt(0)));return JSON.parse(new TextDecoder().decode(plain));}
- const iv=crypto.getRandomValues(new Uint8Array(12));const encrypted=await crypto.subtle.encrypt({name:'AES-GCM',iv,additionalData:aad},key,new TextEncoder().encode(JSON.stringify(value)));
- return JSON.stringify({iv:btoa(String.fromCharCode(...iv)),data:btoa(String.fromCharCode(...new Uint8Array(encrypted)))});
+function normalizeQuestion(value) {
+  return String(value || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+    .slice(0, 500);
 }
-async function ensureAccessUserColumns(database){
- const existing=new Set(((await database.prepare('PRAGMA table_info(access_users)').all()).results||[]).map(row=>row.name));
- if(!existing.has('name'))await database.prepare("ALTER TABLE access_users ADD name text DEFAULT '' NOT NULL").run();
+function autoProvider(value) {
+  return ['linkedin', 'indeed', 'dice', 'gmail'].includes(value) ? value : '';
 }
-
-
-async function ensureProfileColumns(database){
- const existing=new Set(((await database.prepare('PRAGMA table_info(user_profiles)').all()).results||[]).map(row=>row.name));
- const columns=[['application_email',"ALTER TABLE user_profiles ADD application_email text DEFAULT '' NOT NULL"],['mobile_country_code',"ALTER TABLE user_profiles ADD mobile_country_code text DEFAULT '' NOT NULL"],['legal_name',"ALTER TABLE user_profiles ADD legal_name text DEFAULT '' NOT NULL"],['address',"ALTER TABLE user_profiles ADD address text DEFAULT '' NOT NULL"],['city',"ALTER TABLE user_profiles ADD city text DEFAULT '' NOT NULL"],['state',"ALTER TABLE user_profiles ADD state text DEFAULT '' NOT NULL"],['zip',"ALTER TABLE user_profiles ADD zip text DEFAULT '' NOT NULL"],['linkedin_url',"ALTER TABLE user_profiles ADD linkedin_url text DEFAULT '' NOT NULL"],['portfolio_url',"ALTER TABLE user_profiles ADD portfolio_url text DEFAULT '' NOT NULL"],['github_url',"ALTER TABLE user_profiles ADD github_url text DEFAULT '' NOT NULL"],['start_date',"ALTER TABLE user_profiles ADD start_date text DEFAULT '' NOT NULL"],['employment_type_preferences',"ALTER TABLE user_profiles ADD employment_type_preferences text DEFAULT '' NOT NULL"],['location',"ALTER TABLE user_profiles ADD location text DEFAULT '' NOT NULL"],['education',"ALTER TABLE user_profiles ADD education text DEFAULT '' NOT NULL"],['education_university',"ALTER TABLE user_profiles ADD education_university text DEFAULT '' NOT NULL"],['education_degree',"ALTER TABLE user_profiles ADD education_degree text DEFAULT '' NOT NULL"],['education_start_month',"ALTER TABLE user_profiles ADD education_start_month text DEFAULT '' NOT NULL"],['education_start_year',"ALTER TABLE user_profiles ADD education_start_year text DEFAULT '' NOT NULL"],['education_end_month',"ALTER TABLE user_profiles ADD education_end_month text DEFAULT '' NOT NULL"],['education_end_year',"ALTER TABLE user_profiles ADD education_end_year text DEFAULT '' NOT NULL"],['experience',"ALTER TABLE user_profiles ADD experience text DEFAULT '' NOT NULL"],['skills',"ALTER TABLE user_profiles ADD skills text DEFAULT '' NOT NULL"],['certifications',"ALTER TABLE user_profiles ADD certifications text DEFAULT '' NOT NULL"],['work_authorization',"ALTER TABLE user_profiles ADD work_authorization text DEFAULT '' NOT NULL"],['sponsorship_needs',"ALTER TABLE user_profiles ADD sponsorship_needs text DEFAULT '' NOT NULL"],['salary_expectations',"ALTER TABLE user_profiles ADD salary_expectations text DEFAULT '' NOT NULL"],['salary_min',"ALTER TABLE user_profiles ADD salary_min text DEFAULT '' NOT NULL"],['salary_max',"ALTER TABLE user_profiles ADD salary_max text DEFAULT '' NOT NULL"],['hourly_min',"ALTER TABLE user_profiles ADD hourly_min text DEFAULT '' NOT NULL"],['hourly_max',"ALTER TABLE user_profiles ADD hourly_max text DEFAULT '' NOT NULL"],['job_preferences',"ALTER TABLE user_profiles ADD job_preferences text DEFAULT '' NOT NULL"],['relocation_preferences',"ALTER TABLE user_profiles ADD relocation_preferences text DEFAULT '' NOT NULL"],['approved_screening_answers',"ALTER TABLE user_profiles ADD approved_screening_answers text DEFAULT '' NOT NULL"]];
- for(const [name,sql] of columns)if(!existing.has(name))await database.prepare(sql).run();
+function autoStatus(value) {
+  return [
+    'MATCHED',
+    'QUEUED',
+    'IN_PROGRESS',
+    'BLOCKED',
+    'READY_FOR_REVIEW',
+    'SUBMITTED',
+    'FAILED',
+    'SKIPPED',
+  ].includes(value)
+    ? value
+    : '';
 }
-async function ensureAutoApply(database){
- await database.batch([
-  database.prepare("CREATE TABLE IF NOT EXISTS auto_resumes (id text PRIMARY KEY, user_email text NOT NULL, name text NOT NULL, file_key text NOT NULL, file_name text NOT NULL, file_type text NOT NULL, file_size integer NOT NULL, extracted_text text NOT NULL DEFAULT '', extraction_status text NOT NULL DEFAULT 'pending_worker', is_default integer NOT NULL DEFAULT 0, created_at text NOT NULL, updated_at text NOT NULL)"),
-  database.prepare("CREATE TABLE IF NOT EXISTS auto_connected_accounts (id text PRIMARY KEY, user_email text NOT NULL, provider text NOT NULL, status text NOT NULL, auth_type text NOT NULL DEFAULT 'interactive_browser', last_verified_at text, metadata text NOT NULL DEFAULT '{}', created_at text NOT NULL, updated_at text NOT NULL)"),
-  database.prepare("CREATE UNIQUE INDEX IF NOT EXISTS auto_connected_accounts_user_provider ON auto_connected_accounts (user_email,provider)"),
-  database.prepare("CREATE TABLE IF NOT EXISTS auto_agent_settings (user_email text PRIMARY KEY, daily_limit integer NOT NULL DEFAULT 10, minimum_score integer NOT NULL DEFAULT 70, require_review integer NOT NULL DEFAULT 1, updated_at text NOT NULL)"),
-  database.prepare("CREATE TABLE IF NOT EXISTS auto_applications (id text PRIMARY KEY, user_email text NOT NULL, imported_job_id text, company_name text NOT NULL, job_title text NOT NULL, job_url text NOT NULL, resume_id text, match_score integer, match_reasons text NOT NULL DEFAULT '[]', status text NOT NULL DEFAULT 'MATCHED', blocker_status text NOT NULL DEFAULT '', worker_task_id text NOT NULL DEFAULT '', last_activity_at text NOT NULL, created_at text NOT NULL, updated_at text NOT NULL)"),
-  database.prepare("CREATE UNIQUE INDEX IF NOT EXISTS auto_applications_user_job ON auto_applications (user_email,job_url)"),
-  database.prepare("CREATE TABLE IF NOT EXISTS auto_blockers (id text PRIMARY KEY, user_email text NOT NULL, application_id text NOT NULL, company_name text NOT NULL, job_title text NOT NULL, question text NOT NULL DEFAULT '', reason text NOT NULL, status text NOT NULL DEFAULT 'OPEN', answer text NOT NULL DEFAULT '', created_at text NOT NULL, updated_at text NOT NULL)"),
-  database.prepare("CREATE TABLE IF NOT EXISTS auto_saved_answers (id text PRIMARY KEY, user_email text NOT NULL, normalized_question text NOT NULL, question text NOT NULL, answer text NOT NULL, answer_type text NOT NULL DEFAULT 'general', source text NOT NULL DEFAULT 'user', approved_at text NOT NULL, expires_at text, updated_at text NOT NULL)"),
-  database.prepare("CREATE UNIQUE INDEX IF NOT EXISTS auto_saved_answers_user_question ON auto_saved_answers (user_email,normalized_question)"),
-  database.prepare("CREATE TABLE IF NOT EXISTS auto_activity_logs (id text PRIMARY KEY, user_email text NOT NULL, application_id text, event_type text NOT NULL, message text NOT NULL, metadata text NOT NULL DEFAULT '{}', created_at text NOT NULL)")
- ]);
+async function logAuto(
+  database,
+  email,
+  type,
+  message,
+  applicationId = '',
+  metadata = {},
+) {
+  await database
+    .prepare(
+      'INSERT INTO auto_activity_logs (id,user_email,application_id,event_type,message,metadata,created_at) VALUES (?,?,?,?,?,?,?)',
+    )
+    .bind(
+      crypto.randomUUID(),
+      email,
+      applicationId,
+      type,
+      message,
+      JSON.stringify(metadata),
+      new Date().toISOString(),
+    )
+    .run();
 }
-function normalizeQuestion(value){return String(value||'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim().slice(0,500);}
-function autoProvider(value){return ['linkedin','indeed','dice','gmail'].includes(value)?value:'';}
-function autoStatus(value){return ['MATCHED','QUEUED','IN_PROGRESS','BLOCKED','READY_FOR_REVIEW','SUBMITTED','FAILED','SKIPPED'].includes(value)?value:'';}
-async function logAuto(database,email,type,message,applicationId='',metadata={}){await database.prepare('INSERT INTO auto_activity_logs (id,user_email,application_id,event_type,message,metadata,created_at) VALUES (?,?,?,?,?,?,?)').bind(crypto.randomUUID(),email,applicationId,type,message,JSON.stringify(metadata),new Date().toISOString()).run();}
-async function autoSettings(database,email){await ensureAutoApply(database);let row=await database.prepare('SELECT daily_limit,minimum_score,require_review FROM auto_agent_settings WHERE user_email=?').bind(email).first();if(!row){const now=new Date().toISOString();await database.prepare('INSERT INTO auto_agent_settings (user_email,daily_limit,minimum_score,require_review,updated_at) VALUES (?,10,70,1,?)').bind(email,now).run();row={daily_limit:10,minimum_score:70,require_review:1};}return row;}
-function scoreJob(job,profile,resumeText=''){
- const text=`${job.title} ${job.company_name} ${resumeText} ${profile?.visa_status||''}`.toLowerCase();let score=35,reasons=[];
- const title=String(job.title||'').toLowerCase();
- for(const term of ['java','spring','software','developer','engineer','data','devops','cloud','validation'])if(title.includes(term)){score+=8;reasons.push(`Title contains ${term}`);}
- if(profile?.visa_status){score+=8;reasons.push(`Profile status available: ${profile.visa_status}`);} if(resumeText){score+=15;reasons.push('Resume text available for matching.');}
- if(/remote|united states|usa|us/.test(text)){score+=5;reasons.push('US/remote signal found.');}
- return {score:Math.min(100,score),reasons};
+async function autoSettings(database, email) {
+  await ensureAutoApply(database);
+  let row = await database
+    .prepare(
+      'SELECT daily_limit,minimum_score,require_review FROM auto_agent_settings WHERE user_email=?',
+    )
+    .bind(email)
+    .first();
+  if (!row) {
+    const now = new Date().toISOString();
+    await database
+      .prepare(
+        'INSERT INTO auto_agent_settings (user_email,daily_limit,minimum_score,require_review,updated_at) VALUES (?,10,70,1,?)',
+      )
+      .bind(email, now)
+      .run();
+    row = { daily_limit: 10, minimum_score: 70, require_review: 1 };
+  }
+  return row;
 }
-async function workerCall(env,path,payload){
- const base=env.SKYVERN_WORKER_URL,secret=env.AUTO_APPLY_WORKER_SECRET;if(!base||!secret)throw Object.assign(Error('Skyvern/Ollama worker is not configured for this Site. Deploy the external worker and set SKYVERN_WORKER_URL and AUTO_APPLY_WORKER_SECRET.'),{status:501});
- const response=await fetch(new URL(path,base).toString(),{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${secret}`},body:JSON.stringify(payload),signal:AbortSignal.timeout(30000)});
- const body=await response.json().catch(()=>({}));if(!response.ok)throw Object.assign(Error(body.error||'Automation worker request failed.'),{status:502});return body;
-}
-
-async function autoApproveAccess(database){await ensureAppSettings(database);const row=await database.prepare("SELECT value FROM app_settings WHERE key = 'auto_approve_access'").first();return row?.value==='true';}
-async function tabAllowed(env,tab){const row=await db(env).prepare('SELECT allowed FROM tab_access WHERE tab = ?').bind(tab).first();return row?.allowed!==0;}
-async function currentCompany(database,id,old){
- const base=known.get(id);
- const row=base?{name:base[0],linkedin:base[1],careers:base[2],category:base[3]}:await database.prepare('SELECT name,linkedin,careers,category FROM added_companies WHERE id = ?').bind(id).first();
- return row?{...row,...(old?JSON.parse(old.payload):{})}:null;
-}
-function sameOrigin(request,url){return !request.headers.get('Origin')||request.headers.get('Origin')===url.origin;}
-function escapeLike(value){return String(value||'').replace(/[\\%_]/g,'\\$&');}
-async function jsonInput(request){if(!request.headers.get('Content-Type')?.includes('application/json'))throw Error('JSON required.');const body=await request.text();if(body.length>30000)throw Error('Request too large.');return JSON.parse(body);}
-export default {async fetch(request,env){
- const url=new URL(request.url);
- try{
-  if(url.pathname==='/mcp'&&request.method==='POST'){
-   const call=await request.json(),reply=result=>json({jsonrpc:'2.0',id:call.id,result});
-   if(call.method==='initialize')return reply({protocolVersion:'2024-11-05',capabilities:{tools:{}},serverInfo:{name:'CareerNaviq jobs',version:'1.0.0'}});
-   if(call.method==='notifications/initialized')return new Response(null,{status:202});
-   if(call.method==='tools/list')return reply({tools:[{name:'refresh_elite_jobs',description:'Import current technology jobs and return the saved source status. Administrator only.',inputSchema:{type:'object',properties:{},additionalProperties:false}},{name:'elite_jobs_status',description:'Read job import status and saved job counts. Administrator only.',inputSchema:{type:'object',properties:{},additionalProperties:false}}]});
-   const email=(request.headers.get('oai-authenticated-user-email')||'').toLowerCase();
-   if(!request.headers.get('oai-authenticated-user-id')||!(email===adminEmail||await db(env).prepare('SELECT email FROM coadmins WHERE email=?').bind(email).first()))return json({error:'Verified administrator identity required.'},403);
-   if(call.method==='tools/call'){
-    let result;
-    if(call.params?.name==='refresh_elite_jobs')result=await refreshElite(env);
-    else if(call.params?.name==='elite_jobs_status')result={source:await db(env).prepare('SELECT * FROM job_source_checks WHERE company_id=?').bind(aggregateJobSourceId).first(),counts:(await db(env).prepare('SELECT category,count(*) AS count FROM imported_jobs WHERE company_id IN (SELECT value FROM json_each(?)) AND is_open=1 GROUP BY category').bind(JSON.stringify(jobSourceIds)).all()).results};
-    else return json({jsonrpc:'2.0',id:call.id,error:{code:-32601,message:'Unknown tool'}});
-    return reply({content:[{type:'text',text:JSON.stringify(result)}]});
-   }
-   return json({jsonrpc:'2.0',id:call.id,error:{code:-32601,message:'Unknown method'}});
-  }
-
-  if(url.pathname==='/api/session'&&request.method==='GET'){
-   const session=await sessionFor(request,env);return json(session?{email:session.email,role:session.role,status:session.status,name:session.name||''}:{role:'guest',status:'none'});
-  }
-  if(url.pathname==='/api/access/request'&&request.method==='POST'){
-   if(!sameOrigin(request,url))return json({error:'Use the directory to request access.'},403);
-   let input;try{input=await jsonInput(request);}catch{return json({error:'Enter a valid Gmail address.'},400);}
-   const email=String(input?.email||'').trim().toLowerCase();
-   const name=String(input?.name||'').trim().replace(/\s+/g,' ');
-   if(email.length>254||!email.endsWith('@gmail.com')||!emailPattern.test(email)||email===adminEmail)return json({error:'Enter a valid Gmail address.'},400);
-   if(!name||name.length>120)return json({error:'Enter your name to request access.'},400);
-   const database=db(env),now=new Date().toISOString();await ensureAccessUserColumns(database);
-   const autoApprove=await autoApproveAccess(database),initialStatus=autoApprove?'approved':'pending';
-   await database.prepare("INSERT INTO access_users (email,name,status,requested_at,updated_at) VALUES (?,?,?,?,?) ON CONFLICT(email) DO UPDATE SET name = CASE WHEN excluded.name <> '' THEN excluded.name ELSE access_users.name END, updated_at = excluded.updated_at").bind(email,name,initialStatus,now,now).run();
-   const user=await database.prepare('SELECT status,name FROM access_users WHERE email = ?').bind(email).first();
-   if(user.status==='blocked')return json({error:'This Gmail is blocked. Contact the Admin.'},403);
-   const token=crypto.randomUUID()+crypto.randomUUID();
-   await database.prepare('INSERT INTO access_sessions (token,email,role,created_at) VALUES (?,?,?,?)').bind(token,email,'user',now).run();
-   return Response.json({email,role:'user',status:user.status,name:user.name||name},{headers:{'Set-Cookie':sessionCookie(token),'Cache-Control':'no-store'}});
-  }
-  if(url.pathname==='/api/access/login'&&request.method==='POST'){
-   if(!sameOrigin(request,url))return json({error:'Use the directory to log in.'},403);
-   let input;try{input=await jsonInput(request);}catch{return json({error:'Enter a valid Gmail address.'},400);}
-   const email=String(input?.email||'').trim().toLowerCase();
-   if(email.length>254||!email.endsWith('@gmail.com')||!emailPattern.test(email))return json({error:'Enter a valid Gmail address.'},400);
-   const database=db(env);await ensureAccessUserColumns(database);
-   const user=await database.prepare('SELECT status,name FROM access_users WHERE email = ?').bind(email).first();
-   if(!user)return json({error:'No access request found. Use Request access first.'},404);
-   if(user.status==='pending')return json({error:'Your request is awaiting Admin approval.'},403);
-   if(user.status==='blocked')return json({error:'This Gmail is blocked. Contact the Admin.'},403);
-   const token=crypto.randomUUID()+crypto.randomUUID();
-   await database.prepare('INSERT INTO access_sessions (token,email,role,created_at) VALUES (?,?,?,?)').bind(token,email,'user',new Date().toISOString()).run();
-   const coadmin=await database.prepare('SELECT email FROM coadmins WHERE email = ?').bind(email).first();
-   return Response.json({email,role:coadmin?'coadmin':'user',status:'approved',name:user.name||''},{headers:{'Set-Cookie':sessionCookie(token),'Cache-Control':'no-store'}});
-  }
-  if(url.pathname==='/api/admin/login'&&request.method==='POST'){
-   if(!sameOrigin(request,url))return json({error:'Use the directory to open Admin mode.'},403);
-   let input;try{input=await jsonInput(request);}catch{return json({error:'Enter the admin Gmail.'},400);}
-   const email=String(input?.email||'').trim().toLowerCase();
-   let role='admin';
-   if(email!==adminEmail){
-    const member=await db(env).prepare('SELECT email FROM coadmins WHERE email = ?').bind(email).first();
-    const user=await db(env).prepare('SELECT status FROM access_users WHERE email = ?').bind(email).first();
-    if(!member||user?.status!=='approved')return json({error:'This Gmail is not registered as Admin or Coadmin.'},403);
-    role='coadmin';
-   }
-   const token=crypto.randomUUID()+crypto.randomUUID();
-   await db(env).prepare('INSERT INTO access_sessions (token,email,role,created_at) VALUES (?,?,?,?)').bind(token,email,role,new Date().toISOString()).run();
-   return Response.json({email,role,status:'approved'},{headers:{'Set-Cookie':sessionCookie(token),'Cache-Control':'no-store'}});
-  }
-  if(url.pathname==='/api/logout'&&request.method==='POST'){
-   if(!sameOrigin(request,url))return json({error:'Use the directory to sign out.'},403);
-   const token=requestToken(request);if(token)await db(env).prepare('DELETE FROM access_sessions WHERE token = ?').bind(token).run();
-   return Response.json({ok:true},{headers:{'Set-Cookie':clearSessionCookie(),'Cache-Control':'no-store'}});
-  }
-  const session=await sessionFor(request,env);
-
-  if(url.pathname==='/api/admin/analytics'&&request.method==='GET'){
-   if(!canManage(session))return json({error:'Admin access required.'},403);
-   const database=db(env),now=new Date(),dayAgo=new Date(now.getTime()-86400000).toISOString(),weekAgo=new Date(now.getTime()-604800000).toISOString();
-   await ensureAdminAccessRequests(database);
-   const count=async(sql,...values)=>{const query=database.prepare(sql);return Number((await (values.length?query.bind(...values):query).first())?.count||0);};
-   const userRows=(await database.prepare('SELECT status,count(*) AS count FROM access_users GROUP BY status').all()).results||[];
-   const users=Object.fromEntries(userRows.map(row=>[row.status,Number(row.count||0)]));
-   const sectionRows=(await database.prepare("SELECT section,count(*) AS count FROM section_items WHERE status = 'approved' GROUP BY section").all()).results||[];
-   const sections=Object.fromEntries(sectionRows.map(row=>[row.section,Number(row.count||0)]));
-   const jobStatusRows=(await database.prepare('SELECT status,count(*) AS count FROM job_source_checks GROUP BY status').all()).results||[];
-   const sourceStatus=Object.fromEntries(jobStatusRows.map(row=>[row.status,Number(row.count||0)]));
-   const baseCompanies=baseRows.length,addedCompanies=await count('SELECT count(*) AS count FROM added_companies');
-   const pendingAccess=users.pending||0,pendingCompanyChanges=await count("SELECT count(*) AS count FROM change_requests WHERE status = 'pending'"),pendingSectionItems=await count("SELECT count(*) AS count FROM section_items WHERE status = 'pending'"),pendingSectionChanges=await count("SELECT count(*) AS count FROM section_change_requests WHERE status = 'pending'"),pendingAdminAccess=await count("SELECT count(*) AS count FROM admin_access_requests WHERE status = 'pending'");
-   return json({generatedAt:now.toISOString(),totals:{baseCompanies,addedCompanies,companies:baseCompanies+addedCompanies,recruiters:sections['recruiter-directory']||0,studyMaterials:sections['study-materials']||0,interviewSupport:sections['interview-support']||0},users:{approved:users.approved||0,pending:pendingAccess,blocked:users.blocked||0,newThisWeek:await count('SELECT count(*) AS count FROM access_users WHERE requested_at >= ?',weekAgo),profiles:await count('SELECT count(*) AS count FROM user_profiles'),coadmins:await count('SELECT count(*) AS count FROM coadmins')},pending:{accessRequests:pendingAccess,adminAccess:pendingAdminAccess,companyChanges:pendingCompanyChanges,sectionItems:pendingSectionItems,sectionChanges:pendingSectionChanges,total:pendingAccess+pendingAdminAccess+pendingCompanyChanges+pendingSectionItems+pendingSectionChanges},jobs:{open:await count('SELECT count(*) AS count FROM imported_jobs WHERE is_open = 1'),lastDay:await count('SELECT count(*) AS count FROM imported_jobs WHERE discovered_at >= ?',dayAgo),lastWeek:await count('SELECT count(*) AS count FROM imported_jobs WHERE discovered_at >= ?',weekAgo),sourcesChecked:await count('SELECT count(*) AS count FROM job_source_checks'),failedSources:(sourceStatus.error||0)+(sourceStatus.failed||0)},tabs:{restricted:await count('SELECT count(*) AS count FROM tab_access WHERE allowed = 0')}});
-  }
-  if(url.pathname==='/api/tab-access'&&request.method==='GET'){
-   if(!canManage(session))return json({error:'Admin access required.'},403);
-   const {results}=await db(env).prepare('SELECT tab,allowed,updated_at,updated_by FROM tab_access').all();
-   const settings=new Map(results.map(row=>[row.tab,row]));
-   return json({items:[...tabNames].map(([tab,name])=>({tab,name,allowed:settings.get(tab)?.allowed!==0,updatedAt:settings.get(tab)?.updated_at||'',updatedBy:settings.get(tab)?.updated_by||''}))});
-  }
-  if(url.pathname==='/api/tab-access'&&request.method==='PUT'){
-   if(!canManage(session))return json({error:'Admin access required.'},403);
-   if(!sameOrigin(request,url))return json({error:'Use Data access to change tab access.'},403);
-   let input;try{input=await jsonInput(request);}catch{return json({error:'Invalid tab access change.'},400);}
-   if(!tabNames.has(input?.tab)||typeof input?.allowed!=='boolean')return json({error:'Choose a valid tab and access setting.'},400);
-   const allowed=input.allowed?1:0,now=new Date().toISOString();
-   await db(env).prepare('INSERT INTO tab_access (tab,allowed,updated_at,updated_by) VALUES (?,?,?,?) ON CONFLICT(tab) DO UPDATE SET allowed = excluded.allowed,updated_at = excluded.updated_at,updated_by = excluded.updated_by').bind(input.tab,allowed,now,session.email).run();
-   return json({tab:input.tab,name:tabNames.get(input.tab),allowed:input.allowed,updatedAt:now,updatedBy:session.email});
-  }
-  if(url.pathname==='/api/admin-access-requests'&&request.method==='POST'){
-   if(!sameOrigin(request,url))return json({error:'Use the app to request Admin access.'},403);
-   if(session?.status!=='approved')return json({error:'User access required.'},403);
-   if(session.role==='admin'||session.role==='coadmin')return json({status:'approved'});
-   const database=db(env),now=new Date().toISOString();await ensureAdminAccessRequests(database);
-   await database.prepare("INSERT INTO admin_access_requests (email,status,requested_at) VALUES (?,'pending',?) ON CONFLICT(email) DO UPDATE SET status='pending', requested_at=excluded.requested_at, reviewed_at=NULL, reviewed_by=NULL").bind(session.email,now).run();
-   return json({email:session.email,status:'pending'});
-  }
-  if(url.pathname==='/api/admin-access-requests'&&request.method==='GET'){
-   if(!canManage(session))return json({error:'Admin access required.'},403);
-   const database=db(env);await ensureAdminAccessRequests(database);
-   const {results}=await database.prepare("SELECT email,status,requested_at FROM admin_access_requests WHERE status='pending' ORDER BY requested_at DESC").all();
-   return json({items:results});
-  }
-  if(url.pathname==='/api/admin-access-requests'&&request.method==='PUT'){
-   if(!canManage(session))return json({error:'Admin access required.'},403);
-   if(!sameOrigin(request,url))return json({error:'Use Access Management to review Admin requests.'},403);
-   let input;try{input=await jsonInput(request);}catch{return json({error:'Invalid Admin request review.'},400);}
-   const email=String(input?.email||'').trim().toLowerCase(),action=input?.action;
-   if(!emailPattern.test(email)||email===adminEmail||!['approve','deny'].includes(action))return json({error:'Invalid Admin request.'},400);
-   const database=db(env),now=new Date().toISOString();await ensureAdminAccessRequests(database);
-   const existing=await database.prepare("SELECT email FROM admin_access_requests WHERE email = ? AND status = 'pending'").bind(email).first();
-   if(!existing)return json({error:'This Admin request changed. Refresh and try again.'},409);
-   if(action==='approve')await database.prepare('INSERT INTO coadmins (email,granted_at) VALUES (?,?) ON CONFLICT(email) DO UPDATE SET granted_at = excluded.granted_at').bind(email,now).run();
-   await database.prepare('UPDATE admin_access_requests SET status = ?, reviewed_at = ?, reviewed_by = ? WHERE email = ?').bind(action==='approve'?'approved':'denied',now,session.email,email).run();
-   return json({email,status:action==='approve'?'approved':'denied'});
-  }
-  if(url.pathname==='/api/access/settings'&&request.method==='GET'){
-   if(!canManage(session))return json({error:'Admin access required.'},403);
-   const database=db(env),enabled=await autoApproveAccess(database);
-   return json({autoApprove:enabled});
-  }
-  if(url.pathname==='/api/access/settings'&&request.method==='PUT'){
-   if(!canManage(session))return json({error:'Admin access required.'},403);
-   if(!sameOrigin(request,url))return json({error:'Use Access Management to update settings.'},403);
-   let input;try{input=await jsonInput(request);}catch{return json({error:'Invalid access setting.'},400);}
-   if(typeof input?.autoApprove!=='boolean')return json({error:'Choose whether auto approval is on or off.'},400);
-   const database=db(env),now=new Date().toISOString(),value=input.autoApprove?'true':'false';await ensureAppSettings(database);
-   await database.prepare("INSERT INTO app_settings (key,value,updated_at,updated_by) VALUES ('auto_approve_access',?,?,?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at, updated_by = excluded.updated_by").bind(value,now,session.email).run();
-   return json({autoApprove:input.autoApprove});
-  }
-  if(url.pathname==='/api/access/users'&&request.method==='GET'){
-   if(!canManage(session))return json({error:'Admin access required.'},403);
-   const database=db(env);await ensureAccessUserColumns(database);
-   const {results}=await database.prepare('SELECT email,name,status,requested_at,updated_at FROM access_users ORDER BY requested_at DESC').all();
-   return json({items:results});
-  }
-  if(url.pathname==='/api/access/users'&&request.method==='PUT'){
-   if(!canManage(session))return json({error:'Admin access required.'},403);
-   if(!sameOrigin(request,url))return json({error:'Use the directory to manage access.'},403);
-   let input;try{input=await jsonInput(request);}catch{return json({error:'Invalid request.'},400);}
-   const email=String(input?.email||'').trim().toLowerCase(),action=input?.action;
-   const transitions={approve:['pending','approved'],deny:['pending','blocked'],block:['approved','blocked'],unblock:['blocked','approved']};
-   if(!emailPattern.test(email)||email===adminEmail||!Object.hasOwn(transitions,action))return json({error:'Invalid user or action.'},400);
-   const [from,to]=transitions[action];
-   const result=await db(env).prepare('UPDATE access_users SET status = ?, updated_at = ? WHERE email = ? AND status = ? RETURNING email,status').bind(to,new Date().toISOString(),email,from).first();
-   if(!result)return json({error:'This request changed. Refresh the list and try again.'},409);
-   return json(result);
-  }
-  if(url.pathname==='/api/access/users'&&request.method==='DELETE'){
-   if(session?.role!=='admin')return json({error:'Only the Admin can permanently delete users.'},403);
-   if(!sameOrigin(request,url))return json({error:'Use Access Management to delete users.'},403);
-   let input;try{input=await jsonInput(request);}catch{return json({error:'Invalid request.'},400);}
-   const email=String(input?.email||'').trim().toLowerCase();
-   if(!emailPattern.test(email)||email===adminEmail)return json({error:'The Admin account cannot be deleted.'},400);
-   const database=db(env),existing=await database.prepare('SELECT email FROM access_users WHERE email = ?').bind(email).first();
-   if(!existing)return json({error:'User not found. Refresh the list.'},404);
-   await database.batch([
-    database.prepare('DELETE FROM access_sessions WHERE email = ?').bind(email),
-    database.prepare('DELETE FROM user_profiles WHERE email = ?').bind(email),
-    database.prepare('DELETE FROM coadmins WHERE email = ?').bind(email),
-    database.prepare('DELETE FROM access_users WHERE email = ?').bind(email),
-   ]);
-   return json({email,deleted:true});
-  }
-  if(url.pathname==='/api/coadmins'&&request.method==='GET'){
-   if(!canManage(session))return json({error:'Admin access required.'},403);
-   const {results}=await db(env).prepare('SELECT email,granted_at FROM coadmins ORDER BY granted_at DESC').all();
-   return json({items:results});
-  }
-  if(url.pathname==='/api/coadmins'&&request.method==='POST'){
-   if(session?.role!=='admin')return json({error:'Only the Admin can grant Coadmin access.'},403);
-   if(!sameOrigin(request,url))return json({error:'Use the directory to manage Coadmins.'},403);
-   let input;try{input=await jsonInput(request);}catch{return json({error:'Enter a valid Gmail address.'},400);}
-   const email=String(input?.email||'').trim().toLowerCase();
-   if(email.length>254||!email.endsWith('@gmail.com')||!emailPattern.test(email)||email===adminEmail)return json({error:'Enter a valid Gmail address other than the Admin Gmail.'},400);
-   const database=db(env),now=new Date().toISOString();await ensureAccessUserColumns(database);
-   if(await database.prepare('SELECT email FROM deleted_users WHERE email = ?').bind(email).first())return json({error:'This Gmail was permanently removed.'},403);
-   await database.prepare("INSERT INTO access_users (email,name,status,requested_at,updated_at) VALUES (?,'','approved',?,?) ON CONFLICT(email) DO UPDATE SET status = 'approved', updated_at = excluded.updated_at").bind(email,now,now).run();
-   const result=await database.prepare('INSERT INTO coadmins (email,granted_at) VALUES (?,?) ON CONFLICT(email) DO NOTHING RETURNING email,granted_at').bind(email,now).first();
-   if(!result)return json({error:'This Gmail already has Coadmin access.'},409);
-   return json(result,201);
-  }
-  if(url.pathname==='/api/coadmins'&&request.method==='DELETE'){
-   if(session?.role!=='admin')return json({error:'Only the Admin can remove Coadmin access.'},403);
-   if(!sameOrigin(request,url))return json({error:'Use the directory to manage Coadmins.'},403);
-   let input;try{input=await jsonInput(request);}catch{return json({error:'Invalid request.'},400);}
-   const email=String(input?.email||'').trim().toLowerCase();
-   if(!emailPattern.test(email)||email===adminEmail)return json({error:'The Admin cannot be removed.'},400);
-   const result=await db(env).prepare('DELETE FROM coadmins WHERE email = ? RETURNING email').bind(email).first();
-   if(!result)return json({error:'Coadmin not found.'},404);
-   return json(result);
-  }
-  if(url.pathname==='/api/review/changes'&&request.method==='GET'){
-   if(!canManage(session))return json({error:'Admin access required.'},403);
-   const {results}=await db(env).prepare("SELECT id,actor_email,company_id,company_name,kind,before_payload,after_payload,base_version,created_at FROM change_requests WHERE status = 'pending' ORDER BY created_at LIMIT 500").all();
-   return json({items:results.map(r=>({...r,before:JSON.parse(r.before_payload),after:JSON.parse(r.after_payload)}))});
-  }
-  if(url.pathname==='/api/review/changes'&&request.method==='PUT'){
-   if(!canManage(session))return json({error:'Admin access required.'},403);
-   if(!sameOrigin(request,url))return json({error:'Use the directory to review changes.'},403);
-   let input;try{input=await jsonInput(request);}catch{return json({error:'Invalid request.'},400);}
-   const id=String(input?.id||''),action=input?.action;
-   if(!id||!['approve','deny'].includes(action))return json({error:'Invalid review action.'},400);
-   const database=db(env),item=await database.prepare("SELECT company_id,kind,after_payload,base_version FROM change_requests WHERE id = ? AND status = 'pending'").bind(id).first();
-   if(!item)return json({error:'This request was already reviewed. Refresh the list.'},409);
-   if(action==='approve'){
-    if(item.kind==='add'){
-     const proposed=JSON.parse(item.after_payload),normalized=normalizedName(proposed.name);
-     if(baseNames.has(normalized))return json({error:'This company is already in the directory. Deny the request.'},409);
-     const inserted=await database.prepare('INSERT INTO added_companies (id,normalized_name,name,linkedin,careers,category) VALUES (?,?,?,?,?,?) ON CONFLICT(normalized_name) DO NOTHING RETURNING id').bind(item.company_id,normalized,proposed.name,proposed.linkedin,proposed.careers,proposed.category).first();
-     if(!inserted)return json({error:'This company was added already. Deny the duplicate request.'},409);
-    }else{
-    const old=await database.prepare('SELECT payload,version FROM company_edits WHERE id = ?').bind(item.company_id).first();
-    if((old?.version||0)!==item.base_version||old&&JSON.parse(old.payload).deleted)return json({error:'The company changed since this request. Deny it and ask the user to submit a new edit.'},409);
-    const payload={...(old?JSON.parse(old.payload):{}),...JSON.parse(item.after_payload)};
-    const result=old?await database.prepare('UPDATE company_edits SET payload = ?,version = version + 1 WHERE id = ? AND version = ? RETURNING version').bind(JSON.stringify(payload),item.company_id,item.base_version).first():await database.prepare('INSERT INTO company_edits (id,payload,version) VALUES (?,?,1) ON CONFLICT(id) DO NOTHING RETURNING version').bind(item.company_id,JSON.stringify(payload)).first();
-    if(!result)return json({error:'The company changed since this request. Refresh and try again.'},409);
+function scoreJob(job, profile, resumeText = '') {
+  const text =
+    `${job.title} ${job.company_name} ${resumeText} ${profile?.visa_status || ''}`.toLowerCase();
+  let score = 35,
+    reasons = [];
+  const title = String(job.title || '').toLowerCase();
+  for (const term of [
+    'java',
+    'spring',
+    'software',
+    'developer',
+    'engineer',
+    'data',
+    'devops',
+    'cloud',
+    'validation',
+  ])
+    if (title.includes(term)) {
+      score += 8;
+      reasons.push(`Title contains ${term}`);
     }
-   }
-   const reviewed=await database.prepare('UPDATE change_requests SET status = ?, reviewed_at = ?, reviewed_by = ? WHERE id = ? AND status = ? RETURNING id,status').bind(action==='approve'?'approved':'denied',new Date().toISOString(),session.email,id,'pending').first();
-   if(!reviewed)return json({error:'This request was already reviewed. Refresh the list.'},409);
-   return json(reviewed);
+  if (profile?.visa_status) {
+    score += 8;
+    reasons.push(`Profile status available: ${profile.visa_status}`);
   }
-  if(url.pathname==='/api/review/section-items'&&request.method==='GET'){
-   if(!canManage(session))return json({error:'Admin access required.'},403);
-   const {results}=await db(env).prepare("SELECT id,section,category,title,organization,url,details,email,phone,extension,file_name,posted_at,actor_email,created_at FROM section_items WHERE status = 'pending' ORDER BY created_at LIMIT 500").all();
-   return json({items:results});
+  if (resumeText) {
+    score += 15;
+    reasons.push('Resume text available for matching.');
   }
-  if(url.pathname==='/api/review/section-items'&&request.method==='PUT'){
-   if(!canManage(session))return json({error:'Admin access required.'},403);
-   if(!sameOrigin(request,url))return json({error:'Use the directory to review submissions.'},403);
-   let input;try{input=await jsonInput(request);}catch{return json({error:'Invalid request.'},400);}
-   if(typeof input?.id!=='string'||!['approve','deny'].includes(input?.action))return json({error:'Invalid review action.'},400);
-   const result=await db(env).prepare("UPDATE section_items SET status = ?,reviewed_at = ?,reviewed_by = ? WHERE id = ? AND status = 'pending' RETURNING id,status").bind(input.action==='approve'?'approved':'denied',new Date().toISOString(),session.email,input.id).first();
-   return result?json(result):json({error:'This submission was already reviewed.'},409);
+  if (/remote|united states|usa|us/.test(text)) {
+    score += 5;
+    reasons.push('US/remote signal found.');
   }
-  if(url.pathname==='/api/review/section-changes'&&request.method==='GET'){
-   if(!canManage(session))return json({error:'Admin access required.'},403);
-   const {results}=await db(env).prepare("SELECT id,item_id,actor_email,kind,before_payload,after_payload,base_version,pending_file_key,created_at FROM section_change_requests WHERE status = 'pending' ORDER BY created_at LIMIT 500").all();
-   return json({items:results.map(row=>({...row,before:JSON.parse(row.before_payload),after:JSON.parse(row.after_payload)}))});
-  }
-  if(url.pathname==='/api/review/section-changes'&&request.method==='PUT'){
-   if(!canManage(session))return json({error:'Admin access required.'},403);
-   if(!sameOrigin(request,url))return json({error:'Use Access Management to review changes.'},403);
-   let input;try{input=await jsonInput(request);}catch{return json({error:'Invalid review action.'},400);}
-   if(typeof input?.id!=='string'||!['approve','deny'].includes(input?.action))return json({error:'Invalid review action.'},400);
-   const database=db(env),requestRow=await database.prepare("SELECT item_id,kind,after_payload,base_version,pending_file_key FROM section_change_requests WHERE id = ? AND status = 'pending'").bind(input.id).first();
-   if(!requestRow)return json({error:'This change was already reviewed.'},409);
-   const proposed=JSON.parse(requestRow.after_payload);
-   let oldFileKey='';
-   if(input.action==='approve'){
-    const current=await database.prepare('SELECT version,status,file_key FROM section_items WHERE id = ?').bind(requestRow.item_id).first();
-    if(!current||current.status!=='approved'||current.version!==requestRow.base_version)return json({error:'This entry changed. Deny this request and ask for a new one.'},409);
-    oldFileKey=current.file_key;
-    let result;
-    if(requestRow.kind==='move')result=await database.prepare("UPDATE section_items SET category = ?,version = version + 1 WHERE id = ? AND version = ? AND status = 'approved' RETURNING id").bind(proposed.category,requestRow.item_id,requestRow.base_version).first();
-    else if(requestRow.kind==='delete')result=await database.prepare("DELETE FROM section_items WHERE id = ? AND version = ? AND status = 'approved' RETURNING id").bind(requestRow.item_id,requestRow.base_version).first();
-    else result=await database.prepare("UPDATE section_items SET title = ?,organization = ?,url = ?,details = ?,email = ?,phone = ?,extension = ?,posted_at = ?,file_key = ?,file_name = ?,file_type = ?,version = version + 1 WHERE id = ? AND version = ? AND status = 'approved' RETURNING id").bind(proposed.title,proposed.organization,proposed.url,proposed.details,proposed.email,proposed.phone,proposed.extension,proposed.posted_at,proposed.file_key,proposed.file_name,proposed.file_type,requestRow.item_id,requestRow.base_version).first();
-    if(!result)return json({error:'This entry changed. Refresh and try again.'},409);
-   }
-   const reviewed=await database.prepare("UPDATE section_change_requests SET status = ?,reviewed_at = ?,reviewed_by = ? WHERE id = ? AND status = 'pending' RETURNING id,status").bind(input.action==='approve'?'approved':'denied',new Date().toISOString(),session.email,input.id).first();
-   if(!reviewed)return json({error:'This request was already reviewed.'},409);
-   const discardedKey=input.action==='deny'?requestRow.pending_file_key:requestRow.kind==='delete'||requestRow.pending_file_key?oldFileKey:'';
-   if(discardedKey)try{await bucket(env).delete(discardedKey);}catch(error){console.error('Could not remove replaced document',error);}
-   return json(reviewed);
-  }
-  if((url.pathname==='/companies.json'||url.pathname.startsWith('/api/'))&&session?.status!=='approved')return json({error:'Access approval required.'},403);
-  if(url.pathname==='/api/auto-apply/bootstrap'&&request.method==='GET'){
-   if(!canManage(session)&&!await tabAllowed(env,'ai-auto-apply'))return json({error:restrictedMessage},403);
-   const database=db(env);await ensureAutoApply(database);
-   const profile=await database.prepare('SELECT * FROM user_profiles WHERE email=?').bind(session.email).first();
-   const settings=await autoSettings(database,session.email);
-   const resumes=(await database.prepare('SELECT id,name,file_name,file_type,file_size,extraction_status,is_default,created_at,updated_at FROM auto_resumes WHERE user_email=? ORDER BY is_default DESC, created_at DESC').bind(session.email).all()).results||[];
-   const accounts=(await database.prepare('SELECT provider,status,auth_type,last_verified_at,metadata,created_at,updated_at FROM auto_connected_accounts WHERE user_email=? ORDER BY provider').bind(session.email).all()).results||[];
-   const applications=(await database.prepare('SELECT id,company_name,job_title,job_url,resume_id,match_score,status,blocker_status,last_activity_at,created_at,updated_at FROM auto_applications WHERE user_email=? ORDER BY last_activity_at DESC LIMIT 200').bind(session.email).all()).results||[];
-   const blockers=(await database.prepare("SELECT id,application_id,company_name,job_title,question,reason,status,created_at,updated_at FROM auto_blockers WHERE user_email=? AND status IN ('OPEN','WAITING_FOR_USER','FAILED') ORDER BY created_at DESC LIMIT 100").bind(session.email).all()).results||[];
-   const answers=(await database.prepare('SELECT id,question,answer,answer_type,source,approved_at,expires_at,updated_at FROM auto_saved_answers WHERE user_email=? ORDER BY updated_at DESC LIMIT 200').bind(session.email).all()).results||[];
-   const activity=(await database.prepare('SELECT application_id,event_type,message,metadata,created_at FROM auto_activity_logs WHERE user_email=? ORDER BY created_at DESC LIMIT 50').bind(session.email).all()).results||[];
-   const countStatus=Object.fromEntries(((await database.prepare('SELECT status,count(*) AS count FROM auto_applications WHERE user_email=? GROUP BY status').bind(session.email).all()).results||[]).map(r=>[r.status,Number(r.count)]));
-   const counts={matched:countStatus.MATCHED||0,queued:countStatus.QUEUED||0,inProgress:countStatus.IN_PROGRESS||0,readyForReview:countStatus.READY_FOR_REVIEW||0,submitted:countStatus.SUBMITTED||0,failed:countStatus.FAILED||0,blockers:blockers.length};
-   return json({email:session.email,profile:{email:session.email,profile},resumes,accounts,applications,blockers,answers,settings,summary:{counts,activity,worker:{configured:Boolean(env.SKYVERN_WORKER_URL&&env.AUTO_APPLY_WORKER_SECRET),model:env.OLLAMA_MODEL||''}}});
-  }
-  if(url.pathname==='/api/auto-apply/resumes'&&request.method==='POST'){
-   if(!sameOrigin(request,url))return json({error:'Use CareerNaviq to upload resumes.'},403);if(!canManage(session)&&!await tabAllowed(env,'ai-auto-apply'))return json({error:restrictedMessage},403);
-   const form=await request.formData(),file=form.get('file'),name=String(form.get('name')||'Resume').trim().slice(0,120)||'Resume',isDefault=String(form.get('isDefault')||'')==='true';
-   if(!file||typeof file.arrayBuffer!=='function'||file.size===0||file.size>10*1024*1024)return json({error:'Choose a PDF or Word resume smaller than 10 MB.'},400);
-   const fileName=String(file.name||'resume').split(/[\\/]/).pop().slice(0,200),ext=fileName.toLowerCase().split('.').pop(),fileType={pdf:'application/pdf',doc:'application/msword',docx:'application/vnd.openxmlformats-officedocument.wordprocessingml.document'}[ext];
-   if(!fileType)return json({error:'Only PDF, DOC, and DOCX resumes are allowed.'},400);
-   const bytes=await file.arrayBuffer(),magic=new Uint8Array(bytes.slice(0,8));
-   if(!((ext==='pdf'&&[37,80,68,70,45].every((n,i)=>magic[i]===n))||(ext==='doc'&&[208,207,17,224,161,177,26,225].every((n,i)=>magic[i]===n))||(ext==='docx'&&magic[0]===80&&magic[1]===75&&magic[2]===3&&magic[3]===4)))return json({error:'The resume file does not match its extension.'},400);
-   const database=db(env);await ensureAutoApply(database);const id=crypto.randomUUID(),key=`auto-resumes/${session.email}/${id}`,now=new Date().toISOString();await bucket(env).put(key,bytes,{httpMetadata:{contentType:fileType}});
-   if(isDefault)await database.prepare('UPDATE auto_resumes SET is_default=0 WHERE user_email=?').bind(session.email).run();
-   await database.prepare('INSERT INTO auto_resumes (id,user_email,name,file_key,file_name,file_type,file_size,is_default,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)').bind(id,session.email,name,key,fileName,fileType,file.size,isDefault?1:0,now,now).run();
-   await logAuto(database,session.email,'RESUME_UPLOADED',`Uploaded resume ${name}`);return json({id,name,fileName},201);
-  }
-  if(url.pathname.startsWith('/api/auto-apply/resumes/')&&(request.method==='PUT'||request.method==='DELETE')){
-   if(!sameOrigin(request,url))return json({error:'Use CareerNaviq to manage resumes.'},403);const id=decodeURIComponent(url.pathname.split('/').pop());const database=db(env);await ensureAutoApply(database);const row=await database.prepare('SELECT id,file_key,name FROM auto_resumes WHERE id=? AND user_email=?').bind(id,session.email).first();if(!row)return json({error:'Resume not found.'},404);
-   if(request.method==='DELETE'){await bucket(env).delete(row.file_key);await database.prepare('DELETE FROM auto_resumes WHERE id=? AND user_email=?').bind(id,session.email).run();await logAuto(database,session.email,'RESUME_DELETED',`Deleted resume ${row.name}`);return json({deleted:true});}
-   await database.prepare('UPDATE auto_resumes SET is_default=0 WHERE user_email=?').bind(session.email).run();await database.prepare('UPDATE auto_resumes SET is_default=1,updated_at=? WHERE id=? AND user_email=?').bind(new Date().toISOString(),id,session.email).run();return json({id,isDefault:true});
-  }
-  if(url.pathname==='/api/auto-apply/vault'&&request.method==='GET'){
-   const database=db(env);await ensureVault(database);const rows=await database.prepare('SELECT provider,encrypted_value,updated_at FROM credential_vault WHERE user_email=?').bind(session.email).all();const items=[];
-   for(const row of rows.results||[]){const saved=await vaultCrypto(env,session.email,row.provider,row.encrypted_value);items.push({provider:row.provider,account:saved.account,passwordSaved:Boolean(saved.password),updatedAt:row.updated_at});}
-   return json({items});
-  }
-  if(url.pathname==='/api/auto-apply/vault'&&['PUT','DELETE'].includes(request.method)){
-   if(!sameOrigin(request,url))return json({error:'Use CareerNaviq to manage your vault.'},403);
-   let input;try{input=await jsonInput(request);}catch{return json({error:'Invalid vault request.'},400);}
-   const provider=input?.provider==='career_portals'?'career_portals':autoProvider(input?.provider);if(!provider)return json({error:'Choose a supported account.'},400);
-   const database=db(env);await ensureVault(database);
-   if(request.method==='DELETE'){await database.prepare('DELETE FROM credential_vault WHERE user_email=? AND provider=?').bind(session.email,provider).run();return json({saved:false});}
-   const account=String(input.account||'').trim(),password=String(input.password||'');if(!account||account.length>254||password.length>2048)return json({error:'Enter a valid email or username.'},400);
-   if(['gmail','career_portals'].includes(provider)&&!emailPattern.test(account))return json({error:'Enter a valid email.'},400);
-   const old=await database.prepare('SELECT encrypted_value FROM credential_vault WHERE user_email=? AND provider=?').bind(session.email,provider).first();
-   const previous=old?await vaultCrypto(env,session.email,provider,old.encrypted_value):null;
-   if(!password&&!previous?.password)return json({error:'Enter a password to save this account.'},400);
-   if(!password&&previous.account!==account)return json({error:'Enter the password for the changed account.'},400);
-   const encrypted=await vaultCrypto(env,session.email,provider,{account,password:password||previous.password});const now=new Date().toISOString();
-   await database.prepare('INSERT INTO credential_vault(user_email,provider,encrypted_value,updated_at) VALUES(?,?,?,?) ON CONFLICT(user_email,provider) DO UPDATE SET encrypted_value=excluded.encrypted_value,updated_at=excluded.updated_at').bind(session.email,provider,encrypted,now).run();
-   return json({saved:true,updatedAt:now});
-  }
-  if(url.pathname==='/api/auto-apply/accounts'&&request.method==='POST'){
-   if(!sameOrigin(request,url))return json({error:'Use CareerNaviq to manage accounts.'},403);let input;try{input=await jsonInput(request);}catch{return json({error:'Invalid account request.'},400);}const provider=autoProvider(input?.provider),action=input?.action;if(!provider||!['connect','disconnect'].includes(action))return json({error:'Choose LinkedIn, Indeed, Dice, or Gmail.'},400);
-   const database=db(env);await ensureAutoApply(database);const now=new Date().toISOString();
-   if(action==='disconnect'){await database.prepare('DELETE FROM auto_connected_accounts WHERE user_email=? AND provider=?').bind(session.email,provider).run();await logAuto(database,session.email,'ACCOUNT_DISCONNECTED',`Disconnected ${provider}`);return json({message:`${provider} disconnected.`});}
-   const account=String(input?.account||'').trim().slice(0,254);if(account&&provider==='gmail'&&!emailPattern.test(account))return json({error:'Enter a valid Gmail account email.'},400);
-   const authType=provider==='gmail'?'oauth_required':'interactive_browser',metadata=JSON.stringify({account});
-   await database.prepare('INSERT INTO auto_connected_accounts (id,user_email,provider,status,auth_type,last_verified_at,metadata,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?) ON CONFLICT(user_email,provider) DO UPDATE SET status=excluded.status,auth_type=excluded.auth_type,metadata=excluded.metadata,updated_at=excluded.updated_at').bind(crypto.randomUUID(),session.email,provider,authType==='oauth_required'?'oauth_not_configured':'ready_for_worker_login',authType,null,metadata,now,now).run();
-   await logAuto(database,session.email,'ACCOUNT_CONNECT_REQUESTED',`Connection prepared for ${provider}`);return json({message:provider==='gmail'?'Gmail OAuth must be configured before connecting.':'Interactive browser sign-in will open in the external worker when configured.'});
-  }
-  if(url.pathname==='/api/auto-apply/matches'&&request.method==='POST'){
-   if(!sameOrigin(request,url))return json({error:'Use CareerNaviq to match jobs.'},403);let input;try{input=await jsonInput(request);}catch{return json({error:'Invalid matching request.'},400);}const category=String(input?.category||''),minScore=Number(input?.minScore||60);if(!sectionCategories.has(category)||!Number.isInteger(minScore)||minScore<0||minScore>100)return json({error:'Invalid matching filters.'},400);
-   const database=db(env);await ensureAutoApply(database);const profile=await database.prepare('SELECT * FROM user_profiles WHERE email=?').bind(session.email).first();let resume=null;if(input?.resumeId)resume=await database.prepare('SELECT id,extracted_text FROM auto_resumes WHERE user_email=? AND id=?').bind(session.email,input.resumeId).first();else resume=await database.prepare('SELECT id,extracted_text FROM auto_resumes WHERE user_email=? ORDER BY is_default DESC, created_at DESC LIMIT 1').bind(session.email).first();
-   const jobs=(await database.prepare("SELECT id,company_name,title,apply_url,posted_at FROM imported_jobs WHERE is_open=1 AND category=? ORDER BY CASE WHEN posted_at='' THEN 1 ELSE 0 END, posted_at DESC, discovered_at DESC LIMIT 200").bind(category).all()).results||[];const now=new Date().toISOString(),items=[];
-   for(const job of jobs){const scored=scoreJob({title:job.title,company_name:job.company_name},profile,resume?.extracted_text||'');if(scored.score<minScore)continue;const appId=crypto.randomUUID();await database.prepare("INSERT INTO auto_applications (id,user_email,imported_job_id,company_name,job_title,job_url,resume_id,match_score,match_reasons,status,last_activity_at,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,'MATCHED',?,?,?) ON CONFLICT(user_email,job_url) DO UPDATE SET match_score=excluded.match_score,match_reasons=excluded.match_reasons,updated_at=excluded.updated_at RETURNING id,company_name,job_title,job_url,resume_id,match_score,match_reasons,status,blocker_status,last_activity_at,created_at,updated_at").bind(appId,session.email,job.id,job.company_name,job.title,job.apply_url,resume?.id||'',scored.score,JSON.stringify(scored.reasons),now,now,now).first().then(r=>items.push(r));}
-   await logAuto(database,session.email,'MATCHING_COMPLETE',`Created or updated ${items.length} job matches`, '', {category,minScore});return json({items});
-  }
-  if(url.pathname==='/api/auto-apply/agent/start'&&request.method==='POST'){
-   if(!sameOrigin(request,url))return json({error:'Use CareerNaviq to start the agent.'},403);let input;try{input=await jsonInput(request);}catch{return json({error:'Invalid agent request.'},400);}const applicationId=String(input?.applicationId||'').trim(),instructions=String(input?.instructions||'').slice(0,3000);const database=db(env);await ensureAutoApply(database);const app=await database.prepare('SELECT * FROM auto_applications WHERE id=? AND user_email=?').bind(applicationId,session.email).first();if(!app)return json({error:'Application not found.'},404);
-   const profile=await database.prepare('SELECT * FROM user_profiles WHERE email=?').bind(session.email).first(),resume=app.resume_id?await database.prepare('SELECT id,file_name,file_type FROM auto_resumes WHERE id=? AND user_email=?').bind(app.resume_id,session.email).first():null;
-   let worker;try{worker=await workerCall(env,'/tasks/start',{userEmail:session.email,application:app,profile,resume,instructions,requireFinalApproval:true});}catch(error){await database.prepare("UPDATE auto_applications SET status='FAILED',last_activity_at=?,updated_at=? WHERE id=?").bind(new Date().toISOString(),new Date().toISOString(),applicationId).run();await logAuto(database,session.email,'AGENT_NOT_STARTED',error.message,applicationId);return json({error:error.message},error.status||500);}
-   const now=new Date().toISOString();await database.prepare("UPDATE auto_applications SET status='QUEUED',worker_task_id=?,last_activity_at=?,updated_at=? WHERE id=?").bind(worker.taskId||'',now,now,applicationId).run();await logAuto(database,session.email,'AGENT_STARTED','Automation task queued.',applicationId,worker);return json({message:'Automation task queued.',taskId:worker.taskId||''});
-  }
-  if(url.pathname==='/api/auto-apply/agent/control'&&request.method==='POST'){
-   if(!sameOrigin(request,url))return json({error:'Use CareerNaviq to control the agent.'},403);let input;try{input=await jsonInput(request);}catch{return json({error:'Invalid agent control.'},400);}const action=String(input?.action||'');if(!['start','pause','resume','stop'].includes(action))return json({error:'Invalid agent control.'},400);const database=db(env);await ensureAutoApply(database);await logAuto(database,session.email,`AGENT_${action.toUpperCase()}`,`Agent ${action} requested.`);return json({message:`Agent ${action} requested. ${env.SKYVERN_WORKER_URL?'Worker will receive task-specific controls from Application Tracker.':'Configure the external worker to execute browser controls.'}`});
-  }
-  if(url.pathname==='/api/auto-apply/blockers/answer'&&request.method==='POST'){
-   if(!sameOrigin(request,url))return json({error:'Use CareerNaviq to answer blockers.'},403);let input;try{input=await jsonInput(request);}catch{return json({error:'Invalid blocker answer.'},400);}const answer=String(input?.answer||'').trim();if(!answer)return json({error:'Enter an answer.'},400);const database=db(env);await ensureAutoApply(database);const b=await database.prepare('SELECT * FROM auto_blockers WHERE id=? AND user_email=?').bind(input.blockerId,session.email).first();if(!b)return json({error:'Blocker not found.'},404);const now=new Date().toISOString();await database.prepare("UPDATE auto_blockers SET answer=?,status='RESOLVED',updated_at=? WHERE id=?").bind(answer,now,b.id).run();await database.prepare("UPDATE auto_applications SET blocker_status='RESOLVED',status='QUEUED',last_activity_at=?,updated_at=? WHERE id=? AND user_email=?").bind(now,now,b.application_id,session.email).run();if(input.saveAnswer)await database.prepare('INSERT INTO auto_saved_answers (id,user_email,normalized_question,question,answer,answer_type,source,approved_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?) ON CONFLICT(user_email,normalized_question) DO UPDATE SET answer=excluded.answer,approved_at=excluded.approved_at,updated_at=excluded.updated_at').bind(crypto.randomUUID(),session.email,normalizeQuestion(b.question),b.question,answer,'general','blocker',now,now).run();await logAuto(database,session.email,'BLOCKER_RESOLVED',`Resolved blocker: ${b.reason}`,b.application_id);return json({resolved:true});
-  }
-  if(url.pathname==='/api/auto-apply/answers'&&request.method==='POST'){
-   if(!sameOrigin(request,url))return json({error:'Use CareerNaviq to save answers.'},403);let input;try{input=await jsonInput(request);}catch{return json({error:'Invalid answer.'},400);}const question=String(input?.question||'').trim(),answer=String(input?.answer||'').trim(),type=String(input?.answerType||'general');if(!question||!answer||question.length>500||answer.length>3000||!['general','work_authorization','sponsorship','salary','legal','company_specific'].includes(type))return json({error:'Enter a valid question and approved answer.'},400);const database=db(env);await ensureAutoApply(database);const now=new Date().toISOString();await database.prepare('INSERT INTO auto_saved_answers (id,user_email,normalized_question,question,answer,answer_type,source,approved_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?) ON CONFLICT(user_email,normalized_question) DO UPDATE SET question=excluded.question,answer=excluded.answer,answer_type=excluded.answer_type,approved_at=excluded.approved_at,updated_at=excluded.updated_at').bind(crypto.randomUUID(),session.email,normalizeQuestion(question),question,answer,type,'user',now,now).run();return json({saved:true});
-  }
-  if(url.pathname.startsWith('/api/auto-apply/answers/')&&request.method==='DELETE'){
-   const id=decodeURIComponent(url.pathname.split('/').pop());const database=db(env);await ensureAutoApply(database);await database.prepare('DELETE FROM auto_saved_answers WHERE id=? AND user_email=?').bind(id,session.email).run();return json({deleted:true});
-  }
-  if(url.pathname==='/api/auto-apply/settings'&&request.method==='PUT'){
-   if(!sameOrigin(request,url))return json({error:'Use CareerNaviq to save settings.'},403);let input;try{input=await jsonInput(request);}catch{return json({error:'Invalid settings.'},400);}const daily=Number(input?.dailyLimit),minimum=Number(input?.minimumScore),review=Boolean(input?.requireReview);if(!Number.isInteger(daily)||daily<0||daily>100||!Number.isInteger(minimum)||minimum<0||minimum>100)return json({error:'Check daily limit and score.'},400);const database=db(env);await ensureAutoApply(database);await database.prepare('INSERT INTO auto_agent_settings (user_email,daily_limit,minimum_score,require_review,updated_at) VALUES (?,?,?,?,?) ON CONFLICT(user_email) DO UPDATE SET daily_limit=excluded.daily_limit,minimum_score=excluded.minimum_score,require_review=excluded.require_review,updated_at=excluded.updated_at').bind(session.email,daily,minimum,review?1:0,new Date().toISOString()).run();return json({saved:true});
-  }
-  if(url.pathname==='/api/jobs/generate'&&request.method==='POST'){
-   if(!sameOrigin(request,url))return json({error:'Use the jobs page to generate results.'},403);
-   if(!canManage(session)&&!await tabAllowed(env,'latest-posted-jobs'))return json({error:restrictedMessage},403);
-   return json(await refreshElite(env));
-  }
-  if(url.pathname==='/api/jobs/query'&&request.method==='POST'){
-   if(!sameOrigin(request,url))return json({error:'Use the jobs page to view results.'},403);
-   if(!canManage(session)&&!await tabAllowed(env,'latest-posted-jobs'))return json({error:restrictedMessage},403);
-   let input;try{input=await jsonInput(request);}catch{return json({error:'Invalid job filters.'},400);}
-   const ids=jobSourceIds,category=String(input?.category||''),windowName=String(input?.window||'all');
-   if(!Array.isArray(ids)||ids.length>100||ids.some(id=>typeof id!=='string'||id.length>250)||!sectionCategories.has(category)||!['all','day','week','month'].includes(windowName))return json({error:'Invalid job filters.'},400);
-   if(!ids.length)return json({items:[]});
-   const min=input?.minYears==null?null:Number(input.minYears),max=input?.maxYears==null?null:Number(input.maxYears);
-   if((min!==null&&(!Number.isInteger(min)||min<0||min>60))||(max!==null&&(!Number.isInteger(max)||max<0||max>60))||(min!==null&&max!==null&&min>max))return json({error:'Invalid experience range.'},400);
-   const durations={day:86400000,week:604800000,month:2592000000};
-   const cutoff=windowName==='all'?'':new Date(Date.now()-durations[windowName]).toISOString().slice(0,10);
-   const search=String(input?.search||'').trim().slice(0,100),searchLike=`%${search.replace(/[\\%_]/g,'\\$&')}%`;
-   let sql=`SELECT id,company_id,company_name,category,title,apply_url,posted_at,min_years,max_years FROM imported_jobs WHERE is_open = 1 AND last_seen_at >= ? AND category = ? AND company_id IN (SELECT value FROM json_each(?))`;
-   const values=[new Date(Date.now()-30*86400000).toISOString(),category,JSON.stringify(ids)];
-   if(cutoff){sql+=' AND posted_at >= ?';values.push(cutoff);}
-   if(search){sql+=" AND (lower(title) LIKE lower(?) ESCAPE '\\' OR lower(company_name) LIKE lower(?) ESCAPE '\\')";values.push(searchLike,searchLike);}
-   if(min!==null){sql+=' AND min_years IS NOT NULL AND (max_years IS NULL OR max_years >= ?)';values.push(min);}
-   if(max!==null){sql+=' AND min_years IS NOT NULL AND min_years <= ?';values.push(max);}
-   sql+=(search?" ORDER BY CASE WHEN lower(title)=lower(?) THEN 0 WHEN lower(title) LIKE lower(?) ESCAPE '\\' THEN 1 WHEN lower(company_name)=lower(?) THEN 2 WHEN lower(company_name) LIKE lower(?) ESCAPE '\\' THEN 3 ELSE 4 END, ":" ORDER BY ")+"CASE WHEN posted_at = '' THEN 1 ELSE 0 END, posted_at DESC, discovered_at DESC LIMIT 1000";if(search)values.push(search,`${search.replace(/[\\%_]/g,'\\$&')}%`,search,`${search.replace(/[\\%_]/g,'\\$&')}%`);
-   const {results}=await db(env).prepare(sql).bind(...values).all();
-   const source=await db(env).prepare('SELECT checked_at,status,message FROM job_source_checks WHERE company_id=?').bind(aggregateJobSourceId).first();
-   return json({items:results,source});
-  }
-  if(['/companies.json','/api/changes','/api/companies','/api/company'].includes(url.pathname)&&!canManage(session)&&!await tabAllowed(env,'employer-directory'))return json({error:restrictedMessage},403);
+  return { score: Math.min(100, score), reasons };
+}
+async function workerCall(env, path, payload) {
+  const base = env.SKYVERN_WORKER_URL,
+    secret = env.AUTO_APPLY_WORKER_SECRET;
+  if (!base || !secret)
+    throw Object.assign(
+      Error(
+        'Skyvern/Ollama worker is not configured for this Site. Deploy the external worker and set SKYVERN_WORKER_URL and AUTO_APPLY_WORKER_SECRET.',
+      ),
+      { status: 501 },
+    );
+  const response = await fetch(new URL(path, base).toString(), {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${secret}`,
+    },
+    body: JSON.stringify(payload),
+    signal: AbortSignal.timeout(30000),
+  });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok)
+    throw Object.assign(
+      Error(body.error || 'Automation worker request failed.'),
+      { status: 502 },
+    );
+  return body;
+}
 
-  if(url.pathname.startsWith('/api/ask/attachments/')&&request.method==='GET'){
-   const database=db(env);await ensureAskMessages(database);const file=await database.prepare('SELECT * FROM ask_attachments WHERE id=?').bind(url.pathname.split('/').pop()).first();
-   if(!file||(file.user_email!==session.email&&!canManage(session)))return json({error:'Attachment unavailable.'},404);
-   const object=await bucket(env).get(file.file_key);if(!object)return json({error:'Attachment unavailable.'},404);
-   return new Response(object.body,{headers:{'Content-Type':'application/octet-stream','Content-Disposition':"attachment; filename*=UTF-8''"+encodeURIComponent(file.file_name),'Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'}});
-  }
-  if(url.pathname==='/api/ask/messages'&&request.method==='GET'){
-   const database=db(env);await ensureAskMessages(database);
-   const {results}=await database.prepare("SELECT id,body,sender,created_at FROM ask_messages WHERE user_email = ? ORDER BY created_at ASC LIMIT 300").bind(session.email).all();
-   await database.prepare("UPDATE ask_messages SET read_by_user_at = COALESCE(read_by_user_at, ?) WHERE user_email = ? AND sender = 'admin'").bind(new Date().toISOString(),session.email).run();
-   const attachments=await chatAttachments(database);return json({items:results.map(row=>({id:row.id,attachments:attachments.get(row.id)||[],body:row.body,sender:row.sender==='admin'?'support':'user',createdAt:row.created_at}))});
-  }
-  if(url.pathname==='/api/ask/messages'&&request.method==='POST'){
-   if(!sameOrigin(request,url))return json({error:'Use CareerNaviq to send questions.'},403);
-   let input;try{input=await chatInput(request);}catch(error){return json({error:error.message||'Invalid message.'},400);}
-   const body=String(input?.body||'').trim();
-   if((!body&&!input.files?.length)||body.length>1200)return json({error:'Enter a message under 1200 characters.'},400);
-   const database=db(env);await ensureAskMessages(database);await ensureAccessUserColumns(database);
-   const user=await database.prepare('SELECT name FROM access_users WHERE email = ?').bind(session.email).first();
-   const now=new Date().toISOString();
-   const item={id:crypto.randomUUID(),body,sender:'user',createdAt:now};
-   await saveChatFiles(database,env,input,item.id,session.email);
-   await database.prepare("INSERT INTO ask_messages (id,user_email,user_name,body,sender,created_at) VALUES (?,?,?,?,?,?)").bind(item.id,session.email,user?.name||session.name||'',body,'user',now).run();
-   return json({item:{id:item.id,body:item.body,sender:'user',createdAt:item.createdAt}},201);
-  }
-  if(url.pathname==='/api/admin/questions'&&request.method==='GET'){
-   if(!canManage(session))return json({error:'Admin access required.'},403);
-   const database=db(env);await ensureAskMessages(database);await ensureAccessUserColumns(database);
-   const {results}=await database.prepare("SELECT m.id,m.user_email,m.user_name,COALESCE(NULLIF(trim(u.name),''),NULLIF(latest.saved_name,''),m.user_email) AS profile_name,m.body,m.sender,m.created_at,m.read_by_admin_at,m.read_by_user_at FROM ask_messages m JOIN (SELECT user_email,max(created_at) AS last_at,max(NULLIF(trim(user_name),'')) AS saved_name FROM ask_messages GROUP BY user_email) latest ON latest.user_email = m.user_email LEFT JOIN access_users u ON u.email = m.user_email ORDER BY latest.last_at DESC,m.created_at ASC LIMIT 1000").all();
-   const attachments=await chatAttachments(database);const threads=[];const byEmail=new Map();
-   for(const row of results){
-    let thread=byEmail.get(row.user_email);if(!thread){thread={email:row.user_email,name:row.profile_name||row.user_email,messages:[],unread:0,lastAt:row.created_at};byEmail.set(row.user_email,thread);threads.push(thread);}
-    thread.messages.push({id:row.id,attachments:attachments.get(row.id)||[],body:row.body,sender:row.sender,createdAt:row.created_at,readByUserAt:row.read_by_user_at||''});
-    thread.lastAt=row.created_at;if(row.sender==='user'&&!row.read_by_admin_at)thread.unread++;
-   }
-   const cleared=await database.prepare("SELECT t.user_email,t.updated_at,u.name FROM ask_threads t LEFT JOIN access_users u ON u.email=t.user_email ORDER BY t.updated_at DESC").all();
-   for(const row of cleared.results||[])if(!byEmail.has(row.user_email))threads.push({email:row.user_email,name:row.name||row.user_email,messages:[],unread:0,lastAt:row.updated_at});
-   threads.sort((a,b)=>b.lastAt.localeCompare(a.lastAt));
-   return json({items:threads});
-  }
-  if(url.pathname==='/api/admin/questions/manage'&&request.method==='POST'){
-   if(!canManage(session))return json({error:'Admin access required.'},403);
-   if(!sameOrigin(request,url))return json({error:'Use Admin to manage chats.'},403);
-   let input;try{input=await jsonInput(request);}catch{return json({error:'Invalid chat action.'},400);}
-   const email=String(input?.email||'').trim().toLowerCase(),action=input?.action;
-   if(!emailPattern.test(email)||!['clear','delete'].includes(action))return json({error:'Invalid chat action.'},400);
-   const database=db(env);await ensureAskMessages(database);
-   await removeChatFiles(database,env,email);
-   const statements=[database.prepare('DELETE FROM ask_messages WHERE user_email=?').bind(email)];
-   if(action==='clear')statements.push(database.prepare('INSERT INTO ask_threads(user_email,updated_at) VALUES(?,?) ON CONFLICT(user_email) DO UPDATE SET updated_at=excluded.updated_at').bind(email,new Date().toISOString()));
-   else statements.push(database.prepare('DELETE FROM ask_threads WHERE user_email=?').bind(email));
-   await database.batch(statements);return json({success:true});
-  }
-  if(url.pathname==='/api/admin/questions/reply'&&request.method==='POST'){
-   if(!canManage(session))return json({error:'Admin access required.'},403);
-   if(!sameOrigin(request,url))return json({error:'Use Admin to reply.'},403);
-   let input;try{input=await chatInput(request);}catch(error){return json({error:error.message||'Invalid reply.'},400);}
-   const userEmail=String(input?.email||'').trim().toLowerCase(),body=String(input?.body||'').trim();
-   if(!emailPattern.test(userEmail)||(!body&&!input.files?.length)||body.length>1200)return json({error:'Enter a valid user and reply.'},400);
-   const database=db(env);await ensureAskMessages(database);
-   const existing=await database.prepare('SELECT user_email FROM ask_messages WHERE user_email = ? LIMIT 1').bind(userEmail).first();
-   const recipient=await database.prepare('SELECT name,status FROM access_users WHERE email = ?').bind(userEmail).first();
-   const thread=await database.prepare('SELECT user_email FROM ask_threads WHERE user_email = ?').bind(userEmail).first();
-   if(!existing&&!thread&&recipient?.status!=='approved')return json({error:'Select an existing approved user.'},404);
-   const now=new Date().toISOString(),messageId=crypto.randomUUID();
-   await saveChatFiles(database,env,input,messageId,userEmail);
-   await database.batch([
-    database.prepare("UPDATE ask_messages SET read_by_admin_at = COALESCE(read_by_admin_at, ?) WHERE user_email = ? AND sender = 'user'").bind(now,userEmail),
-    database.prepare("INSERT INTO ask_messages (id,user_email,user_name,body,sender,admin_email,created_at) VALUES (?,?,?,?,?,?,?)").bind(messageId,userEmail,recipient?.name||'',body,'admin',session.email,now)
-   ]);
-   return json({sent:true});
-  }
-  if(url.pathname==='/api/admin/questions/read'&&request.method==='POST'){
-   if(!canManage(session))return json({error:'Admin access required.'},403);
-   if(!sameOrigin(request,url))return json({error:'Use Admin to read messages.'},403);
-   let input;try{input=await jsonInput(request);}catch{return json({error:'Invalid conversation.'},400);}
-   const userEmail=String(input?.email||'').trim().toLowerCase();
-   if(!emailPattern.test(userEmail))return json({error:'Invalid user email.'},400);
-   const database=db(env);await ensureAskMessages(database);
-   await database.prepare("UPDATE ask_messages SET read_by_admin_at = COALESCE(read_by_admin_at, ?) WHERE user_email = ? AND sender = 'user'").bind(new Date().toISOString(),userEmail).run();
-   return json({read:true});
-  }
+async function autoApproveAccess(database) {
+  await ensureAppSettings(database);
+  const row = await database
+    .prepare("SELECT value FROM app_settings WHERE key = 'auto_approve_access'")
+    .first();
+  return row?.value === 'true';
+}
+async function tabAllowed(env, tab) {
+  const row = await db(env)
+    .prepare('SELECT allowed FROM tab_access WHERE tab = ?')
+    .bind(tab)
+    .first();
+  return row?.allowed !== 0;
+}
+async function currentCompany(database, id, old) {
+  const base = known.get(id);
+  const row = base
+    ? { name: base[0], linkedin: base[1], careers: base[2], category: base[3] }
+    : await database
+        .prepare(
+          'SELECT name,linkedin,careers,category FROM added_companies WHERE id = ?',
+        )
+        .bind(id)
+        .first();
+  return row ? { ...row, ...(old ? JSON.parse(old.payload) : {}) } : null;
+}
+function sameOrigin(request, url) {
+  return (
+    !request.headers.get('Origin') ||
+    request.headers.get('Origin') === url.origin
+  );
+}
+function escapeLike(value) {
+  return String(value || '').replace(/[\\%_]/g, '\\$&');
+}
+async function jsonInput(request) {
+  if (!request.headers.get('Content-Type')?.includes('application/json'))
+    throw Error('JSON required.');
+  const body = await request.text();
+  if (body.length > 30000) throw Error('Request too large.');
+  return JSON.parse(body);
+}
+export default {
+  async fetch(request, env) {
+    const url = new URL(request.url);
+    try {
+      if (url.pathname === '/mcp' && request.method === 'POST') {
+        const call = await request.json(),
+          reply = (result) => json({ jsonrpc: '2.0', id: call.id, result });
+        if (call.method === 'initialize')
+          return reply({
+            protocolVersion: '2024-11-05',
+            capabilities: { tools: {} },
+            serverInfo: { name: 'CarrerNaviq jobs', version: '1.0.0' },
+          });
+        if (call.method === 'notifications/initialized')
+          return new Response(null, { status: 202 });
+        if (call.method === 'tools/list')
+          return reply({
+            tools: [
+              {
+                name: 'refresh_elite_jobs',
+                description:
+                  'Import current technology jobs and return the saved source status. Administrator only.',
+                inputSchema: {
+                  type: 'object',
+                  properties: {},
+                  additionalProperties: false,
+                },
+              },
+              {
+                name: 'elite_jobs_status',
+                description:
+                  'Read job import status and saved job counts. Administrator only.',
+                inputSchema: {
+                  type: 'object',
+                  properties: {},
+                  additionalProperties: false,
+                },
+              },
+            ],
+          });
+        const email = (
+          request.headers.get('oai-authenticated-user-email') || ''
+        ).toLowerCase();
+        if (
+          !request.headers.get('oai-authenticated-user-id') ||
+          !(
+            email === adminEmail ||
+            (await db(env)
+              .prepare('SELECT email FROM coadmins WHERE email=?')
+              .bind(email)
+              .first())
+          )
+        )
+          return json(
+            { error: 'Verified administrator identity required.' },
+            403,
+          );
+        if (call.method === 'tools/call') {
+          let result;
+          if (call.params?.name === 'refresh_elite_jobs')
+            result = await refreshElite(env);
+          else if (call.params?.name === 'elite_jobs_status')
+            result = {
+              source: await db(env)
+                .prepare('SELECT * FROM job_source_checks WHERE company_id=?')
+                .bind(aggregateJobSourceId)
+                .first(),
+              counts: (
+                await db(env)
+                  .prepare(
+                    'SELECT category,count(*) AS count FROM imported_jobs WHERE company_id IN (SELECT value FROM json_each(?)) AND is_open=1 GROUP BY category',
+                  )
+                  .bind(JSON.stringify(jobSourceIds))
+                  .all()
+              ).results,
+            };
+          else
+            return json({
+              jsonrpc: '2.0',
+              id: call.id,
+              error: { code: -32601, message: 'Unknown tool' },
+            });
+          return reply({
+            content: [{ type: 'text', text: JSON.stringify(result) }],
+          });
+        }
+        return json({
+          jsonrpc: '2.0',
+          id: call.id,
+          error: { code: -32601, message: 'Unknown method' },
+        });
+      }
 
-  if(url.pathname==='/api/app-profile'&&request.method==='PUT'){
-   if(!sameOrigin(request,url))return json({error:'Use CareerNaviq to update your profile.'},403);
-   let input;try{input=await jsonInput(request);}catch{return json({error:'Invalid profile details.'},400);}
-   const name=String(input?.name||'').trim().replace(/\s+/g,' ');
-   if(!name||name.length>120)return json({error:'Enter your name.'},400);
-   const database=db(env);await ensureAccessUserColumns(database);
-   const now=new Date().toISOString();
-   await database.prepare("INSERT INTO access_users(email,name,status,requested_at,updated_at) VALUES(?,?,?,?,?) ON CONFLICT(email) DO UPDATE SET name=excluded.name,updated_at=excluded.updated_at").bind(session.email,name,session.status,now,now).run();
-   return json({email:session.email,name});
-  }
-  if(url.pathname==='/api/app-profile'&&request.method==='DELETE'){
-   if(!sameOrigin(request,url))return json({error:'Use CareerNaviq to delete your account access.'},403);
-   let input;try{input=await jsonInput(request);}catch{return json({error:'Invalid account deletion.'},400);}
-   const email=String(input?.email||'').trim().toLowerCase();
-   if(email!==session.email)return json({error:'Enter your own account email to delete access.'},400);
-   if(email===adminEmail)return json({error:'The Admin account cannot be deleted here.'},400);
-   const database=db(env);await ensureAskMessages(database);await ensureAutoApply(database);await ensureVault(database);await removeChatFiles(database,env,email);await database.batch([
-    database.prepare('DELETE FROM credential_vault WHERE user_email=?').bind(email),
-    database.prepare('DELETE FROM access_sessions WHERE email = ?').bind(email),
-    database.prepare('DELETE FROM user_profiles WHERE email = ?').bind(email),
-    database.prepare('DELETE FROM auto_resumes WHERE user_email = ?').bind(email),
-    database.prepare('DELETE FROM auto_connected_accounts WHERE user_email = ?').bind(email),
-    database.prepare('DELETE FROM auto_agent_settings WHERE user_email = ?').bind(email),
-    database.prepare('DELETE FROM coadmins WHERE email = ?').bind(email),
-    database.prepare('DELETE FROM ask_messages WHERE user_email = ?').bind(email),
-    database.prepare('DELETE FROM access_users WHERE email = ?').bind(email)
-   ]);
-   return json({deleted:true,email},200);
-  }
-  if(url.pathname==='/api/profile'&&request.method==='GET'){
-   const database=db(env);await ensureProfileColumns(database);await ensureAccessUserColumns(database);const profile=await database.prepare('SELECT * FROM user_profiles WHERE email = ?').bind(session.email).first();const accessUser=await database.prepare('SELECT name FROM access_users WHERE email = ?').bind(session.email).first();
-   return json({email:session.email,name:accessUser?.name||session.name||'',profile:profile||null});
-  }
-  if(url.pathname==='/api/profile'&&request.method==='PUT'){
-   if(!sameOrigin(request,url))return json({error:'Use the profile page to save changes.'},403);
-   let input;try{input=await jsonInput(request);}catch{return json({error:'Invalid profile details.'},400);}
-   const firstName=String(input?.firstName||'').trim(),lastName=String(input?.lastName||'').trim(),legalName=String(input?.legalName||'').trim(),applicationEmail=String(input?.applicationEmail||'').trim();
-   const mobile=String(input?.mobile||'').trim(),mobileCountryCode=String(input?.mobileCountryCode||'').trim()||'+1',workAuthorization=String(input?.workAuthorization||'').trim();
-   const location=String(input?.location||'').trim(),address=String(input?.address||'').trim(),city=String(input?.city||'').trim(),state=String(input?.state||'').trim(),zip=String(input?.zip||'').trim(),linkedinUrl=String(input?.linkedinUrl||'').trim(),portfolioUrl=String(input?.portfolioUrl||'').trim(),githubUrl=String(input?.githubUrl||'').trim();
-   const university=String(input?.university||'').trim(),degree=String(input?.degree||'').trim(),educationStartMonth=String(input?.educationStartMonth||'').trim(),educationStartYear=String(input?.educationStartYear||'').trim(),educationEndMonth=String(input?.educationEndMonth||'').trim(),educationEndYear=String(input?.educationEndYear||'').trim();
-   const startDate=String(input?.startDate||'').trim(),employmentTypePreferences=String(input?.employmentTypePreferences||'').trim(),relocationPreferences=String(input?.relocationPreferences||'').trim();
-   const salaryMin=String(input?.salaryMin||'').trim(),salaryMax=String(input?.salaryMax||'').trim(),hourlyMin=String(input?.hourlyMin||'').trim(),hourlyMax=String(input?.hourlyMax||'').trim();
-   const experience=String(input?.experience||'').trim(),skills=String(input?.skills||'').trim(),certifications=String(input?.certifications||'').trim(),sponsorshipNeeds=String(input?.sponsorshipNeeds||'').trim(),jobPreferences=String(input?.jobPreferences||'').trim(),approvedScreeningAnswers=String(input?.approvedScreeningAnswers||'').trim();
-   const phoneCodeOk=/^\+(?:\d{1,4}|1-CA)$/.test(mobileCountryCode),emailOk=!applicationEmail||/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(applicationEmail),numberOk=value=>!value||/^\d{1,9}(?:\.\d{1,2})?$/.test(value);
-   const authOptions=['','U.S. Citizen','Green Card / Permanent Resident','H1B','H4 EAD','L2 EAD','OPT','STEM OPT','CPT','TN Visa','Requires sponsorship now','Requires sponsorship in the future','Other work authorization'];
-   const employmentOptions=['','Full-time','Contract - W2','Contract - C2C','Contract - 1099','Contract-to-hire','Part-time','Internship'];
-   const relocationOptions=['','Open to relocate','Not open to relocate','Remote only','Hybrid only','On-site only','Within current city','Within current state','Anywhere in the U.S.','Specific locations only'];
-   const monthOptions=['','January','February','March','April','May','June','July','August','September','October','November','December'];
-   if(firstName.length>80||lastName.length>80||legalName.length>180||!emailOk||mobileCountryCode.length>8||!phoneCodeOk||mobile.length>40||(mobile&&!/^[()\d.\s-]+$/.test(mobile))||!authOptions.includes(workAuthorization)||location.length>160||address.length>240||city.length>100||state.length>80||zip.length>20||!link(linkedinUrl)||!link(portfolioUrl)||!link(githubUrl)||university.length>200||degree.length>200||!monthOptions.includes(educationStartMonth)||!monthOptions.includes(educationEndMonth)||(educationStartYear&&!/^\d{4}$/.test(educationStartYear))||(educationEndYear&&!/^\d{4}$/.test(educationEndYear))||startDate.length>20||!employmentOptions.includes(employmentTypePreferences)||!relocationOptions.includes(relocationPreferences)||!numberOk(salaryMin)||!numberOk(salaryMax)||!numberOk(hourlyMin)||!numberOk(hourlyMax)||experience.length>3000||skills.length>3000||certifications.length>2000||sponsorshipNeeds.length>2000||jobPreferences.length>2000||approvedScreeningAnswers.length>5000)return json({error:'Check the details you entered. You can leave any profile field blank.'},400);
-   const salaryExpectations=[salaryMin||salaryMax?`Annual: ${salaryMin||'Any'}-${salaryMax||'Any'}`:'',hourlyMin||hourlyMax?`Hourly: ${hourlyMin||'Any'}-${hourlyMax||'Any'}`:''].filter(Boolean).join(' | ');
-   const education=[university,degree,[educationStartMonth,educationStartYear].filter(Boolean).join(' '),[educationEndMonth,educationEndYear].filter(Boolean).join(' ')].filter(Boolean).join(' | ');
-   const now=new Date().toISOString();
-   const database=db(env);await ensureProfileColumns(database);const result=await database.prepare('INSERT INTO user_profiles (email,first_name,last_name,mobile,mobile_country_code,visa_status,legal_name,application_email,location,address,city,state,zip,linkedin_url,portfolio_url,github_url,start_date,education,education_university,education_degree,education_start_month,education_start_year,education_end_month,education_end_year,experience,skills,certifications,work_authorization,sponsorship_needs,salary_expectations,salary_min,salary_max,hourly_min,hourly_max,job_preferences,employment_type_preferences,relocation_preferences,approved_screening_answers,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(email) DO UPDATE SET first_name=excluded.first_name,last_name=excluded.last_name,mobile=excluded.mobile,mobile_country_code=excluded.mobile_country_code,visa_status=excluded.visa_status,legal_name=excluded.legal_name,application_email=excluded.application_email,location=excluded.location,address=excluded.address,city=excluded.city,state=excluded.state,zip=excluded.zip,linkedin_url=excluded.linkedin_url,portfolio_url=excluded.portfolio_url,github_url=excluded.github_url,start_date=excluded.start_date,education=excluded.education,education_university=excluded.education_university,education_degree=excluded.education_degree,education_start_month=excluded.education_start_month,education_start_year=excluded.education_start_year,education_end_month=excluded.education_end_month,education_end_year=excluded.education_end_year,experience=excluded.experience,skills=excluded.skills,certifications=excluded.certifications,work_authorization=excluded.work_authorization,sponsorship_needs=excluded.sponsorship_needs,salary_expectations=excluded.salary_expectations,salary_min=excluded.salary_min,salary_max=excluded.salary_max,hourly_min=excluded.hourly_min,hourly_max=excluded.hourly_max,job_preferences=excluded.job_preferences,employment_type_preferences=excluded.employment_type_preferences,relocation_preferences=excluded.relocation_preferences,approved_screening_answers=excluded.approved_screening_answers,updated_at=excluded.updated_at RETURNING *').bind(session.email,firstName,lastName,mobile,mobileCountryCode,workAuthorization,legalName,applicationEmail,location,address,city,state,zip,linkedinUrl,portfolioUrl,githubUrl,startDate,education,university,degree,educationStartMonth,educationStartYear,educationEndMonth,educationEndYear,experience,skills,certifications,workAuthorization,sponsorshipNeeds,salaryExpectations,salaryMin,salaryMax,hourlyMin,hourlyMax,jobPreferences,employmentTypePreferences,relocationPreferences,approvedScreeningAnswers,now).first();
-   return json({email:session.email,profile:result});
-  }
-  if(url.pathname==='/api/section-items'&&request.method==='GET'){
-   const section=url.searchParams.get('section'),category=url.searchParams.get('category');
-   if(!sectionNames.has(section)||(!sectionCategories.has(category)&&!(section==='recruiter-directory'&&['all','mylist'].includes(category))))return json({error:'Invalid section or category.'},400);
-   if(!canManage(session)&&!await tabAllowed(env,section))return json({error:restrictedMessage},403);
-   const search=(url.searchParams.get('search')||'').trim().slice(0,100),searchLike=`%${escapeLike(search)}%`;
-   const windowName=url.searchParams.get('window')||'all';
-   if(!['all','day','week','month'].includes(windowName))return json({error:'Invalid date filter.'},400);
-   const durations={day:86400000,week:604800000,month:2592000000};
-   const cutoff=windowName==='all'?'':new Date(Date.now()-durations[windowName]).toISOString();
-   const searchableFields=['title','organization','url','details','email','phone','extension','file_name','category'];
-   const itemSearch=search?` AND (${searchableFields.map(field=>`lower(coalesce(${field},'')) LIKE lower(?) ESCAPE '\\'`).join(' OR ')})`:'';
-   const joinSearch=search?` AND (${searchableFields.map(field=>`lower(coalesce(item.${field},'')) LIKE lower(?) ESCAPE '\\'`).join(' OR ')})`:'';
-   const searchValues=search?searchableFields.map(()=>searchLike):[];
-   const sectionItemOrder=section==='recruiter-directory'
-    ? "ORDER BY CASE WHEN organization IS NULL OR organization = '' THEN 1 ELSE 0 END, lower(coalesce(organization,'')), lower(title), created_at DESC"
-    : "ORDER BY created_at DESC";
-   const recruiterJoinOrder="ORDER BY CASE WHEN item.organization IS NULL OR item.organization = '' THEN 1 ELSE 0 END, lower(coalesce(item.organization,'')), lower(item.title), item.created_at DESC";
-   let results;
-   if(section==='recruiter-directory'){
-    const database=db(env);await ensureSectionFavorites(database);
-    if(category==='mylist')({results}=await database.prepare(`SELECT item.id,item.version,item.category,item.title,item.organization,item.url,item.details,item.email,item.phone,item.extension,item.file_name,item.posted_at,item.created_at,1 AS is_favorite FROM section_items item JOIN section_favorites favorite ON favorite.item_id = item.id AND favorite.user_email = ? WHERE item.section = ? AND item.status = 'approved'${joinSearch} AND (? = '' OR item.posted_at >= ?) ${recruiterJoinOrder} LIMIT 5000`).bind(...[session.email,section,...searchValues,cutoff,cutoff]).all());
-    else {
-     const categoryClause=search?'':' AND category = ?';
-     const binds=search?[session.email,section,...searchValues,cutoff,cutoff]:[session.email,section,category,...searchValues,cutoff,cutoff];
-     ({results}=await database.prepare(`SELECT id,version,category,title,organization,url,details,email,phone,extension,file_name,posted_at,created_at,EXISTS(SELECT 1 FROM section_favorites favorite WHERE favorite.user_email = ? AND favorite.item_id = section_items.id) AS is_favorite FROM section_items WHERE section = ?${categoryClause} AND status = 'approved'${itemSearch} AND (? = '' OR posted_at >= ?) ${sectionItemOrder} LIMIT ${section==='recruiter-directory'?5000:500}`).bind(...binds).all());
+      if (url.pathname === '/api/session' && request.method === 'GET') {
+        const session = await sessionFor(request, env);
+        return json(
+          session
+            ? {
+                email: session.email,
+                role: session.role,
+                status: session.status,
+                name: session.name || '',
+              }
+            : { role: 'guest', status: 'none' },
+        );
+      }
+      if (url.pathname === '/api/access/request' && request.method === 'POST') {
+        if (!sameOrigin(request, url))
+          return json({ error: 'Use the directory to request access.' }, 403);
+        let input;
+        try {
+          input = await jsonInput(request);
+        } catch {
+          return json({ error: 'Enter a valid Gmail address.' }, 400);
+        }
+        const email = String(input?.email || '')
+          .trim()
+          .toLowerCase();
+        const name = String(input?.name || '')
+          .trim()
+          .replace(/\s+/g, ' ');
+        if (
+          email.length > 254 ||
+          !email.endsWith('@gmail.com') ||
+          !emailPattern.test(email) ||
+          email === adminEmail
+        )
+          return json({ error: 'Enter a valid Gmail address.' }, 400);
+        if (!name || name.length > 120)
+          return json({ error: 'Enter your name to request access.' }, 400);
+        const database = db(env),
+          now = new Date().toISOString();
+        await ensureAccessUserColumns(database);
+        const autoApprove = await autoApproveAccess(database),
+          initialStatus = autoApprove ? 'approved' : 'pending';
+        await database
+          .prepare(
+            "INSERT INTO access_users (email,name,status,requested_at,updated_at) VALUES (?,?,?,?,?) ON CONFLICT(email) DO UPDATE SET name = CASE WHEN excluded.name <> '' THEN excluded.name ELSE access_users.name END, updated_at = excluded.updated_at",
+          )
+          .bind(email, name, initialStatus, now, now)
+          .run();
+        const user = await database
+          .prepare('SELECT status,name FROM access_users WHERE email = ?')
+          .bind(email)
+          .first();
+        if (user.status === 'blocked')
+          return json(
+            { error: 'This Gmail is blocked. Contact the Admin.' },
+            403,
+          );
+        const token = crypto.randomUUID() + crypto.randomUUID();
+        await database
+          .prepare(
+            'INSERT INTO access_sessions (token,email,role,created_at) VALUES (?,?,?,?)',
+          )
+          .bind(token, email, 'user', now)
+          .run();
+        return Response.json(
+          { email, role: 'user', status: user.status, name: user.name || name },
+          {
+            headers: {
+              'Set-Cookie': sessionCookie(token),
+              'Cache-Control': 'no-store',
+            },
+          },
+        );
+      }
+      if (url.pathname === '/api/access/login' && request.method === 'POST') {
+        if (!sameOrigin(request, url))
+          return json({ error: 'Use the directory to log in.' }, 403);
+        let input;
+        try {
+          input = await jsonInput(request);
+        } catch {
+          return json({ error: 'Enter a valid Gmail address.' }, 400);
+        }
+        const email = String(input?.email || '')
+          .trim()
+          .toLowerCase();
+        if (
+          email.length > 254 ||
+          !email.endsWith('@gmail.com') ||
+          !emailPattern.test(email)
+        )
+          return json({ error: 'Enter a valid Gmail address.' }, 400);
+        const database = db(env);
+        await ensureAccessUserColumns(database);
+        const user = await database
+          .prepare('SELECT status,name FROM access_users WHERE email = ?')
+          .bind(email)
+          .first();
+        if (!user)
+          return json(
+            { error: 'No access request found. Use Request access first.' },
+            404,
+          );
+        if (user.status === 'pending')
+          return json(
+            { error: 'Your request is awaiting Admin approval.' },
+            403,
+          );
+        if (user.status === 'blocked')
+          return json(
+            { error: 'This Gmail is blocked. Contact the Admin.' },
+            403,
+          );
+        const token = crypto.randomUUID() + crypto.randomUUID();
+        await database
+          .prepare(
+            'INSERT INTO access_sessions (token,email,role,created_at) VALUES (?,?,?,?)',
+          )
+          .bind(token, email, 'user', new Date().toISOString())
+          .run();
+        const coadmin = await database
+          .prepare('SELECT email FROM coadmins WHERE email = ?')
+          .bind(email)
+          .first();
+        return Response.json(
+          {
+            email,
+            role: coadmin ? 'coadmin' : 'user',
+            status: 'approved',
+            name: user.name || '',
+          },
+          {
+            headers: {
+              'Set-Cookie': sessionCookie(token),
+              'Cache-Control': 'no-store',
+            },
+          },
+        );
+      }
+      if (url.pathname === '/api/admin/login' && request.method === 'POST') {
+        if (!sameOrigin(request, url))
+          return json({ error: 'Use the directory to open Admin mode.' }, 403);
+        let input;
+        try {
+          input = await jsonInput(request);
+        } catch {
+          return json({ error: 'Enter the admin Gmail.' }, 400);
+        }
+        const email = String(input?.email || '')
+          .trim()
+          .toLowerCase();
+        let role = 'admin';
+        if (email !== adminEmail) {
+          const member = await db(env)
+            .prepare('SELECT email FROM coadmins WHERE email = ?')
+            .bind(email)
+            .first();
+          const user = await db(env)
+            .prepare('SELECT status FROM access_users WHERE email = ?')
+            .bind(email)
+            .first();
+          if (!member || user?.status !== 'approved')
+            return json(
+              { error: 'This Gmail is not registered as Admin or Coadmin.' },
+              403,
+            );
+          role = 'coadmin';
+        }
+        const token = crypto.randomUUID() + crypto.randomUUID();
+        await db(env)
+          .prepare(
+            'INSERT INTO access_sessions (token,email,role,created_at) VALUES (?,?,?,?)',
+          )
+          .bind(token, email, role, new Date().toISOString())
+          .run();
+        return Response.json(
+          { email, role, status: 'approved' },
+          {
+            headers: {
+              'Set-Cookie': sessionCookie(token),
+              'Cache-Control': 'no-store',
+            },
+          },
+        );
+      }
+      if (url.pathname === '/api/logout' && request.method === 'POST') {
+        if (!sameOrigin(request, url))
+          return json({ error: 'Use the directory to sign out.' }, 403);
+        const token = requestToken(request);
+        if (token)
+          await db(env)
+            .prepare('DELETE FROM access_sessions WHERE token = ?')
+            .bind(token)
+            .run();
+        return Response.json(
+          { ok: true },
+          {
+            headers: {
+              'Set-Cookie': clearSessionCookie(),
+              'Cache-Control': 'no-store',
+            },
+          },
+        );
+      }
+      const session = await sessionFor(request, env);
+
+      if (url.pathname === '/api/admin/analytics' && request.method === 'GET') {
+        if (!canManage(session))
+          return json({ error: 'Admin access required.' }, 403);
+        const database = db(env),
+          now = new Date(),
+          dayAgo = new Date(now.getTime() - 86400000).toISOString(),
+          weekAgo = new Date(now.getTime() - 604800000).toISOString();
+        await ensureAdminAccessRequests(database);
+        const count = async (sql, ...values) => {
+          const query = database.prepare(sql);
+          return Number(
+            (await (values.length ? query.bind(...values) : query).first())
+              ?.count || 0,
+          );
+        };
+        const userRows =
+          (
+            await database
+              .prepare(
+                'SELECT status,count(*) AS count FROM access_users GROUP BY status',
+              )
+              .all()
+          ).results || [];
+        const users = Object.fromEntries(
+          userRows.map((row) => [row.status, Number(row.count || 0)]),
+        );
+        const sectionRows =
+          (
+            await database
+              .prepare(
+                "SELECT section,count(*) AS count FROM section_items WHERE status = 'approved' GROUP BY section",
+              )
+              .all()
+          ).results || [];
+        const sections = Object.fromEntries(
+          sectionRows.map((row) => [row.section, Number(row.count || 0)]),
+        );
+        const jobStatusRows =
+          (
+            await database
+              .prepare(
+                'SELECT status,count(*) AS count FROM job_source_checks GROUP BY status',
+              )
+              .all()
+          ).results || [];
+        const sourceStatus = Object.fromEntries(
+          jobStatusRows.map((row) => [row.status, Number(row.count || 0)]),
+        );
+        const baseCompanies = baseRows.length,
+          addedCompanies = await count(
+            'SELECT count(*) AS count FROM added_companies',
+          );
+        const pendingAccess = users.pending || 0,
+          pendingCompanyChanges = await count(
+            "SELECT count(*) AS count FROM change_requests WHERE status = 'pending'",
+          ),
+          pendingSectionItems = await count(
+            "SELECT count(*) AS count FROM section_items WHERE status = 'pending'",
+          ),
+          pendingSectionChanges = await count(
+            "SELECT count(*) AS count FROM section_change_requests WHERE status = 'pending'",
+          ),
+          pendingAdminAccess = await count(
+            "SELECT count(*) AS count FROM admin_access_requests WHERE status = 'pending'",
+          );
+        return json({
+          generatedAt: now.toISOString(),
+          totals: {
+            baseCompanies,
+            addedCompanies,
+            companies: baseCompanies + addedCompanies,
+            recruiters: sections['recruiter-directory'] || 0,
+            studyMaterials: sections['study-materials'] || 0,
+            interviewSupport: sections['interview-support'] || 0,
+          },
+          users: {
+            approved: users.approved || 0,
+            pending: pendingAccess,
+            blocked: users.blocked || 0,
+            newThisWeek: await count(
+              'SELECT count(*) AS count FROM access_users WHERE requested_at >= ?',
+              weekAgo,
+            ),
+            profiles: await count(
+              'SELECT count(*) AS count FROM user_profiles',
+            ),
+            coadmins: await count('SELECT count(*) AS count FROM coadmins'),
+          },
+          pending: {
+            accessRequests: pendingAccess,
+            adminAccess: pendingAdminAccess,
+            companyChanges: pendingCompanyChanges,
+            sectionItems: pendingSectionItems,
+            sectionChanges: pendingSectionChanges,
+            total:
+              pendingAccess +
+              pendingAdminAccess +
+              pendingCompanyChanges +
+              pendingSectionItems +
+              pendingSectionChanges,
+          },
+          jobs: {
+            open: await count(
+              'SELECT count(*) AS count FROM imported_jobs WHERE is_open = 1',
+            ),
+            lastDay: await count(
+              'SELECT count(*) AS count FROM imported_jobs WHERE discovered_at >= ?',
+              dayAgo,
+            ),
+            lastWeek: await count(
+              'SELECT count(*) AS count FROM imported_jobs WHERE discovered_at >= ?',
+              weekAgo,
+            ),
+            sourcesChecked: await count(
+              'SELECT count(*) AS count FROM job_source_checks',
+            ),
+            failedSources:
+              (sourceStatus.error || 0) + (sourceStatus.failed || 0),
+          },
+          tabs: {
+            restricted: await count(
+              'SELECT count(*) AS count FROM tab_access WHERE allowed = 0',
+            ),
+          },
+        });
+      }
+      if (url.pathname === '/api/tab-access' && request.method === 'GET') {
+        if (!canManage(session))
+          return json({ error: 'Admin access required.' }, 403);
+        const { results } = await db(env)
+          .prepare('SELECT tab,allowed,updated_at,updated_by FROM tab_access')
+          .all();
+        const settings = new Map(results.map((row) => [row.tab, row]));
+        return json({
+          items: [...tabNames].map(([tab, name]) => ({
+            tab,
+            name,
+            allowed: settings.get(tab)?.allowed !== 0,
+            updatedAt: settings.get(tab)?.updated_at || '',
+            updatedBy: settings.get(tab)?.updated_by || '',
+          })),
+        });
+      }
+      if (url.pathname === '/api/tab-access' && request.method === 'PUT') {
+        if (!canManage(session))
+          return json({ error: 'Admin access required.' }, 403);
+        if (!sameOrigin(request, url))
+          return json({ error: 'Use Data access to change tab access.' }, 403);
+        let input;
+        try {
+          input = await jsonInput(request);
+        } catch {
+          return json({ error: 'Invalid tab access change.' }, 400);
+        }
+        if (!tabNames.has(input?.tab) || typeof input?.allowed !== 'boolean')
+          return json({ error: 'Choose a valid tab and access setting.' }, 400);
+        const allowed = input.allowed ? 1 : 0,
+          now = new Date().toISOString();
+        await db(env)
+          .prepare(
+            'INSERT INTO tab_access (tab,allowed,updated_at,updated_by) VALUES (?,?,?,?) ON CONFLICT(tab) DO UPDATE SET allowed = excluded.allowed,updated_at = excluded.updated_at,updated_by = excluded.updated_by',
+          )
+          .bind(input.tab, allowed, now, session.email)
+          .run();
+        return json({
+          tab: input.tab,
+          name: tabNames.get(input.tab),
+          allowed: input.allowed,
+          updatedAt: now,
+          updatedBy: session.email,
+        });
+      }
+      if (
+        url.pathname === '/api/admin-access-requests' &&
+        request.method === 'POST'
+      ) {
+        if (!sameOrigin(request, url))
+          return json({ error: 'Use the app to request Admin access.' }, 403);
+        if (session?.status !== 'approved')
+          return json({ error: 'User access required.' }, 403);
+        if (session.role === 'admin' || session.role === 'coadmin')
+          return json({ status: 'approved' });
+        const database = db(env),
+          now = new Date().toISOString();
+        await ensureAdminAccessRequests(database);
+        await database
+          .prepare(
+            "INSERT INTO admin_access_requests (email,status,requested_at) VALUES (?,'pending',?) ON CONFLICT(email) DO UPDATE SET status='pending', requested_at=excluded.requested_at, reviewed_at=NULL, reviewed_by=NULL",
+          )
+          .bind(session.email, now)
+          .run();
+        return json({ email: session.email, status: 'pending' });
+      }
+      if (
+        url.pathname === '/api/admin-access-requests' &&
+        request.method === 'GET'
+      ) {
+        if (!canManage(session))
+          return json({ error: 'Admin access required.' }, 403);
+        const database = db(env);
+        await ensureAdminAccessRequests(database);
+        const { results } = await database
+          .prepare(
+            "SELECT email,status,requested_at FROM admin_access_requests WHERE status='pending' ORDER BY requested_at DESC",
+          )
+          .all();
+        return json({ items: results });
+      }
+      if (
+        url.pathname === '/api/admin-access-requests' &&
+        request.method === 'PUT'
+      ) {
+        if (!canManage(session))
+          return json({ error: 'Admin access required.' }, 403);
+        if (!sameOrigin(request, url))
+          return json(
+            { error: 'Use Access Management to review Admin requests.' },
+            403,
+          );
+        let input;
+        try {
+          input = await jsonInput(request);
+        } catch {
+          return json({ error: 'Invalid Admin request review.' }, 400);
+        }
+        const email = String(input?.email || '')
+            .trim()
+            .toLowerCase(),
+          action = input?.action;
+        if (
+          !emailPattern.test(email) ||
+          email === adminEmail ||
+          !['approve', 'deny'].includes(action)
+        )
+          return json({ error: 'Invalid Admin request.' }, 400);
+        const database = db(env),
+          now = new Date().toISOString();
+        await ensureAdminAccessRequests(database);
+        const existing = await database
+          .prepare(
+            "SELECT email FROM admin_access_requests WHERE email = ? AND status = 'pending'",
+          )
+          .bind(email)
+          .first();
+        if (!existing)
+          return json(
+            { error: 'This Admin request changed. Refresh and try again.' },
+            409,
+          );
+        if (action === 'approve')
+          await database
+            .prepare(
+              'INSERT INTO coadmins (email,granted_at) VALUES (?,?) ON CONFLICT(email) DO UPDATE SET granted_at = excluded.granted_at',
+            )
+            .bind(email, now)
+            .run();
+        await database
+          .prepare(
+            'UPDATE admin_access_requests SET status = ?, reviewed_at = ?, reviewed_by = ? WHERE email = ?',
+          )
+          .bind(
+            action === 'approve' ? 'approved' : 'denied',
+            now,
+            session.email,
+            email,
+          )
+          .run();
+        return json({
+          email,
+          status: action === 'approve' ? 'approved' : 'denied',
+        });
+      }
+      if (url.pathname === '/api/access/settings' && request.method === 'GET') {
+        if (!canManage(session))
+          return json({ error: 'Admin access required.' }, 403);
+        const database = db(env),
+          enabled = await autoApproveAccess(database);
+        return json({ autoApprove: enabled });
+      }
+      if (url.pathname === '/api/access/settings' && request.method === 'PUT') {
+        if (!canManage(session))
+          return json({ error: 'Admin access required.' }, 403);
+        if (!sameOrigin(request, url))
+          return json(
+            { error: 'Use Access Management to update settings.' },
+            403,
+          );
+        let input;
+        try {
+          input = await jsonInput(request);
+        } catch {
+          return json({ error: 'Invalid access setting.' }, 400);
+        }
+        if (typeof input?.autoApprove !== 'boolean')
+          return json(
+            { error: 'Choose whether auto approval is on or off.' },
+            400,
+          );
+        const database = db(env),
+          now = new Date().toISOString(),
+          value = input.autoApprove ? 'true' : 'false';
+        await ensureAppSettings(database);
+        await database
+          .prepare(
+            "INSERT INTO app_settings (key,value,updated_at,updated_by) VALUES ('auto_approve_access',?,?,?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at, updated_by = excluded.updated_by",
+          )
+          .bind(value, now, session.email)
+          .run();
+        return json({ autoApprove: input.autoApprove });
+      }
+      if (url.pathname === '/api/access/users' && request.method === 'GET') {
+        if (!canManage(session))
+          return json({ error: 'Admin access required.' }, 403);
+        const database = db(env);
+        await ensureAccessUserColumns(database);
+        const { results } = await database
+          .prepare(
+            'SELECT email,name,status,requested_at,updated_at FROM access_users ORDER BY requested_at DESC',
+          )
+          .all();
+        return json({ items: results });
+      }
+      if (url.pathname === '/api/access/users' && request.method === 'PUT') {
+        if (!canManage(session))
+          return json({ error: 'Admin access required.' }, 403);
+        if (!sameOrigin(request, url))
+          return json({ error: 'Use the directory to manage access.' }, 403);
+        let input;
+        try {
+          input = await jsonInput(request);
+        } catch {
+          return json({ error: 'Invalid request.' }, 400);
+        }
+        const email = String(input?.email || '')
+            .trim()
+            .toLowerCase(),
+          action = input?.action;
+        const transitions = {
+          approve: ['pending', 'approved'],
+          deny: ['pending', 'blocked'],
+          block: ['approved', 'blocked'],
+          unblock: ['blocked', 'approved'],
+        };
+        if (
+          !emailPattern.test(email) ||
+          email === adminEmail ||
+          !Object.hasOwn(transitions, action)
+        )
+          return json({ error: 'Invalid user or action.' }, 400);
+        const [from, to] = transitions[action];
+        const result = await db(env)
+          .prepare(
+            'UPDATE access_users SET status = ?, updated_at = ? WHERE email = ? AND status = ? RETURNING email,status',
+          )
+          .bind(to, new Date().toISOString(), email, from)
+          .first();
+        if (!result)
+          return json(
+            { error: 'This request changed. Refresh the list and try again.' },
+            409,
+          );
+        return json(result);
+      }
+      if (url.pathname === '/api/access/users' && request.method === 'DELETE') {
+        if (session?.role !== 'admin')
+          return json(
+            { error: 'Only the Admin can permanently delete users.' },
+            403,
+          );
+        if (!sameOrigin(request, url))
+          return json({ error: 'Use Access Management to delete users.' }, 403);
+        let input;
+        try {
+          input = await jsonInput(request);
+        } catch {
+          return json({ error: 'Invalid request.' }, 400);
+        }
+        const email = String(input?.email || '')
+          .trim()
+          .toLowerCase();
+        if (!emailPattern.test(email) || email === adminEmail)
+          return json({ error: 'The Admin account cannot be deleted.' }, 400);
+        const database = db(env),
+          existing = await database
+            .prepare('SELECT email FROM access_users WHERE email = ?')
+            .bind(email)
+            .first();
+        if (!existing)
+          return json({ error: 'User not found. Refresh the list.' }, 404);
+        await database.batch([
+          database
+            .prepare('DELETE FROM access_sessions WHERE email = ?')
+            .bind(email),
+          database
+            .prepare('DELETE FROM user_profiles WHERE email = ?')
+            .bind(email),
+          database.prepare('DELETE FROM coadmins WHERE email = ?').bind(email),
+          database
+            .prepare('DELETE FROM access_users WHERE email = ?')
+            .bind(email),
+        ]);
+        return json({ email, deleted: true });
+      }
+      if (url.pathname === '/api/coadmins' && request.method === 'GET') {
+        if (!canManage(session))
+          return json({ error: 'Admin access required.' }, 403);
+        const { results } = await db(env)
+          .prepare(
+            'SELECT email,granted_at FROM coadmins ORDER BY granted_at DESC',
+          )
+          .all();
+        return json({ items: results });
+      }
+      if (url.pathname === '/api/coadmins' && request.method === 'POST') {
+        if (session?.role !== 'admin')
+          return json(
+            { error: 'Only the Admin can grant Coadmin access.' },
+            403,
+          );
+        if (!sameOrigin(request, url))
+          return json({ error: 'Use the directory to manage Coadmins.' }, 403);
+        let input;
+        try {
+          input = await jsonInput(request);
+        } catch {
+          return json({ error: 'Enter a valid Gmail address.' }, 400);
+        }
+        const email = String(input?.email || '')
+          .trim()
+          .toLowerCase();
+        if (
+          email.length > 254 ||
+          !email.endsWith('@gmail.com') ||
+          !emailPattern.test(email) ||
+          email === adminEmail
+        )
+          return json(
+            {
+              error: 'Enter a valid Gmail address other than the Admin Gmail.',
+            },
+            400,
+          );
+        const database = db(env),
+          now = new Date().toISOString();
+        await ensureAccessUserColumns(database);
+        if (
+          await database
+            .prepare('SELECT email FROM deleted_users WHERE email = ?')
+            .bind(email)
+            .first()
+        )
+          return json({ error: 'This Gmail was permanently removed.' }, 403);
+        await database
+          .prepare(
+            "INSERT INTO access_users (email,name,status,requested_at,updated_at) VALUES (?,'','approved',?,?) ON CONFLICT(email) DO UPDATE SET status = 'approved', updated_at = excluded.updated_at",
+          )
+          .bind(email, now, now)
+          .run();
+        const result = await database
+          .prepare(
+            'INSERT INTO coadmins (email,granted_at) VALUES (?,?) ON CONFLICT(email) DO NOTHING RETURNING email,granted_at',
+          )
+          .bind(email, now)
+          .first();
+        if (!result)
+          return json({ error: 'This Gmail already has Coadmin access.' }, 409);
+        return json(result, 201);
+      }
+      if (url.pathname === '/api/coadmins' && request.method === 'DELETE') {
+        if (session?.role !== 'admin')
+          return json(
+            { error: 'Only the Admin can remove Coadmin access.' },
+            403,
+          );
+        if (!sameOrigin(request, url))
+          return json({ error: 'Use the directory to manage Coadmins.' }, 403);
+        let input;
+        try {
+          input = await jsonInput(request);
+        } catch {
+          return json({ error: 'Invalid request.' }, 400);
+        }
+        const email = String(input?.email || '')
+          .trim()
+          .toLowerCase();
+        if (!emailPattern.test(email) || email === adminEmail)
+          return json({ error: 'The Admin cannot be removed.' }, 400);
+        const result = await db(env)
+          .prepare('DELETE FROM coadmins WHERE email = ? RETURNING email')
+          .bind(email)
+          .first();
+        if (!result) return json({ error: 'Coadmin not found.' }, 404);
+        return json(result);
+      }
+      if (url.pathname === '/api/review/changes' && request.method === 'GET') {
+        if (!canManage(session))
+          return json({ error: 'Admin access required.' }, 403);
+        const { results } = await db(env)
+          .prepare(
+            "SELECT id,actor_email,company_id,company_name,kind,before_payload,after_payload,base_version,created_at FROM change_requests WHERE status = 'pending' ORDER BY created_at LIMIT 500",
+          )
+          .all();
+        return json({
+          items: results.map((r) => ({
+            ...r,
+            before: JSON.parse(r.before_payload),
+            after: JSON.parse(r.after_payload),
+          })),
+        });
+      }
+      if (url.pathname === '/api/review/changes' && request.method === 'PUT') {
+        if (!canManage(session))
+          return json({ error: 'Admin access required.' }, 403);
+        if (!sameOrigin(request, url))
+          return json({ error: 'Use the directory to review changes.' }, 403);
+        let input;
+        try {
+          input = await jsonInput(request);
+        } catch {
+          return json({ error: 'Invalid request.' }, 400);
+        }
+        const id = String(input?.id || ''),
+          action = input?.action;
+        if (!id || !['approve', 'deny'].includes(action))
+          return json({ error: 'Invalid review action.' }, 400);
+        const database = db(env),
+          item = await database
+            .prepare(
+              "SELECT company_id,kind,after_payload,base_version FROM change_requests WHERE id = ? AND status = 'pending'",
+            )
+            .bind(id)
+            .first();
+        if (!item)
+          return json(
+            { error: 'This request was already reviewed. Refresh the list.' },
+            409,
+          );
+        if (action === 'approve') {
+          if (item.kind === 'add') {
+            const proposed = JSON.parse(item.after_payload),
+              normalized = normalizedName(proposed.name);
+            if (baseNames.has(normalized))
+              return json(
+                {
+                  error:
+                    'This company is already in the directory. Deny the request.',
+                },
+                409,
+              );
+            const inserted = await database
+              .prepare(
+                'INSERT INTO added_companies (id,normalized_name,name,linkedin,careers,category) VALUES (?,?,?,?,?,?) ON CONFLICT(normalized_name) DO NOTHING RETURNING id',
+              )
+              .bind(
+                item.company_id,
+                normalized,
+                proposed.name,
+                proposed.linkedin,
+                proposed.careers,
+                proposed.category,
+              )
+              .first();
+            if (!inserted)
+              return json(
+                {
+                  error:
+                    'This company was added already. Deny the duplicate request.',
+                },
+                409,
+              );
+          } else {
+            const old = await database
+              .prepare('SELECT payload,version FROM company_edits WHERE id = ?')
+              .bind(item.company_id)
+              .first();
+            if (
+              (old?.version || 0) !== item.base_version ||
+              (old && JSON.parse(old.payload).deleted)
+            )
+              return json(
+                {
+                  error:
+                    'The company changed since this request. Deny it and ask the user to submit a new edit.',
+                },
+                409,
+              );
+            const payload = {
+              ...(old ? JSON.parse(old.payload) : {}),
+              ...JSON.parse(item.after_payload),
+            };
+            const result = old
+              ? await database
+                  .prepare(
+                    'UPDATE company_edits SET payload = ?,version = version + 1 WHERE id = ? AND version = ? RETURNING version',
+                  )
+                  .bind(
+                    JSON.stringify(payload),
+                    item.company_id,
+                    item.base_version,
+                  )
+                  .first()
+              : await database
+                  .prepare(
+                    'INSERT INTO company_edits (id,payload,version) VALUES (?,?,1) ON CONFLICT(id) DO NOTHING RETURNING version',
+                  )
+                  .bind(item.company_id, JSON.stringify(payload))
+                  .first();
+            if (!result)
+              return json(
+                {
+                  error:
+                    'The company changed since this request. Refresh and try again.',
+                },
+                409,
+              );
+          }
+        }
+        const reviewed = await database
+          .prepare(
+            'UPDATE change_requests SET status = ?, reviewed_at = ?, reviewed_by = ? WHERE id = ? AND status = ? RETURNING id,status',
+          )
+          .bind(
+            action === 'approve' ? 'approved' : 'denied',
+            new Date().toISOString(),
+            session.email,
+            id,
+            'pending',
+          )
+          .first();
+        if (!reviewed)
+          return json(
+            { error: 'This request was already reviewed. Refresh the list.' },
+            409,
+          );
+        return json(reviewed);
+      }
+      if (
+        url.pathname === '/api/review/section-items' &&
+        request.method === 'GET'
+      ) {
+        if (!canManage(session))
+          return json({ error: 'Admin access required.' }, 403);
+        const { results } = await db(env)
+          .prepare(
+            "SELECT id,section,category,title,organization,url,details,email,phone,extension,file_name,posted_at,actor_email,created_at FROM section_items WHERE status = 'pending' ORDER BY created_at LIMIT 500",
+          )
+          .all();
+        return json({ items: results });
+      }
+      if (
+        url.pathname === '/api/review/section-items' &&
+        request.method === 'PUT'
+      ) {
+        if (!canManage(session))
+          return json({ error: 'Admin access required.' }, 403);
+        if (!sameOrigin(request, url))
+          return json(
+            { error: 'Use the directory to review submissions.' },
+            403,
+          );
+        let input;
+        try {
+          input = await jsonInput(request);
+        } catch {
+          return json({ error: 'Invalid request.' }, 400);
+        }
+        if (
+          typeof input?.id !== 'string' ||
+          !['approve', 'deny'].includes(input?.action)
+        )
+          return json({ error: 'Invalid review action.' }, 400);
+        const result = await db(env)
+          .prepare(
+            "UPDATE section_items SET status = ?,reviewed_at = ?,reviewed_by = ? WHERE id = ? AND status = 'pending' RETURNING id,status",
+          )
+          .bind(
+            input.action === 'approve' ? 'approved' : 'denied',
+            new Date().toISOString(),
+            session.email,
+            input.id,
+          )
+          .first();
+        return result
+          ? json(result)
+          : json({ error: 'This submission was already reviewed.' }, 409);
+      }
+      if (
+        url.pathname === '/api/review/section-changes' &&
+        request.method === 'GET'
+      ) {
+        if (!canManage(session))
+          return json({ error: 'Admin access required.' }, 403);
+        const { results } = await db(env)
+          .prepare(
+            "SELECT id,item_id,actor_email,kind,before_payload,after_payload,base_version,pending_file_key,created_at FROM section_change_requests WHERE status = 'pending' ORDER BY created_at LIMIT 500",
+          )
+          .all();
+        return json({
+          items: results.map((row) => ({
+            ...row,
+            before: JSON.parse(row.before_payload),
+            after: JSON.parse(row.after_payload),
+          })),
+        });
+      }
+      if (
+        url.pathname === '/api/review/section-changes' &&
+        request.method === 'PUT'
+      ) {
+        if (!canManage(session))
+          return json({ error: 'Admin access required.' }, 403);
+        if (!sameOrigin(request, url))
+          return json(
+            { error: 'Use Access Management to review changes.' },
+            403,
+          );
+        let input;
+        try {
+          input = await jsonInput(request);
+        } catch {
+          return json({ error: 'Invalid review action.' }, 400);
+        }
+        if (
+          typeof input?.id !== 'string' ||
+          !['approve', 'deny'].includes(input?.action)
+        )
+          return json({ error: 'Invalid review action.' }, 400);
+        const database = db(env),
+          requestRow = await database
+            .prepare(
+              "SELECT item_id,kind,after_payload,base_version,pending_file_key FROM section_change_requests WHERE id = ? AND status = 'pending'",
+            )
+            .bind(input.id)
+            .first();
+        if (!requestRow)
+          return json({ error: 'This change was already reviewed.' }, 409);
+        const proposed = JSON.parse(requestRow.after_payload);
+        let oldFileKey = '';
+        if (input.action === 'approve') {
+          const current = await database
+            .prepare(
+              'SELECT version,status,file_key FROM section_items WHERE id = ?',
+            )
+            .bind(requestRow.item_id)
+            .first();
+          if (
+            !current ||
+            current.status !== 'approved' ||
+            current.version !== requestRow.base_version
+          )
+            return json(
+              {
+                error:
+                  'This entry changed. Deny this request and ask for a new one.',
+              },
+              409,
+            );
+          oldFileKey = current.file_key;
+          let result;
+          if (requestRow.kind === 'move')
+            result = await database
+              .prepare(
+                "UPDATE section_items SET category = ?,version = version + 1 WHERE id = ? AND version = ? AND status = 'approved' RETURNING id",
+              )
+              .bind(
+                proposed.category,
+                requestRow.item_id,
+                requestRow.base_version,
+              )
+              .first();
+          else if (requestRow.kind === 'delete')
+            result = await database
+              .prepare(
+                "DELETE FROM section_items WHERE id = ? AND version = ? AND status = 'approved' RETURNING id",
+              )
+              .bind(requestRow.item_id, requestRow.base_version)
+              .first();
+          else
+            result = await database
+              .prepare(
+                "UPDATE section_items SET title = ?,organization = ?,url = ?,details = ?,email = ?,phone = ?,extension = ?,posted_at = ?,file_key = ?,file_name = ?,file_type = ?,version = version + 1 WHERE id = ? AND version = ? AND status = 'approved' RETURNING id",
+              )
+              .bind(
+                proposed.title,
+                proposed.organization,
+                proposed.url,
+                proposed.details,
+                proposed.email,
+                proposed.phone,
+                proposed.extension,
+                proposed.posted_at,
+                proposed.file_key,
+                proposed.file_name,
+                proposed.file_type,
+                requestRow.item_id,
+                requestRow.base_version,
+              )
+              .first();
+          if (!result)
+            return json(
+              { error: 'This entry changed. Refresh and try again.' },
+              409,
+            );
+        }
+        const reviewed = await database
+          .prepare(
+            "UPDATE section_change_requests SET status = ?,reviewed_at = ?,reviewed_by = ? WHERE id = ? AND status = 'pending' RETURNING id,status",
+          )
+          .bind(
+            input.action === 'approve' ? 'approved' : 'denied',
+            new Date().toISOString(),
+            session.email,
+            input.id,
+          )
+          .first();
+        if (!reviewed)
+          return json({ error: 'This request was already reviewed.' }, 409);
+        const discardedKey =
+          input.action === 'deny'
+            ? requestRow.pending_file_key
+            : requestRow.kind === 'delete' || requestRow.pending_file_key
+              ? oldFileKey
+              : '';
+        if (discardedKey)
+          try {
+            await bucket(env).delete(discardedKey);
+          } catch (error) {
+            console.error('Could not remove replaced document', error);
+          }
+        return json(reviewed);
+      }
+      if (
+        (url.pathname === '/companies.json' ||
+          url.pathname.startsWith('/api/')) &&
+        session?.status !== 'approved'
+      )
+        return json({ error: 'Access approval required.' }, 403);
+      if (
+        url.pathname === '/api/auto-apply/bootstrap' &&
+        request.method === 'GET'
+      ) {
+        if (!canManage(session) && !(await tabAllowed(env, 'ai-auto-apply')))
+          return json({ error: restrictedMessage }, 403);
+        const database = db(env);
+        await ensureAutoApply(database);
+        const profile = await database
+          .prepare('SELECT * FROM user_profiles WHERE email=?')
+          .bind(session.email)
+          .first();
+        const settings = await autoSettings(database, session.email);
+        const resumes =
+          (
+            await database
+              .prepare(
+                'SELECT id,name,file_name,file_type,file_size,extraction_status,is_default,created_at,updated_at FROM auto_resumes WHERE user_email=? ORDER BY is_default DESC, created_at DESC',
+              )
+              .bind(session.email)
+              .all()
+          ).results || [];
+        const accounts =
+          (
+            await database
+              .prepare(
+                'SELECT provider,status,auth_type,last_verified_at,metadata,created_at,updated_at FROM auto_connected_accounts WHERE user_email=? ORDER BY provider',
+              )
+              .bind(session.email)
+              .all()
+          ).results || [];
+        const applications =
+          (
+            await database
+              .prepare(
+                'SELECT id,company_name,job_title,job_url,resume_id,match_score,status,blocker_status,last_activity_at,created_at,updated_at FROM auto_applications WHERE user_email=? ORDER BY last_activity_at DESC LIMIT 200',
+              )
+              .bind(session.email)
+              .all()
+          ).results || [];
+        const blockers =
+          (
+            await database
+              .prepare(
+                "SELECT id,application_id,company_name,job_title,question,reason,status,created_at,updated_at FROM auto_blockers WHERE user_email=? AND status IN ('OPEN','WAITING_FOR_USER','FAILED') ORDER BY created_at DESC LIMIT 100",
+              )
+              .bind(session.email)
+              .all()
+          ).results || [];
+        const answers =
+          (
+            await database
+              .prepare(
+                'SELECT id,question,answer,answer_type,source,approved_at,expires_at,updated_at FROM auto_saved_answers WHERE user_email=? ORDER BY updated_at DESC LIMIT 200',
+              )
+              .bind(session.email)
+              .all()
+          ).results || [];
+        const activity =
+          (
+            await database
+              .prepare(
+                'SELECT application_id,event_type,message,metadata,created_at FROM auto_activity_logs WHERE user_email=? ORDER BY created_at DESC LIMIT 50',
+              )
+              .bind(session.email)
+              .all()
+          ).results || [];
+        const countStatus = Object.fromEntries(
+          (
+            (
+              await database
+                .prepare(
+                  'SELECT status,count(*) AS count FROM auto_applications WHERE user_email=? GROUP BY status',
+                )
+                .bind(session.email)
+                .all()
+            ).results || []
+          ).map((r) => [r.status, Number(r.count)]),
+        );
+        const counts = {
+          matched: countStatus.MATCHED || 0,
+          queued: countStatus.QUEUED || 0,
+          inProgress: countStatus.IN_PROGRESS || 0,
+          readyForReview: countStatus.READY_FOR_REVIEW || 0,
+          submitted: countStatus.SUBMITTED || 0,
+          failed: countStatus.FAILED || 0,
+          blockers: blockers.length,
+        };
+        return json({
+          email: session.email,
+          profile: { email: session.email, profile },
+          resumes,
+          accounts,
+          applications,
+          blockers,
+          answers,
+          settings,
+          summary: {
+            counts,
+            activity,
+            worker: {
+              configured: Boolean(
+                env.SKYVERN_WORKER_URL && env.AUTO_APPLY_WORKER_SECRET,
+              ),
+              model: env.OLLAMA_MODEL || '',
+            },
+          },
+        });
+      }
+      if (
+        url.pathname === '/api/auto-apply/resumes' &&
+        request.method === 'POST'
+      ) {
+        if (!sameOrigin(request, url))
+          return json({ error: 'Use CarrerNaviq to upload resumes.' }, 403);
+        if (!canManage(session) && !(await tabAllowed(env, 'ai-auto-apply')))
+          return json({ error: restrictedMessage }, 403);
+        const form = await request.formData(),
+          file = form.get('file'),
+          name =
+            String(form.get('name') || 'Resume')
+              .trim()
+              .slice(0, 120) || 'Resume',
+          isDefault = String(form.get('isDefault') || '') === 'true';
+        if (
+          !file ||
+          typeof file.arrayBuffer !== 'function' ||
+          file.size === 0 ||
+          file.size > 10 * 1024 * 1024
+        )
+          return json(
+            { error: 'Choose a PDF or Word resume smaller than 10 MB.' },
+            400,
+          );
+        const fileName = String(file.name || 'resume')
+            .split(/[\\/]/)
+            .pop()
+            .slice(0, 200),
+          ext = fileName.toLowerCase().split('.').pop(),
+          fileType = {
+            pdf: 'application/pdf',
+            doc: 'application/msword',
+            docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          }[ext];
+        if (!fileType)
+          return json(
+            { error: 'Only PDF, DOC, and DOCX resumes are allowed.' },
+            400,
+          );
+        const bytes = await file.arrayBuffer(),
+          magic = new Uint8Array(bytes.slice(0, 8));
+        if (
+          !(
+            (ext === 'pdf' &&
+              [37, 80, 68, 70, 45].every((n, i) => magic[i] === n)) ||
+            (ext === 'doc' &&
+              [208, 207, 17, 224, 161, 177, 26, 225].every(
+                (n, i) => magic[i] === n,
+              )) ||
+            (ext === 'docx' &&
+              magic[0] === 80 &&
+              magic[1] === 75 &&
+              magic[2] === 3 &&
+              magic[3] === 4)
+          )
+        )
+          return json(
+            { error: 'The resume file does not match its extension.' },
+            400,
+          );
+        const database = db(env);
+        await ensureAutoApply(database);
+        const id = crypto.randomUUID(),
+          key = `auto-resumes/${session.email}/${id}`,
+          now = new Date().toISOString();
+        await bucket(env).put(key, bytes, {
+          httpMetadata: { contentType: fileType },
+        });
+        if (isDefault)
+          await database
+            .prepare('UPDATE auto_resumes SET is_default=0 WHERE user_email=?')
+            .bind(session.email)
+            .run();
+        await database
+          .prepare(
+            'INSERT INTO auto_resumes (id,user_email,name,file_key,file_name,file_type,file_size,is_default,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)',
+          )
+          .bind(
+            id,
+            session.email,
+            name,
+            key,
+            fileName,
+            fileType,
+            file.size,
+            isDefault ? 1 : 0,
+            now,
+            now,
+          )
+          .run();
+        await logAuto(
+          database,
+          session.email,
+          'RESUME_UPLOADED',
+          `Uploaded resume ${name}`,
+        );
+        return json({ id, name, fileName }, 201);
+      }
+      if (
+        url.pathname.startsWith('/api/auto-apply/resumes/') &&
+        (request.method === 'PUT' || request.method === 'DELETE')
+      ) {
+        if (!sameOrigin(request, url))
+          return json({ error: 'Use CarrerNaviq to manage resumes.' }, 403);
+        const id = decodeURIComponent(url.pathname.split('/').pop());
+        const database = db(env);
+        await ensureAutoApply(database);
+        const row = await database
+          .prepare(
+            'SELECT id,file_key,name FROM auto_resumes WHERE id=? AND user_email=?',
+          )
+          .bind(id, session.email)
+          .first();
+        if (!row) return json({ error: 'Resume not found.' }, 404);
+        if (request.method === 'DELETE') {
+          await bucket(env).delete(row.file_key);
+          await database
+            .prepare('DELETE FROM auto_resumes WHERE id=? AND user_email=?')
+            .bind(id, session.email)
+            .run();
+          await logAuto(
+            database,
+            session.email,
+            'RESUME_DELETED',
+            `Deleted resume ${row.name}`,
+          );
+          return json({ deleted: true });
+        }
+        await database
+          .prepare('UPDATE auto_resumes SET is_default=0 WHERE user_email=?')
+          .bind(session.email)
+          .run();
+        await database
+          .prepare(
+            'UPDATE auto_resumes SET is_default=1,updated_at=? WHERE id=? AND user_email=?',
+          )
+          .bind(new Date().toISOString(), id, session.email)
+          .run();
+        return json({ id, isDefault: true });
+      }
+      if (
+        url.pathname === '/api/auto-apply/vault' &&
+        request.method === 'GET'
+      ) {
+        const database = db(env);
+        await ensureVault(database);
+        const rows = await database
+          .prepare(
+            'SELECT provider,encrypted_value,updated_at FROM credential_vault WHERE user_email=?',
+          )
+          .bind(session.email)
+          .all();
+        const items = [];
+        for (const row of rows.results || []) {
+          const saved = await vaultCrypto(
+            env,
+            session.email,
+            row.provider,
+            row.encrypted_value,
+          );
+          items.push({
+            provider: row.provider,
+            account: saved.account,
+            passwordSaved: Boolean(saved.password),
+            updatedAt: row.updated_at,
+          });
+        }
+        return json({ items });
+      }
+      if (
+        url.pathname === '/api/auto-apply/vault' &&
+        ['PUT', 'DELETE'].includes(request.method)
+      ) {
+        if (!sameOrigin(request, url))
+          return json({ error: 'Use CarrerNaviq to manage your vault.' }, 403);
+        let input;
+        try {
+          input = await jsonInput(request);
+        } catch {
+          return json({ error: 'Invalid vault request.' }, 400);
+        }
+        const provider =
+          input?.provider === 'career_portals'
+            ? 'career_portals'
+            : autoProvider(input?.provider);
+        if (!provider)
+          return json({ error: 'Choose a supported account.' }, 400);
+        const database = db(env);
+        await ensureVault(database);
+        if (request.method === 'DELETE') {
+          await database
+            .prepare(
+              'DELETE FROM credential_vault WHERE user_email=? AND provider=?',
+            )
+            .bind(session.email, provider)
+            .run();
+          return json({ saved: false });
+        }
+        const account = String(input.account || '').trim(),
+          password = String(input.password || '');
+        if (!account || account.length > 254 || password.length > 2048)
+          return json({ error: 'Enter a valid email or username.' }, 400);
+        if (
+          ['gmail', 'career_portals'].includes(provider) &&
+          !emailPattern.test(account)
+        )
+          return json({ error: 'Enter a valid email.' }, 400);
+        const old = await database
+          .prepare(
+            'SELECT encrypted_value FROM credential_vault WHERE user_email=? AND provider=?',
+          )
+          .bind(session.email, provider)
+          .first();
+        const previous = old
+          ? await vaultCrypto(env, session.email, provider, old.encrypted_value)
+          : null;
+        if (!password && !previous?.password)
+          return json({ error: 'Enter a password to save this account.' }, 400);
+        if (!password && previous.account !== account)
+          return json(
+            { error: 'Enter the password for the changed account.' },
+            400,
+          );
+        const encrypted = await vaultCrypto(env, session.email, provider, {
+          account,
+          password: password || previous.password,
+        });
+        const now = new Date().toISOString();
+        await database
+          .prepare(
+            'INSERT INTO credential_vault(user_email,provider,encrypted_value,updated_at) VALUES(?,?,?,?) ON CONFLICT(user_email,provider) DO UPDATE SET encrypted_value=excluded.encrypted_value,updated_at=excluded.updated_at',
+          )
+          .bind(session.email, provider, encrypted, now)
+          .run();
+        return json({ saved: true, updatedAt: now });
+      }
+      if (
+        url.pathname === '/api/auto-apply/accounts' &&
+        request.method === 'POST'
+      ) {
+        if (!sameOrigin(request, url))
+          return json({ error: 'Use CarrerNaviq to manage accounts.' }, 403);
+        let input;
+        try {
+          input = await jsonInput(request);
+        } catch {
+          return json({ error: 'Invalid account request.' }, 400);
+        }
+        const provider = autoProvider(input?.provider),
+          action = input?.action;
+        if (!provider || !['connect', 'disconnect'].includes(action))
+          return json(
+            { error: 'Choose LinkedIn, Indeed, Dice, or Gmail.' },
+            400,
+          );
+        const database = db(env);
+        await ensureAutoApply(database);
+        const now = new Date().toISOString();
+        if (action === 'disconnect') {
+          await database
+            .prepare(
+              'DELETE FROM auto_connected_accounts WHERE user_email=? AND provider=?',
+            )
+            .bind(session.email, provider)
+            .run();
+          await logAuto(
+            database,
+            session.email,
+            'ACCOUNT_DISCONNECTED',
+            `Disconnected ${provider}`,
+          );
+          return json({ message: `${provider} disconnected.` });
+        }
+        const account = String(input?.account || '')
+          .trim()
+          .slice(0, 254);
+        if (account && provider === 'gmail' && !emailPattern.test(account))
+          return json({ error: 'Enter a valid Gmail account email.' }, 400);
+        const authType =
+            provider === 'gmail' ? 'oauth_required' : 'interactive_browser',
+          metadata = JSON.stringify({ account });
+        await database
+          .prepare(
+            'INSERT INTO auto_connected_accounts (id,user_email,provider,status,auth_type,last_verified_at,metadata,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?) ON CONFLICT(user_email,provider) DO UPDATE SET status=excluded.status,auth_type=excluded.auth_type,metadata=excluded.metadata,updated_at=excluded.updated_at',
+          )
+          .bind(
+            crypto.randomUUID(),
+            session.email,
+            provider,
+            authType === 'oauth_required'
+              ? 'oauth_not_configured'
+              : 'ready_for_worker_login',
+            authType,
+            null,
+            metadata,
+            now,
+            now,
+          )
+          .run();
+        await logAuto(
+          database,
+          session.email,
+          'ACCOUNT_CONNECT_REQUESTED',
+          `Connection prepared for ${provider}`,
+        );
+        return json({
+          message:
+            provider === 'gmail'
+              ? 'Gmail OAuth must be configured before connecting.'
+              : 'Interactive browser sign-in will open in the external worker when configured.',
+        });
+      }
+      if (
+        url.pathname === '/api/auto-apply/matches' &&
+        request.method === 'POST'
+      ) {
+        if (!sameOrigin(request, url))
+          return json({ error: 'Use CarrerNaviq to match jobs.' }, 403);
+        let input;
+        try {
+          input = await jsonInput(request);
+        } catch {
+          return json({ error: 'Invalid matching request.' }, 400);
+        }
+        const category = String(input?.category || ''),
+          minScore = Number(input?.minScore || 60);
+        if (
+          !sectionCategories.has(category) ||
+          !Number.isInteger(minScore) ||
+          minScore < 0 ||
+          minScore > 100
+        )
+          return json({ error: 'Invalid matching filters.' }, 400);
+        const database = db(env);
+        await ensureAutoApply(database);
+        const profile = await database
+          .prepare('SELECT * FROM user_profiles WHERE email=?')
+          .bind(session.email)
+          .first();
+        let resume = null;
+        if (input?.resumeId)
+          resume = await database
+            .prepare(
+              'SELECT id,extracted_text FROM auto_resumes WHERE user_email=? AND id=?',
+            )
+            .bind(session.email, input.resumeId)
+            .first();
+        else
+          resume = await database
+            .prepare(
+              'SELECT id,extracted_text FROM auto_resumes WHERE user_email=? ORDER BY is_default DESC, created_at DESC LIMIT 1',
+            )
+            .bind(session.email)
+            .first();
+        const jobs =
+          (
+            await database
+              .prepare(
+                "SELECT id,company_name,title,apply_url,posted_at FROM imported_jobs WHERE is_open=1 AND category=? ORDER BY CASE WHEN posted_at='' THEN 1 ELSE 0 END, posted_at DESC, discovered_at DESC LIMIT 200",
+              )
+              .bind(category)
+              .all()
+          ).results || [];
+        const now = new Date().toISOString(),
+          items = [];
+        for (const job of jobs) {
+          const scored = scoreJob(
+            { title: job.title, company_name: job.company_name },
+            profile,
+            resume?.extracted_text || '',
+          );
+          if (scored.score < minScore) continue;
+          const appId = crypto.randomUUID();
+          await database
+            .prepare(
+              "INSERT INTO auto_applications (id,user_email,imported_job_id,company_name,job_title,job_url,resume_id,match_score,match_reasons,status,last_activity_at,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,'MATCHED',?,?,?) ON CONFLICT(user_email,job_url) DO UPDATE SET match_score=excluded.match_score,match_reasons=excluded.match_reasons,updated_at=excluded.updated_at RETURNING id,company_name,job_title,job_url,resume_id,match_score,match_reasons,status,blocker_status,last_activity_at,created_at,updated_at",
+            )
+            .bind(
+              appId,
+              session.email,
+              job.id,
+              job.company_name,
+              job.title,
+              job.apply_url,
+              resume?.id || '',
+              scored.score,
+              JSON.stringify(scored.reasons),
+              now,
+              now,
+              now,
+            )
+            .first()
+            .then((r) => items.push(r));
+        }
+        await logAuto(
+          database,
+          session.email,
+          'MATCHING_COMPLETE',
+          `Created or updated ${items.length} job matches`,
+          '',
+          { category, minScore },
+        );
+        return json({ items });
+      }
+      if (
+        url.pathname === '/api/auto-apply/agent/start' &&
+        request.method === 'POST'
+      ) {
+        if (!sameOrigin(request, url))
+          return json({ error: 'Use CarrerNaviq to start the agent.' }, 403);
+        let input;
+        try {
+          input = await jsonInput(request);
+        } catch {
+          return json({ error: 'Invalid agent request.' }, 400);
+        }
+        const applicationId = String(input?.applicationId || '').trim(),
+          instructions = String(input?.instructions || '').slice(0, 3000);
+        const database = db(env);
+        await ensureAutoApply(database);
+        const app = await database
+          .prepare(
+            'SELECT * FROM auto_applications WHERE id=? AND user_email=?',
+          )
+          .bind(applicationId, session.email)
+          .first();
+        if (!app) return json({ error: 'Application not found.' }, 404);
+        const profile = await database
+            .prepare('SELECT * FROM user_profiles WHERE email=?')
+            .bind(session.email)
+            .first(),
+          resume = app.resume_id
+            ? await database
+                .prepare(
+                  'SELECT id,file_name,file_type FROM auto_resumes WHERE id=? AND user_email=?',
+                )
+                .bind(app.resume_id, session.email)
+                .first()
+            : null;
+        let worker;
+        try {
+          worker = await workerCall(env, '/tasks/start', {
+            userEmail: session.email,
+            application: app,
+            profile,
+            resume,
+            instructions,
+            requireFinalApproval: true,
+          });
+        } catch (error) {
+          await database
+            .prepare(
+              "UPDATE auto_applications SET status='FAILED',last_activity_at=?,updated_at=? WHERE id=?",
+            )
+            .bind(
+              new Date().toISOString(),
+              new Date().toISOString(),
+              applicationId,
+            )
+            .run();
+          await logAuto(
+            database,
+            session.email,
+            'AGENT_NOT_STARTED',
+            error.message,
+            applicationId,
+          );
+          return json({ error: error.message }, error.status || 500);
+        }
+        const now = new Date().toISOString();
+        await database
+          .prepare(
+            "UPDATE auto_applications SET status='QUEUED',worker_task_id=?,last_activity_at=?,updated_at=? WHERE id=?",
+          )
+          .bind(worker.taskId || '', now, now, applicationId)
+          .run();
+        await logAuto(
+          database,
+          session.email,
+          'AGENT_STARTED',
+          'Automation task queued.',
+          applicationId,
+          worker,
+        );
+        return json({
+          message: 'Automation task queued.',
+          taskId: worker.taskId || '',
+        });
+      }
+      if (
+        url.pathname === '/api/auto-apply/agent/control' &&
+        request.method === 'POST'
+      ) {
+        if (!sameOrigin(request, url))
+          return json({ error: 'Use CarrerNaviq to control the agent.' }, 403);
+        let input;
+        try {
+          input = await jsonInput(request);
+        } catch {
+          return json({ error: 'Invalid agent control.' }, 400);
+        }
+        const action = String(input?.action || '');
+        if (!['start', 'pause', 'resume', 'stop'].includes(action))
+          return json({ error: 'Invalid agent control.' }, 400);
+        const database = db(env);
+        await ensureAutoApply(database);
+        await logAuto(
+          database,
+          session.email,
+          `AGENT_${action.toUpperCase()}`,
+          `Agent ${action} requested.`,
+        );
+        return json({
+          message: `Agent ${action} requested. ${env.SKYVERN_WORKER_URL ? 'Worker will receive task-specific controls from Application Tracker.' : 'Configure the external worker to execute browser controls.'}`,
+        });
+      }
+      if (
+        url.pathname === '/api/auto-apply/blockers/answer' &&
+        request.method === 'POST'
+      ) {
+        if (!sameOrigin(request, url))
+          return json({ error: 'Use CarrerNaviq to answer blockers.' }, 403);
+        let input;
+        try {
+          input = await jsonInput(request);
+        } catch {
+          return json({ error: 'Invalid blocker answer.' }, 400);
+        }
+        const answer = String(input?.answer || '').trim();
+        if (!answer) return json({ error: 'Enter an answer.' }, 400);
+        const database = db(env);
+        await ensureAutoApply(database);
+        const b = await database
+          .prepare('SELECT * FROM auto_blockers WHERE id=? AND user_email=?')
+          .bind(input.blockerId, session.email)
+          .first();
+        if (!b) return json({ error: 'Blocker not found.' }, 404);
+        const now = new Date().toISOString();
+        await database
+          .prepare(
+            "UPDATE auto_blockers SET answer=?,status='RESOLVED',updated_at=? WHERE id=?",
+          )
+          .bind(answer, now, b.id)
+          .run();
+        await database
+          .prepare(
+            "UPDATE auto_applications SET blocker_status='RESOLVED',status='QUEUED',last_activity_at=?,updated_at=? WHERE id=? AND user_email=?",
+          )
+          .bind(now, now, b.application_id, session.email)
+          .run();
+        if (input.saveAnswer)
+          await database
+            .prepare(
+              'INSERT INTO auto_saved_answers (id,user_email,normalized_question,question,answer,answer_type,source,approved_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?) ON CONFLICT(user_email,normalized_question) DO UPDATE SET answer=excluded.answer,approved_at=excluded.approved_at,updated_at=excluded.updated_at',
+            )
+            .bind(
+              crypto.randomUUID(),
+              session.email,
+              normalizeQuestion(b.question),
+              b.question,
+              answer,
+              'general',
+              'blocker',
+              now,
+              now,
+            )
+            .run();
+        await logAuto(
+          database,
+          session.email,
+          'BLOCKER_RESOLVED',
+          `Resolved blocker: ${b.reason}`,
+          b.application_id,
+        );
+        return json({ resolved: true });
+      }
+      if (
+        url.pathname === '/api/auto-apply/answers' &&
+        request.method === 'POST'
+      ) {
+        if (!sameOrigin(request, url))
+          return json({ error: 'Use CarrerNaviq to save answers.' }, 403);
+        let input;
+        try {
+          input = await jsonInput(request);
+        } catch {
+          return json({ error: 'Invalid answer.' }, 400);
+        }
+        const question = String(input?.question || '').trim(),
+          answer = String(input?.answer || '').trim(),
+          type = String(input?.answerType || 'general');
+        if (
+          !question ||
+          !answer ||
+          question.length > 500 ||
+          answer.length > 3000 ||
+          ![
+            'general',
+            'work_authorization',
+            'sponsorship',
+            'salary',
+            'legal',
+            'company_specific',
+          ].includes(type)
+        )
+          return json(
+            { error: 'Enter a valid question and approved answer.' },
+            400,
+          );
+        const database = db(env);
+        await ensureAutoApply(database);
+        const now = new Date().toISOString();
+        await database
+          .prepare(
+            'INSERT INTO auto_saved_answers (id,user_email,normalized_question,question,answer,answer_type,source,approved_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?) ON CONFLICT(user_email,normalized_question) DO UPDATE SET question=excluded.question,answer=excluded.answer,answer_type=excluded.answer_type,approved_at=excluded.approved_at,updated_at=excluded.updated_at',
+          )
+          .bind(
+            crypto.randomUUID(),
+            session.email,
+            normalizeQuestion(question),
+            question,
+            answer,
+            type,
+            'user',
+            now,
+            now,
+          )
+          .run();
+        return json({ saved: true });
+      }
+      if (
+        url.pathname.startsWith('/api/auto-apply/answers/') &&
+        request.method === 'DELETE'
+      ) {
+        const id = decodeURIComponent(url.pathname.split('/').pop());
+        const database = db(env);
+        await ensureAutoApply(database);
+        await database
+          .prepare('DELETE FROM auto_saved_answers WHERE id=? AND user_email=?')
+          .bind(id, session.email)
+          .run();
+        return json({ deleted: true });
+      }
+      if (
+        url.pathname === '/api/auto-apply/settings' &&
+        request.method === 'PUT'
+      ) {
+        if (!sameOrigin(request, url))
+          return json({ error: 'Use CarrerNaviq to save settings.' }, 403);
+        let input;
+        try {
+          input = await jsonInput(request);
+        } catch {
+          return json({ error: 'Invalid settings.' }, 400);
+        }
+        const daily = Number(input?.dailyLimit),
+          minimum = Number(input?.minimumScore),
+          review = Boolean(input?.requireReview);
+        if (
+          !Number.isInteger(daily) ||
+          daily < 0 ||
+          daily > 100 ||
+          !Number.isInteger(minimum) ||
+          minimum < 0 ||
+          minimum > 100
+        )
+          return json({ error: 'Check daily limit and score.' }, 400);
+        const database = db(env);
+        await ensureAutoApply(database);
+        await database
+          .prepare(
+            'INSERT INTO auto_agent_settings (user_email,daily_limit,minimum_score,require_review,updated_at) VALUES (?,?,?,?,?) ON CONFLICT(user_email) DO UPDATE SET daily_limit=excluded.daily_limit,minimum_score=excluded.minimum_score,require_review=excluded.require_review,updated_at=excluded.updated_at',
+          )
+          .bind(
+            session.email,
+            daily,
+            minimum,
+            review ? 1 : 0,
+            new Date().toISOString(),
+          )
+          .run();
+        return json({ saved: true });
+      }
+      if (url.pathname === '/api/jobs/generate' && request.method === 'POST') {
+        if (!sameOrigin(request, url))
+          return json({ error: 'Use the jobs page to generate results.' }, 403);
+        if (
+          !canManage(session) &&
+          !(await tabAllowed(env, 'latest-posted-jobs'))
+        )
+          return json({ error: restrictedMessage }, 403);
+        return json(await refreshElite(env));
+      }
+      if (url.pathname === '/api/jobs/query' && request.method === 'POST') {
+        if (!sameOrigin(request, url))
+          return json({ error: 'Use the jobs page to view results.' }, 403);
+        if (
+          !canManage(session) &&
+          !(await tabAllowed(env, 'latest-posted-jobs'))
+        )
+          return json({ error: restrictedMessage }, 403);
+        let input;
+        try {
+          input = await jsonInput(request);
+        } catch {
+          return json({ error: 'Invalid job filters.' }, 400);
+        }
+        const ids = jobSourceIds,
+          category = String(input?.category || ''),
+          windowName = String(input?.window || 'all');
+        if (
+          !Array.isArray(ids) ||
+          ids.length > 100 ||
+          ids.some((id) => typeof id !== 'string' || id.length > 250) ||
+          !sectionCategories.has(category) ||
+          !['all', 'day', 'week', 'month'].includes(windowName)
+        )
+          return json({ error: 'Invalid job filters.' }, 400);
+        if (!ids.length) return json({ items: [] });
+        const min = input?.minYears == null ? null : Number(input.minYears),
+          max = input?.maxYears == null ? null : Number(input.maxYears);
+        if (
+          (min !== null && (!Number.isInteger(min) || min < 0 || min > 60)) ||
+          (max !== null && (!Number.isInteger(max) || max < 0 || max > 60)) ||
+          (min !== null && max !== null && min > max)
+        )
+          return json({ error: 'Invalid experience range.' }, 400);
+        const durations = { day: 86400000, week: 604800000, month: 2592000000 };
+        const cutoff =
+          windowName === 'all'
+            ? ''
+            : new Date(Date.now() - durations[windowName])
+                .toISOString()
+                .slice(0, 10);
+        const search = String(input?.search || '')
+            .trim()
+            .slice(0, 100),
+          searchLike = `%${search.replace(/[\\%_]/g, '\\$&')}%`;
+        let sql = `SELECT id,company_id,company_name,category,title,apply_url,posted_at,min_years,max_years FROM imported_jobs WHERE is_open = 1 AND last_seen_at >= ? AND category = ? AND company_id IN (SELECT value FROM json_each(?))`;
+        const values = [
+          new Date(Date.now() - 30 * 86400000).toISOString(),
+          category,
+          JSON.stringify(ids),
+        ];
+        if (cutoff) {
+          sql += ' AND posted_at >= ?';
+          values.push(cutoff);
+        }
+        if (search) {
+          sql +=
+            " AND (lower(title) LIKE lower(?) ESCAPE '\\' OR lower(company_name) LIKE lower(?) ESCAPE '\\')";
+          values.push(searchLike, searchLike);
+        }
+        if (min !== null) {
+          sql +=
+            ' AND min_years IS NOT NULL AND (max_years IS NULL OR max_years >= ?)';
+          values.push(min);
+        }
+        if (max !== null) {
+          sql += ' AND min_years IS NOT NULL AND min_years <= ?';
+          values.push(max);
+        }
+        sql +=
+          (search
+            ? " ORDER BY CASE WHEN lower(title)=lower(?) THEN 0 WHEN lower(title) LIKE lower(?) ESCAPE '\\' THEN 1 WHEN lower(company_name)=lower(?) THEN 2 WHEN lower(company_name) LIKE lower(?) ESCAPE '\\' THEN 3 ELSE 4 END, "
+            : ' ORDER BY ') +
+          "CASE WHEN posted_at = '' THEN 1 ELSE 0 END, posted_at DESC, discovered_at DESC LIMIT 1000";
+        if (search)
+          values.push(
+            search,
+            `${search.replace(/[\\%_]/g, '\\$&')}%`,
+            search,
+            `${search.replace(/[\\%_]/g, '\\$&')}%`,
+          );
+        const { results } = await db(env)
+          .prepare(sql)
+          .bind(...values)
+          .all();
+        const source = await db(env)
+          .prepare(
+            'SELECT checked_at,status,message FROM job_source_checks WHERE company_id=?',
+          )
+          .bind(aggregateJobSourceId)
+          .first();
+        return json({ items: results, source });
+      }
+      if (
+        [
+          '/companies.json',
+          '/api/changes',
+          '/api/companies',
+          '/api/company',
+        ].includes(url.pathname) &&
+        !canManage(session) &&
+        !(await tabAllowed(env, 'employer-directory'))
+      )
+        return json({ error: restrictedMessage }, 403);
+
+      if (
+        url.pathname.startsWith('/api/ask/attachments/') &&
+        request.method === 'GET'
+      ) {
+        const database = db(env);
+        await ensureAskMessages(database);
+        const file = await database
+          .prepare('SELECT * FROM ask_attachments WHERE id=?')
+          .bind(url.pathname.split('/').pop())
+          .first();
+        if (!file || (file.user_email !== session.email && !canManage(session)))
+          return json({ error: 'Attachment unavailable.' }, 404);
+        const object = await bucket(env).get(file.file_key);
+        if (!object) return json({ error: 'Attachment unavailable.' }, 404);
+        return new Response(object.body, {
+          headers: {
+            'Content-Type': 'application/octet-stream',
+            'Content-Disposition':
+              "attachment; filename*=UTF-8''" +
+              encodeURIComponent(file.file_name),
+            'Cache-Control': 'private, no-store',
+            'X-Content-Type-Options': 'nosniff',
+          },
+        });
+      }
+      if (url.pathname === '/api/ask/messages' && request.method === 'GET') {
+        const database = db(env);
+        await ensureAskMessages(database);
+        const { results } = await database
+          .prepare(
+            'SELECT id,body,sender,created_at FROM ask_messages WHERE user_email = ? ORDER BY created_at ASC LIMIT 300',
+          )
+          .bind(session.email)
+          .all();
+        await database
+          .prepare(
+            "UPDATE ask_messages SET read_by_user_at = COALESCE(read_by_user_at, ?) WHERE user_email = ? AND sender = 'admin'",
+          )
+          .bind(new Date().toISOString(), session.email)
+          .run();
+        const attachments = await chatAttachments(database);
+        return json({
+          items: results.map((row) => ({
+            id: row.id,
+            attachments: attachments.get(row.id) || [],
+            body: row.body,
+            sender: row.sender === 'admin' ? 'support' : 'user',
+            createdAt: row.created_at,
+          })),
+        });
+      }
+      if (url.pathname === '/api/ask/messages' && request.method === 'POST') {
+        if (!sameOrigin(request, url))
+          return json({ error: 'Use CarrerNaviq to send questions.' }, 403);
+        let input;
+        try {
+          input = await chatInput(request);
+        } catch (error) {
+          return json({ error: error.message || 'Invalid message.' }, 400);
+        }
+        const body = String(input?.body || '').trim();
+        if ((!body && !input.files?.length) || body.length > 1200)
+          return json({ error: 'Enter a message under 1200 characters.' }, 400);
+        const database = db(env);
+        await ensureAskMessages(database);
+        await ensureAccessUserColumns(database);
+        const user = await database
+          .prepare('SELECT name FROM access_users WHERE email = ?')
+          .bind(session.email)
+          .first();
+        const now = new Date().toISOString();
+        const item = {
+          id: crypto.randomUUID(),
+          body,
+          sender: 'user',
+          createdAt: now,
+        };
+        await saveChatFiles(database, env, input, item.id, session.email);
+        await database
+          .prepare(
+            'INSERT INTO ask_messages (id,user_email,user_name,body,sender,created_at) VALUES (?,?,?,?,?,?)',
+          )
+          .bind(
+            item.id,
+            session.email,
+            user?.name || session.name || '',
+            body,
+            'user',
+            now,
+          )
+          .run();
+        return json(
+          {
+            item: {
+              id: item.id,
+              body: item.body,
+              sender: 'user',
+              createdAt: item.createdAt,
+            },
+          },
+          201,
+        );
+      }
+      if (url.pathname === '/api/admin/questions' && request.method === 'GET') {
+        if (!canManage(session))
+          return json({ error: 'Admin access required.' }, 403);
+        const database = db(env);
+        await ensureAskMessages(database);
+        await ensureAccessUserColumns(database);
+        const { results } = await database
+          .prepare(
+            "SELECT m.id,m.user_email,m.user_name,COALESCE(NULLIF(trim(u.name),''),NULLIF(latest.saved_name,''),m.user_email) AS profile_name,m.body,m.sender,m.created_at,m.read_by_admin_at,m.read_by_user_at FROM ask_messages m JOIN (SELECT user_email,max(created_at) AS last_at,max(NULLIF(trim(user_name),'')) AS saved_name FROM ask_messages GROUP BY user_email) latest ON latest.user_email = m.user_email LEFT JOIN access_users u ON u.email = m.user_email ORDER BY latest.last_at DESC,m.created_at ASC LIMIT 1000",
+          )
+          .all();
+        const attachments = await chatAttachments(database);
+        const threads = [];
+        const byEmail = new Map();
+        for (const row of results) {
+          let thread = byEmail.get(row.user_email);
+          if (!thread) {
+            thread = {
+              email: row.user_email,
+              name: row.profile_name || row.user_email,
+              messages: [],
+              unread: 0,
+              lastAt: row.created_at,
+            };
+            byEmail.set(row.user_email, thread);
+            threads.push(thread);
+          }
+          thread.messages.push({
+            id: row.id,
+            attachments: attachments.get(row.id) || [],
+            body: row.body,
+            sender: row.sender,
+            createdAt: row.created_at,
+            readByUserAt: row.read_by_user_at || '',
+          });
+          thread.lastAt = row.created_at;
+          if (row.sender === 'user' && !row.read_by_admin_at) thread.unread++;
+        }
+        const cleared = await database
+          .prepare(
+            'SELECT t.user_email,t.updated_at,u.name FROM ask_threads t LEFT JOIN access_users u ON u.email=t.user_email ORDER BY t.updated_at DESC',
+          )
+          .all();
+        for (const row of cleared.results || [])
+          if (!byEmail.has(row.user_email))
+            threads.push({
+              email: row.user_email,
+              name: row.name || row.user_email,
+              messages: [],
+              unread: 0,
+              lastAt: row.updated_at,
+            });
+        threads.sort((a, b) => b.lastAt.localeCompare(a.lastAt));
+        return json({ items: threads });
+      }
+      if (
+        url.pathname === '/api/admin/questions/manage' &&
+        request.method === 'POST'
+      ) {
+        if (!canManage(session))
+          return json({ error: 'Admin access required.' }, 403);
+        if (!sameOrigin(request, url))
+          return json({ error: 'Use Admin to manage chats.' }, 403);
+        let input;
+        try {
+          input = await jsonInput(request);
+        } catch {
+          return json({ error: 'Invalid chat action.' }, 400);
+        }
+        const email = String(input?.email || '')
+            .trim()
+            .toLowerCase(),
+          action = input?.action;
+        if (!emailPattern.test(email) || !['clear', 'delete'].includes(action))
+          return json({ error: 'Invalid chat action.' }, 400);
+        const database = db(env);
+        await ensureAskMessages(database);
+        await removeChatFiles(database, env, email);
+        const statements = [
+          database
+            .prepare('DELETE FROM ask_messages WHERE user_email=?')
+            .bind(email),
+        ];
+        if (action === 'clear')
+          statements.push(
+            database
+              .prepare(
+                'INSERT INTO ask_threads(user_email,updated_at) VALUES(?,?) ON CONFLICT(user_email) DO UPDATE SET updated_at=excluded.updated_at',
+              )
+              .bind(email, new Date().toISOString()),
+          );
+        else
+          statements.push(
+            database
+              .prepare('DELETE FROM ask_threads WHERE user_email=?')
+              .bind(email),
+          );
+        await database.batch(statements);
+        return json({ success: true });
+      }
+      if (
+        url.pathname === '/api/admin/questions/reply' &&
+        request.method === 'POST'
+      ) {
+        if (!canManage(session))
+          return json({ error: 'Admin access required.' }, 403);
+        if (!sameOrigin(request, url))
+          return json({ error: 'Use Admin to reply.' }, 403);
+        let input;
+        try {
+          input = await chatInput(request);
+        } catch (error) {
+          return json({ error: error.message || 'Invalid reply.' }, 400);
+        }
+        const userEmail = String(input?.email || '')
+            .trim()
+            .toLowerCase(),
+          body = String(input?.body || '').trim();
+        if (
+          !emailPattern.test(userEmail) ||
+          (!body && !input.files?.length) ||
+          body.length > 1200
+        )
+          return json({ error: 'Enter a valid user and reply.' }, 400);
+        const database = db(env);
+        await ensureAskMessages(database);
+        const existing = await database
+          .prepare(
+            'SELECT user_email FROM ask_messages WHERE user_email = ? LIMIT 1',
+          )
+          .bind(userEmail)
+          .first();
+        const recipient = await database
+          .prepare('SELECT name,status FROM access_users WHERE email = ?')
+          .bind(userEmail)
+          .first();
+        const thread = await database
+          .prepare('SELECT user_email FROM ask_threads WHERE user_email = ?')
+          .bind(userEmail)
+          .first();
+        if (!existing && !thread && recipient?.status !== 'approved')
+          return json({ error: 'Select an existing approved user.' }, 404);
+        const now = new Date().toISOString(),
+          messageId = crypto.randomUUID();
+        await saveChatFiles(database, env, input, messageId, userEmail);
+        await database.batch([
+          database
+            .prepare(
+              "UPDATE ask_messages SET read_by_admin_at = COALESCE(read_by_admin_at, ?) WHERE user_email = ? AND sender = 'user'",
+            )
+            .bind(now, userEmail),
+          database
+            .prepare(
+              'INSERT INTO ask_messages (id,user_email,user_name,body,sender,admin_email,created_at) VALUES (?,?,?,?,?,?,?)',
+            )
+            .bind(
+              messageId,
+              userEmail,
+              recipient?.name || '',
+              body,
+              'admin',
+              session.email,
+              now,
+            ),
+        ]);
+        return json({ sent: true });
+      }
+      if (
+        url.pathname === '/api/admin/questions/read' &&
+        request.method === 'POST'
+      ) {
+        if (!canManage(session))
+          return json({ error: 'Admin access required.' }, 403);
+        if (!sameOrigin(request, url))
+          return json({ error: 'Use Admin to read messages.' }, 403);
+        let input;
+        try {
+          input = await jsonInput(request);
+        } catch {
+          return json({ error: 'Invalid conversation.' }, 400);
+        }
+        const userEmail = String(input?.email || '')
+          .trim()
+          .toLowerCase();
+        if (!emailPattern.test(userEmail))
+          return json({ error: 'Invalid user email.' }, 400);
+        const database = db(env);
+        await ensureAskMessages(database);
+        await database
+          .prepare(
+            "UPDATE ask_messages SET read_by_admin_at = COALESCE(read_by_admin_at, ?) WHERE user_email = ? AND sender = 'user'",
+          )
+          .bind(new Date().toISOString(), userEmail)
+          .run();
+        return json({ read: true });
+      }
+
+      if (url.pathname === '/api/app-profile' && request.method === 'PUT') {
+        if (!sameOrigin(request, url))
+          return json(
+            { error: 'Use CarrerNaviq to update your profile.' },
+            403,
+          );
+        let input;
+        try {
+          input = await jsonInput(request);
+        } catch {
+          return json({ error: 'Invalid profile details.' }, 400);
+        }
+        const name = String(input?.name || '')
+          .trim()
+          .replace(/\s+/g, ' ');
+        if (!name || name.length > 120)
+          return json({ error: 'Enter your name.' }, 400);
+        const database = db(env);
+        await ensureAccessUserColumns(database);
+        const now = new Date().toISOString();
+        await database
+          .prepare(
+            'INSERT INTO access_users(email,name,status,requested_at,updated_at) VALUES(?,?,?,?,?) ON CONFLICT(email) DO UPDATE SET name=excluded.name,updated_at=excluded.updated_at',
+          )
+          .bind(session.email, name, session.status, now, now)
+          .run();
+        return json({ email: session.email, name });
+      }
+      if (url.pathname === '/api/app-profile' && request.method === 'DELETE') {
+        if (!sameOrigin(request, url))
+          return json(
+            { error: 'Use CarrerNaviq to delete your account access.' },
+            403,
+          );
+        let input;
+        try {
+          input = await jsonInput(request);
+        } catch {
+          return json({ error: 'Invalid account deletion.' }, 400);
+        }
+        const email = String(input?.email || '')
+          .trim()
+          .toLowerCase();
+        if (email !== session.email)
+          return json(
+            { error: 'Enter your own account email to delete access.' },
+            400,
+          );
+        if (email === adminEmail)
+          return json(
+            { error: 'The Admin account cannot be deleted here.' },
+            400,
+          );
+        const database = db(env);
+        await ensureAskMessages(database);
+        await ensureAutoApply(database);
+        await ensureVault(database);
+        await removeChatFiles(database, env, email);
+        await database.batch([
+          database
+            .prepare('DELETE FROM credential_vault WHERE user_email=?')
+            .bind(email),
+          database
+            .prepare('DELETE FROM access_sessions WHERE email = ?')
+            .bind(email),
+          database
+            .prepare('DELETE FROM user_profiles WHERE email = ?')
+            .bind(email),
+          database
+            .prepare('DELETE FROM auto_resumes WHERE user_email = ?')
+            .bind(email),
+          database
+            .prepare('DELETE FROM auto_connected_accounts WHERE user_email = ?')
+            .bind(email),
+          database
+            .prepare('DELETE FROM auto_agent_settings WHERE user_email = ?')
+            .bind(email),
+          database.prepare('DELETE FROM coadmins WHERE email = ?').bind(email),
+          database
+            .prepare('DELETE FROM ask_messages WHERE user_email = ?')
+            .bind(email),
+          database
+            .prepare('DELETE FROM access_users WHERE email = ?')
+            .bind(email),
+        ]);
+        return json({ deleted: true, email }, 200);
+      }
+      if (url.pathname === '/api/profile' && request.method === 'GET') {
+        const database = db(env);
+        await ensureProfileColumns(database);
+        await ensureAccessUserColumns(database);
+        const profile = await database
+          .prepare('SELECT * FROM user_profiles WHERE email = ?')
+          .bind(session.email)
+          .first();
+        const accessUser = await database
+          .prepare('SELECT name FROM access_users WHERE email = ?')
+          .bind(session.email)
+          .first();
+        return json({
+          email: session.email,
+          name: accessUser?.name || session.name || '',
+          profile: profile || null,
+        });
+      }
+      if (url.pathname === '/api/profile' && request.method === 'PUT') {
+        if (!sameOrigin(request, url))
+          return json({ error: 'Use the profile page to save changes.' }, 403);
+        let input;
+        try {
+          input = await jsonInput(request);
+        } catch {
+          return json({ error: 'Invalid profile details.' }, 400);
+        }
+        const firstName = String(input?.firstName || '').trim(),
+          lastName = String(input?.lastName || '').trim(),
+          legalName = String(input?.legalName || '').trim(),
+          applicationEmail = String(input?.applicationEmail || '').trim();
+        const mobile = String(input?.mobile || '').trim(),
+          mobileCountryCode =
+            String(input?.mobileCountryCode || '').trim() || '+1',
+          workAuthorization = String(input?.workAuthorization || '').trim();
+        const location = String(input?.location || '').trim(),
+          address = String(input?.address || '').trim(),
+          city = String(input?.city || '').trim(),
+          state = String(input?.state || '').trim(),
+          zip = String(input?.zip || '').trim(),
+          linkedinUrl = String(input?.linkedinUrl || '').trim(),
+          portfolioUrl = String(input?.portfolioUrl || '').trim(),
+          githubUrl = String(input?.githubUrl || '').trim();
+        const university = String(input?.university || '').trim(),
+          degree = String(input?.degree || '').trim(),
+          educationStartMonth = String(input?.educationStartMonth || '').trim(),
+          educationStartYear = String(input?.educationStartYear || '').trim(),
+          educationEndMonth = String(input?.educationEndMonth || '').trim(),
+          educationEndYear = String(input?.educationEndYear || '').trim();
+        const startDate = String(input?.startDate || '').trim(),
+          employmentTypePreferences = String(
+            input?.employmentTypePreferences || '',
+          ).trim(),
+          relocationPreferences = String(
+            input?.relocationPreferences || '',
+          ).trim();
+        const salaryMin = String(input?.salaryMin || '').trim(),
+          salaryMax = String(input?.salaryMax || '').trim(),
+          hourlyMin = String(input?.hourlyMin || '').trim(),
+          hourlyMax = String(input?.hourlyMax || '').trim();
+        const experience = String(input?.experience || '').trim(),
+          skills = String(input?.skills || '').trim(),
+          certifications = String(input?.certifications || '').trim(),
+          sponsorshipNeeds = String(input?.sponsorshipNeeds || '').trim(),
+          jobPreferences = String(input?.jobPreferences || '').trim(),
+          approvedScreeningAnswers = String(
+            input?.approvedScreeningAnswers || '',
+          ).trim();
+        const phoneCodeOk = /^\+(?:\d{1,4}|1-CA)$/.test(mobileCountryCode),
+          emailOk =
+            !applicationEmail ||
+            /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(applicationEmail),
+          numberOk = (value) => !value || /^\d{1,9}(?:\.\d{1,2})?$/.test(value);
+        const authOptions = [
+          '',
+          'U.S. Citizen',
+          'Green Card / Permanent Resident',
+          'H1B',
+          'H4 EAD',
+          'L2 EAD',
+          'OPT',
+          'STEM OPT',
+          'CPT',
+          'TN Visa',
+          'Requires sponsorship now',
+          'Requires sponsorship in the future',
+          'Other work authorization',
+        ];
+        const employmentOptions = [
+          '',
+          'Full-time',
+          'Contract - W2',
+          'Contract - C2C',
+          'Contract - 1099',
+          'Contract-to-hire',
+          'Part-time',
+          'Internship',
+        ];
+        const relocationOptions = [
+          '',
+          'Open to relocate',
+          'Not open to relocate',
+          'Remote only',
+          'Hybrid only',
+          'On-site only',
+          'Within current city',
+          'Within current state',
+          'Anywhere in the U.S.',
+          'Specific locations only',
+        ];
+        const monthOptions = [
+          '',
+          'January',
+          'February',
+          'March',
+          'April',
+          'May',
+          'June',
+          'July',
+          'August',
+          'September',
+          'October',
+          'November',
+          'December',
+        ];
+        if (
+          firstName.length > 80 ||
+          lastName.length > 80 ||
+          legalName.length > 180 ||
+          !emailOk ||
+          mobileCountryCode.length > 8 ||
+          !phoneCodeOk ||
+          mobile.length > 40 ||
+          (mobile && !/^[()\d.\s-]+$/.test(mobile)) ||
+          !authOptions.includes(workAuthorization) ||
+          location.length > 160 ||
+          address.length > 240 ||
+          city.length > 100 ||
+          state.length > 80 ||
+          zip.length > 20 ||
+          !link(linkedinUrl) ||
+          !link(portfolioUrl) ||
+          !link(githubUrl) ||
+          university.length > 200 ||
+          degree.length > 200 ||
+          !monthOptions.includes(educationStartMonth) ||
+          !monthOptions.includes(educationEndMonth) ||
+          (educationStartYear && !/^\d{4}$/.test(educationStartYear)) ||
+          (educationEndYear && !/^\d{4}$/.test(educationEndYear)) ||
+          startDate.length > 20 ||
+          !employmentOptions.includes(employmentTypePreferences) ||
+          !relocationOptions.includes(relocationPreferences) ||
+          !numberOk(salaryMin) ||
+          !numberOk(salaryMax) ||
+          !numberOk(hourlyMin) ||
+          !numberOk(hourlyMax) ||
+          experience.length > 3000 ||
+          skills.length > 3000 ||
+          certifications.length > 2000 ||
+          sponsorshipNeeds.length > 2000 ||
+          jobPreferences.length > 2000 ||
+          approvedScreeningAnswers.length > 5000
+        )
+          return json(
+            {
+              error:
+                'Check the details you entered. You can leave any profile field blank.',
+            },
+            400,
+          );
+        const salaryExpectations = [
+          salaryMin || salaryMax
+            ? `Annual: ${salaryMin || 'Any'}-${salaryMax || 'Any'}`
+            : '',
+          hourlyMin || hourlyMax
+            ? `Hourly: ${hourlyMin || 'Any'}-${hourlyMax || 'Any'}`
+            : '',
+        ]
+          .filter(Boolean)
+          .join(' | ');
+        const education = [
+          university,
+          degree,
+          [educationStartMonth, educationStartYear].filter(Boolean).join(' '),
+          [educationEndMonth, educationEndYear].filter(Boolean).join(' '),
+        ]
+          .filter(Boolean)
+          .join(' | ');
+        const now = new Date().toISOString();
+        const database = db(env);
+        await ensureProfileColumns(database);
+        const result = await database
+          .prepare(
+            'INSERT INTO user_profiles (email,first_name,last_name,mobile,mobile_country_code,visa_status,legal_name,application_email,location,address,city,state,zip,linkedin_url,portfolio_url,github_url,start_date,education,education_university,education_degree,education_start_month,education_start_year,education_end_month,education_end_year,experience,skills,certifications,work_authorization,sponsorship_needs,salary_expectations,salary_min,salary_max,hourly_min,hourly_max,job_preferences,employment_type_preferences,relocation_preferences,approved_screening_answers,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(email) DO UPDATE SET first_name=excluded.first_name,last_name=excluded.last_name,mobile=excluded.mobile,mobile_country_code=excluded.mobile_country_code,visa_status=excluded.visa_status,legal_name=excluded.legal_name,application_email=excluded.application_email,location=excluded.location,address=excluded.address,city=excluded.city,state=excluded.state,zip=excluded.zip,linkedin_url=excluded.linkedin_url,portfolio_url=excluded.portfolio_url,github_url=excluded.github_url,start_date=excluded.start_date,education=excluded.education,education_university=excluded.education_university,education_degree=excluded.education_degree,education_start_month=excluded.education_start_month,education_start_year=excluded.education_start_year,education_end_month=excluded.education_end_month,education_end_year=excluded.education_end_year,experience=excluded.experience,skills=excluded.skills,certifications=excluded.certifications,work_authorization=excluded.work_authorization,sponsorship_needs=excluded.sponsorship_needs,salary_expectations=excluded.salary_expectations,salary_min=excluded.salary_min,salary_max=excluded.salary_max,hourly_min=excluded.hourly_min,hourly_max=excluded.hourly_max,job_preferences=excluded.job_preferences,employment_type_preferences=excluded.employment_type_preferences,relocation_preferences=excluded.relocation_preferences,approved_screening_answers=excluded.approved_screening_answers,updated_at=excluded.updated_at RETURNING *',
+          )
+          .bind(
+            session.email,
+            firstName,
+            lastName,
+            mobile,
+            mobileCountryCode,
+            workAuthorization,
+            legalName,
+            applicationEmail,
+            location,
+            address,
+            city,
+            state,
+            zip,
+            linkedinUrl,
+            portfolioUrl,
+            githubUrl,
+            startDate,
+            education,
+            university,
+            degree,
+            educationStartMonth,
+            educationStartYear,
+            educationEndMonth,
+            educationEndYear,
+            experience,
+            skills,
+            certifications,
+            workAuthorization,
+            sponsorshipNeeds,
+            salaryExpectations,
+            salaryMin,
+            salaryMax,
+            hourlyMin,
+            hourlyMax,
+            jobPreferences,
+            employmentTypePreferences,
+            relocationPreferences,
+            approvedScreeningAnswers,
+            now,
+          )
+          .first();
+        return json({ email: session.email, profile: result });
+      }
+      if (url.pathname === '/api/section-items' && request.method === 'GET') {
+        const section = url.searchParams.get('section'),
+          category = url.searchParams.get('category');
+        if (
+          !sectionNames.has(section) ||
+          (!sectionCategories.has(category) &&
+            !(
+              section === 'recruiter-directory' &&
+              ['all', 'mylist'].includes(category)
+            ))
+        )
+          return json({ error: 'Invalid section or category.' }, 400);
+        if (!canManage(session) && !(await tabAllowed(env, section)))
+          return json({ error: restrictedMessage }, 403);
+        const search = (url.searchParams.get('search') || '')
+            .trim()
+            .slice(0, 100),
+          searchLike = `%${escapeLike(search)}%`;
+        const windowName = url.searchParams.get('window') || 'all';
+        if (!['all', 'day', 'week', 'month'].includes(windowName))
+          return json({ error: 'Invalid date filter.' }, 400);
+        const durations = { day: 86400000, week: 604800000, month: 2592000000 };
+        const cutoff =
+          windowName === 'all'
+            ? ''
+            : new Date(Date.now() - durations[windowName]).toISOString();
+        const searchableFields = [
+          'title',
+          'organization',
+          'url',
+          'details',
+          'email',
+          'phone',
+          'extension',
+          'file_name',
+          'category',
+        ];
+        const itemSearch = search
+          ? ` AND (${searchableFields.map((field) => `lower(coalesce(${field},'')) LIKE lower(?) ESCAPE '\\'`).join(' OR ')})`
+          : '';
+        const joinSearch = search
+          ? ` AND (${searchableFields.map((field) => `lower(coalesce(item.${field},'')) LIKE lower(?) ESCAPE '\\'`).join(' OR ')})`
+          : '';
+        const searchValues = search
+          ? searchableFields.map(() => searchLike)
+          : [];
+        const sectionItemOrder =
+          section === 'recruiter-directory'
+            ? "ORDER BY CASE WHEN organization IS NULL OR organization = '' THEN 1 ELSE 0 END, lower(coalesce(organization,'')), lower(title), created_at DESC"
+            : 'ORDER BY created_at DESC';
+        const recruiterJoinOrder =
+          "ORDER BY CASE WHEN item.organization IS NULL OR item.organization = '' THEN 1 ELSE 0 END, lower(coalesce(item.organization,'')), lower(item.title), item.created_at DESC";
+        let results;
+        if (section === 'recruiter-directory') {
+          const database = db(env);
+          await ensureSectionFavorites(database);
+          if (category === 'mylist')
+            ({ results } = await database
+              .prepare(
+                `SELECT item.id,item.version,item.category,item.title,item.organization,item.url,item.details,item.email,item.phone,item.extension,item.file_name,item.posted_at,item.created_at,1 AS is_favorite FROM section_items item JOIN section_favorites favorite ON favorite.item_id = item.id AND favorite.user_email = ? WHERE item.section = ? AND item.status = 'approved'${joinSearch} AND (? = '' OR item.posted_at >= ?) ${recruiterJoinOrder} LIMIT 5000`,
+              )
+              .bind(
+                ...[session.email, section, ...searchValues, cutoff, cutoff],
+              )
+              .all());
+          else {
+            const categoryClause = search ? '' : ' AND category = ?';
+            const binds = search
+              ? [session.email, section, ...searchValues, cutoff, cutoff]
+              : [
+                  session.email,
+                  section,
+                  category,
+                  ...searchValues,
+                  cutoff,
+                  cutoff,
+                ];
+            ({ results } = await database
+              .prepare(
+                `SELECT id,version,category,title,organization,url,details,email,phone,extension,file_name,posted_at,created_at,EXISTS(SELECT 1 FROM section_favorites favorite WHERE favorite.user_email = ? AND favorite.item_id = section_items.id) AS is_favorite FROM section_items WHERE section = ?${categoryClause} AND status = 'approved'${itemSearch} AND (? = '' OR posted_at >= ?) ${sectionItemOrder} LIMIT ${section === 'recruiter-directory' ? 5000 : 500}`,
+              )
+              .bind(...binds)
+              .all());
+          }
+        } else {
+          const categoryClause = search ? '' : ' AND category = ?';
+          const binds = search
+            ? [section, ...searchValues, cutoff, cutoff]
+            : [section, category, ...searchValues, cutoff, cutoff];
+          ({ results } = await db(env)
+            .prepare(
+              `SELECT id,version,category,title,organization,url,details,email,phone,extension,file_name,posted_at,created_at FROM section_items WHERE section = ?${categoryClause} AND status = 'approved'${itemSearch} AND (? = '' OR posted_at >= ?) ${sectionItemOrder} LIMIT ${section === 'recruiter-directory' ? 5000 : 500}`,
+            )
+            .bind(...binds)
+            .all());
+        }
+        return json({ items: results });
+      }
+      if (
+        url.pathname === '/api/section-favorites' &&
+        request.method === 'PUT'
+      ) {
+        if (!sameOrigin(request, url))
+          return json({ error: 'Use the directory to save recruiters.' }, 403);
+        let input;
+        try {
+          input = await jsonInput(request);
+        } catch {
+          return json({ error: 'Invalid favorite request.' }, 400);
+        }
+        const id = String(input?.id || ''),
+          saved = Boolean(input?.saved);
+        if (!id) return json({ error: 'Choose a recruiter.' }, 400);
+        const database = db(env);
+        await ensureSectionFavorites(database);
+        const item = await database
+          .prepare(
+            "SELECT id FROM section_items WHERE id = ? AND section = 'recruiter-directory' AND status = 'approved'",
+          )
+          .bind(id)
+          .first();
+        if (!item) return json({ error: 'Recruiter not found.' }, 404);
+        if (saved)
+          await database
+            .prepare(
+              'INSERT OR IGNORE INTO section_favorites (user_email,item_id,created_at) VALUES (?,?,?)',
+            )
+            .bind(session.email, id, new Date().toISOString())
+            .run();
+        else
+          await database
+            .prepare(
+              'DELETE FROM section_favorites WHERE user_email = ? AND item_id = ?',
+            )
+            .bind(session.email, id)
+            .run();
+        return json({ ok: true, saved });
+      }
+      if (
+        url.pathname.startsWith('/api/section-file/') &&
+        request.method === 'GET'
+      ) {
+        const id = url.pathname.slice('/api/section-file/'.length);
+        const item = await db(env)
+          .prepare(
+            'SELECT section,file_key,file_name,file_type,status,actor_email FROM section_items WHERE id = ?',
+          )
+          .bind(id)
+          .first();
+        if (!item?.file_key) return json({ error: 'Document not found.' }, 404);
+        if (!canManage(session) && !(await tabAllowed(env, item.section)))
+          return json({ error: restrictedMessage }, 403);
+        if (
+          item.status !== 'approved' &&
+          !canManage(session) &&
+          item.actor_email !== session.email
+        )
+          return json({ error: 'Document is awaiting approval.' }, 403);
+        const file = await bucket(env).get(item.file_key);
+        if (!file) return json({ error: 'Document unavailable.' }, 404);
+        return new Response(file.body, {
+          headers: {
+            'Content-Type': item.file_type,
+            'Content-Disposition': `attachment; filename*=UTF-8''${encodeURIComponent(item.file_name)}`,
+            'Cache-Control': 'private, no-store',
+            'X-Content-Type-Options': 'nosniff',
+          },
+        });
+      }
+      if (
+        url.pathname.startsWith('/api/section-change-file/') &&
+        request.method === 'GET'
+      ) {
+        if (!canManage(session))
+          return json({ error: 'Admin access required.' }, 403);
+        const id = url.pathname.slice('/api/section-change-file/'.length);
+        const item = await db(env)
+          .prepare(
+            "SELECT pending_file_key,after_payload FROM section_change_requests WHERE id = ? AND status = 'pending'",
+          )
+          .bind(id)
+          .first();
+        if (!item?.pending_file_key)
+          return json({ error: 'Document not found.' }, 404);
+        const proposed = JSON.parse(item.after_payload),
+          file = await bucket(env).get(item.pending_file_key);
+        if (!file) return json({ error: 'Document unavailable.' }, 404);
+        return new Response(file.body, {
+          headers: {
+            'Content-Type': proposed.file_type,
+            'Content-Disposition': `attachment; filename*=UTF-8''${encodeURIComponent(proposed.file_name)}`,
+            'Cache-Control': 'private, no-store',
+            'X-Content-Type-Options': 'nosniff',
+          },
+        });
+      }
+      if (
+        url.pathname === '/api/section-changes' &&
+        request.method === 'POST'
+      ) {
+        if (!sameOrigin(request, url))
+          return json({ error: 'Use the directory to request changes.' }, 403);
+        let input,
+          file = null;
+        try {
+          if (
+            request.headers.get('Content-Type')?.includes('multipart/form-data')
+          ) {
+            const data = await request.formData();
+            input = Object.fromEntries(
+              [...data.entries()].filter(([key]) => key !== 'file'),
+            );
+            file = data.get('file');
+          } else input = await jsonInput(request);
+        } catch {
+          return json({ error: 'Invalid change request.' }, 400);
+        }
+        const id = String(input?.id || ''),
+          version = Number(input?.version),
+          kind = String(input?.kind || '');
+        if (
+          !id ||
+          !Number.isSafeInteger(version) ||
+          version < 1 ||
+          !['edit', 'move', 'delete'].includes(kind)
+        )
+          return json({ error: 'Invalid change request.' }, 400);
+        const database = db(env),
+          current = await database
+            .prepare(
+              "SELECT id,version,section,category,title,organization,url,details,email,phone,extension,posted_at,file_key,file_name,file_type FROM section_items WHERE id = ? AND status = 'approved'",
+            )
+            .bind(id)
+            .first();
+        if (!current) return json({ error: 'Entry not found.' }, 404);
+        if (!canManage(session) && !(await tabAllowed(env, current.section)))
+          return json({ error: restrictedMessage }, 403);
+        if (current.version !== version)
+          return json(
+            { error: 'This entry changed. Refresh and try again.' },
+            409,
+          );
+        if (
+          !canManage(session) &&
+          (await database
+            .prepare(
+              "SELECT id FROM section_change_requests WHERE item_id = ? AND status = 'pending' LIMIT 1",
+            )
+            .bind(id)
+            .first())
+        )
+          return json(
+            { error: 'A change for this entry is already awaiting approval.' },
+            409,
+          );
+        const before = {
+          section: current.section,
+          category: current.category,
+          title: current.title,
+          organization: current.organization,
+          url: current.url,
+          details: current.details,
+          email: current.email,
+          phone: current.phone,
+          extension: current.extension,
+          posted_at: current.posted_at,
+          file_name: current.file_name,
+        };
+        let after = {},
+          pendingFileKey = '',
+          fileBytes = null;
+        if (kind === 'move') {
+          const target = String(input?.category || '');
+          if (
+            (!sectionCategories.has(target) &&
+              !(
+                current.section === 'recruiter-directory' && target === 'all'
+              )) ||
+            target === current.category
+          )
+            return json({ error: 'Choose a different category.' }, 400);
+          after = { category: target };
+        } else if (kind === 'edit') {
+          const title = String(input?.title || '').trim(),
+            organization = String(input?.organization || '').trim(),
+            itemUrl = String(input?.url || '').trim(),
+            details = String(input?.details || '').trim();
+          const email = String(input?.email || '').trim(),
+            phone = String(input?.phone || '').trim(),
+            extension = String(input?.extension || '').trim();
+          if (
+            title.length > 200 ||
+            organization.length > 200 ||
+            details.length > 2000 ||
+            email.length > 254 ||
+            (email && !emailPattern.test(email)) ||
+            phone.length > 40 ||
+            extension.length > 20 ||
+            !link(itemUrl)
+          )
+            return json({ error: 'Check the edited fields and link.' }, 400);
+          const isDocument = current.section === 'study-materials';
+          if (file && !isDocument)
+            return json(
+              { error: 'Only materials and interview prep accept uploads.' },
+              400,
+            );
+          let postedAt = current.posted_at;
+          if (current.section === 'latest-posted-jobs') {
+            postedAt = '';
+            if (input?.postedAt) {
+              const date = new Date(input.postedAt);
+              if (!Number.isFinite(date.getTime()))
+                return json(
+                  { error: 'Enter a valid posting date or leave it blank.' },
+                  400,
+                );
+              postedAt = date.toISOString();
+            }
+          }
+          after = {
+            title,
+            organization,
+            url: itemUrl,
+            details,
+            email,
+            phone,
+            extension,
+            posted_at: postedAt,
+            file_key: current.file_key,
+            file_name: current.file_name,
+            file_type: current.file_type,
+          };
+          if (file) {
+            if (
+              typeof file.arrayBuffer !== 'function' ||
+              file.size === 0 ||
+              file.size > 10 * 1024 * 1024
+            )
+              return json(
+                { error: 'Choose a PDF or Word file smaller than 10 MB.' },
+                400,
+              );
+            const fileName = String(file.name || '')
+                .split(/[\\/]/)
+                .pop()
+                .slice(0, 200),
+              ext = fileName.toLowerCase().split('.').pop();
+            const fileType = {
+              pdf: 'application/pdf',
+              doc: 'application/msword',
+              docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            }[ext];
+            if (!fileType)
+              return json(
+                { error: 'Only PDF, DOC, and DOCX files are allowed.' },
+                400,
+              );
+            fileBytes = await file.arrayBuffer();
+            const magic = new Uint8Array(fileBytes.slice(0, 8));
+            const pdf =
+                ext === 'pdf' &&
+                [37, 80, 68, 70, 45].every((n, i) => magic[i] === n),
+              doc =
+                ext === 'doc' &&
+                [208, 207, 17, 224, 161, 177, 26, 225].every(
+                  (n, i) => magic[i] === n,
+                ),
+              docx =
+                ext === 'docx' &&
+                magic[0] === 80 &&
+                magic[1] === 75 &&
+                magic[2] === 3 &&
+                magic[3] === 4;
+            if (!pdf && !doc && !docx)
+              return json(
+                {
+                  error:
+                    'The selected file does not match its PDF or Word extension.',
+                },
+                400,
+              );
+            after.file_name = fileName;
+            after.file_type = fileType;
+          }
+          if (
+            !file &&
+            Object.entries(after).every(
+              ([key, value]) => value === current[key],
+            )
+          )
+            return json({ error: 'No changes to submit.' }, 400);
+        } else if (file)
+          return json({ error: 'This action does not accept a file.' }, 400);
+        if (canManage(session)) {
+          let newFileKey = '';
+          if (fileBytes) {
+            newFileKey = `section-items/${id}/${crypto.randomUUID()}`;
+            after.file_key = newFileKey;
+            await bucket(env).put(newFileKey, fileBytes, {
+              httpMetadata: { contentType: after.file_type },
+            });
+          }
+          let result;
+          try {
+            if (kind === 'move')
+              result = await database
+                .prepare(
+                  "UPDATE section_items SET category = ?,version = version + 1 WHERE id = ? AND version = ? AND status = 'approved' RETURNING id,version",
+                )
+                .bind(after.category, id, version)
+                .first();
+            else if (kind === 'delete')
+              result = await database
+                .prepare(
+                  "DELETE FROM section_items WHERE id = ? AND version = ? AND status = 'approved' RETURNING id",
+                )
+                .bind(id, version)
+                .first();
+            else
+              result = await database
+                .prepare(
+                  "UPDATE section_items SET title = ?,organization = ?,url = ?,details = ?,email = ?,phone = ?,extension = ?,posted_at = ?,file_key = ?,file_name = ?,file_type = ?,version = version + 1 WHERE id = ? AND version = ? AND status = 'approved' RETURNING id,version",
+                )
+                .bind(
+                  after.title,
+                  after.organization,
+                  after.url,
+                  after.details,
+                  after.email,
+                  after.phone,
+                  after.extension,
+                  after.posted_at,
+                  after.file_key,
+                  after.file_name,
+                  after.file_type,
+                  id,
+                  version,
+                )
+                .first();
+          } catch (error) {
+            if (newFileKey) await bucket(env).delete(newFileKey);
+            throw error;
+          }
+          if (!result) {
+            if (newFileKey) await bucket(env).delete(newFileKey);
+            return json(
+              { error: 'This entry changed. Refresh and try again.' },
+              409,
+            );
+          }
+          if ((kind === 'delete' || newFileKey) && current.file_key)
+            try {
+              await bucket(env).delete(current.file_key);
+            } catch (error) {
+              console.error('Could not remove replaced document', error);
+            }
+          return json({
+            status: 'approved',
+            id,
+            version: result.version || null,
+            kind,
+          });
+        }
+        const requestId = crypto.randomUUID();
+        if (fileBytes) {
+          pendingFileKey = `section-changes/${requestId}`;
+          after.file_key = pendingFileKey;
+          await bucket(env).put(pendingFileKey, fileBytes, {
+            httpMetadata: { contentType: after.file_type },
+          });
+        }
+        try {
+          await database
+            .prepare(
+              "INSERT INTO section_change_requests (id,item_id,actor_email,kind,before_payload,after_payload,base_version,pending_file_key,status,created_at) VALUES (?,?,?,?,?,?,?,?,'pending',?)",
+            )
+            .bind(
+              requestId,
+              id,
+              session.email,
+              kind,
+              JSON.stringify(before),
+              JSON.stringify(after),
+              version,
+              pendingFileKey,
+              new Date().toISOString(),
+            )
+            .run();
+        } catch (error) {
+          if (pendingFileKey) await bucket(env).delete(pendingFileKey);
+          throw error;
+        }
+        return json({ pending: true, id: requestId }, 202);
+      }
+      if (url.pathname === '/api/section-items' && request.method === 'POST') {
+        if (!sameOrigin(request, url))
+          return json({ error: 'Use the directory to add items.' }, 403);
+        let input,
+          file = null;
+        try {
+          if (
+            request.headers.get('Content-Type')?.includes('multipart/form-data')
+          ) {
+            const data = await request.formData();
+            input = Object.fromEntries(
+              [...data.entries()].filter(([key]) => key !== 'file'),
+            );
+            file = data.get('file');
+          } else input = await jsonInput(request);
+        } catch {
+          return json({ error: 'Invalid submission.' }, 400);
+        }
+        const section = String(input?.section || ''),
+          category = String(input?.category || '');
+        const title = String(input?.title || '').trim(),
+          organization = String(input?.organization || '').trim(),
+          itemUrl = String(input?.url || '').trim(),
+          details = String(input?.details || '').trim();
+        const email = String(input?.email || '').trim(),
+          phone = String(input?.phone || '').trim(),
+          extension = String(input?.extension || '').trim();
+        if (
+          !sectionNames.has(section) ||
+          (!sectionCategories.has(category) &&
+            !(section === 'recruiter-directory' && category === 'all')) ||
+          title.length > 200 ||
+          organization.length > 200 ||
+          details.length > 2000 ||
+          email.length > 254 ||
+          (email && !emailPattern.test(email)) ||
+          phone.length > 40 ||
+          extension.length > 20 ||
+          !link(itemUrl)
+        )
+          return json({ error: 'Check the required fields and link.' }, 400);
+        if (!canManage(session) && !(await tabAllowed(env, section)))
+          return json({ error: restrictedMessage }, 403);
+        if (
+          ![
+            title,
+            organization,
+            itemUrl,
+            details,
+            email,
+            phone,
+            extension,
+            input?.postedAt,
+          ].some(Boolean) &&
+          !file
+        )
+          return json(
+            { error: 'Add at least one detail or a file to create an entry.' },
+            400,
+          );
+        if (section === 'recruiter-directory' && email) {
+          const duplicate = await db(env)
+            .prepare(
+              "SELECT id FROM section_items WHERE section = 'recruiter-directory' AND lower(email) = lower(?) AND status != 'denied' LIMIT 1",
+            )
+            .bind(email)
+            .first();
+          if (duplicate)
+            return json(
+              { error: 'A recruiter with this email already exists.' },
+              409,
+            );
+        }
+        const documentSection = section === 'study-materials';
+        if (file && !documentSection)
+          return json(
+            {
+              error:
+                'Uploads are available only for materials and interview prep.',
+            },
+            400,
+          );
+        let fileKey = '',
+          fileName = '',
+          fileType = '',
+          fileBytes = null;
+        if (file) {
+          if (
+            typeof file.arrayBuffer !== 'function' ||
+            file.size === 0 ||
+            file.size > 10 * 1024 * 1024
+          )
+            return json(
+              { error: 'Choose a PDF or Word file smaller than 10 MB.' },
+              400,
+            );
+          fileName = String(file.name || '')
+            .split(/[\\/]/)
+            .pop()
+            .slice(0, 200);
+          const ext = fileName.toLowerCase().split('.').pop();
+          fileType = {
+            pdf: 'application/pdf',
+            doc: 'application/msword',
+            docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          }[ext];
+          if (!fileType)
+            return json(
+              { error: 'Only PDF, DOC, and DOCX files are allowed.' },
+              400,
+            );
+          fileBytes = await file.arrayBuffer();
+          const magic = new Uint8Array(fileBytes.slice(0, 8));
+          const pdf =
+            ext === 'pdf' &&
+            [37, 80, 68, 70, 45].every((n, i) => magic[i] === n);
+          const doc =
+            ext === 'doc' &&
+            [208, 207, 17, 224, 161, 177, 26, 225].every(
+              (n, i) => magic[i] === n,
+            );
+          const docx =
+            ext === 'docx' &&
+            magic[0] === 80 &&
+            magic[1] === 75 &&
+            magic[2] === 3 &&
+            magic[3] === 4;
+          if (!pdf && !doc && !docx)
+            return json(
+              {
+                error:
+                  'The selected file does not match its PDF or Word extension.',
+              },
+              400,
+            );
+        }
+        let postedAt = '';
+        if (section === 'latest-posted-jobs' && input?.postedAt) {
+          const date = new Date(input.postedAt);
+          if (!Number.isFinite(date.getTime()))
+            return json({ error: 'Enter the posting date and time.' }, 400);
+          postedAt = date.toISOString();
+        }
+        const status = canManage(session) ? 'approved' : 'pending';
+        const item = {
+          id: crypto.randomUUID(),
+          section,
+          category,
+          title,
+          organization,
+          url: itemUrl,
+          details,
+          email,
+          phone,
+          extension,
+          postedAt,
+          status,
+          createdAt: new Date().toISOString(),
+        };
+        if (fileBytes) {
+          fileKey = `section-items/${item.id}`;
+          await bucket(env).put(fileKey, fileBytes, {
+            httpMetadata: { contentType: fileType },
+          });
+        }
+        try {
+          await db(env)
+            .prepare(
+              'INSERT INTO section_items (id,section,category,title,organization,url,details,email,phone,extension,file_key,file_name,file_type,posted_at,actor_email,status,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
+            )
+            .bind(
+              item.id,
+              section,
+              category,
+              title,
+              organization,
+              itemUrl,
+              details,
+              email,
+              phone,
+              extension,
+              fileKey,
+              fileName,
+              fileType,
+              postedAt,
+              session.email,
+              status,
+              item.createdAt,
+            )
+            .run();
+        } catch (error) {
+          if (fileKey) await bucket(env).delete(fileKey);
+          throw error;
+        }
+        return json({ item, status }, 201);
+      }
+      if (url.pathname === '/api/changes' && request.method === 'GET') {
+        const after = url.searchParams.get('after') || '';
+        const { results } = await db(env)
+          .prepare(
+            'SELECT id,payload,version FROM company_edits WHERE id > ? ORDER BY id LIMIT 500',
+          )
+          .bind(after)
+          .all();
+        return json({
+          items: results.map((r) => ({
+            id: r.id,
+            ...JSON.parse(r.payload),
+            version: r.version,
+          })),
+          next: results.length === 500 ? results[results.length - 1].id : null,
+        });
+      }
+      if (url.pathname === '/api/companies' && request.method === 'GET') {
+        const after = Number(url.searchParams.get('after') || 0);
+        if (!Number.isSafeInteger(after) || after < 0)
+          return json({ error: 'Invalid cursor.' }, 400);
+        const { results } = await db(env)
+          .prepare(
+            'SELECT sequence,id,name,linkedin,careers,category FROM added_companies WHERE sequence > ? ORDER BY sequence LIMIT 500',
+          )
+          .bind(after)
+          .all();
+        return json({
+          items: results.map((r) => ({
+            id: r.id,
+            name: r.name,
+            linkedin: r.linkedin,
+            careers: r.careers,
+            category: r.category,
+          })),
+          next:
+            results.length === 500
+              ? results[results.length - 1].sequence
+              : null,
+        });
+      }
+      if (url.pathname === '/api/companies' && request.method === 'POST') {
+        if (
+          request.headers.get('Origin') &&
+          request.headers.get('Origin') !== url.origin
+        )
+          return json({ error: 'Use the directory to add companies.' }, 403);
+        if (!request.headers.get('Content-Type')?.includes('application/json'))
+          return json({ error: 'JSON required.' }, 415);
+        const body = await request.text();
+        if (body.length > 10000)
+          return json({ error: 'Request too large.' }, 413);
+        let input;
+        try {
+          input = JSON.parse(body);
+        } catch {
+          return json({ error: 'Invalid request.' }, 400);
+        }
+        if (
+          !input ||
+          typeof input !== 'object' ||
+          Array.isArray(input) ||
+          Object.keys(input).some(
+            (k) => !['name', 'linkedin', 'careers', 'category'].includes(k),
+          ) ||
+          typeof input.name !== 'string' ||
+          !input.name.trim() ||
+          input.name.length > 250 ||
+          typeof input.linkedin !== 'string' ||
+          !link(input.linkedin) ||
+          typeof input.careers !== 'string' ||
+          !link(input.careers) ||
+          !['client', 'implementation', 'vendor'].includes(input.category)
+        )
+          return json({ error: 'Check the name, links and category.' }, 400);
+        const name = input.name.trim().replace(/\s+/g, ' '),
+          normalized = normalizedName(name);
+        if (baseNames.has(normalized))
+          return json(
+            { error: 'This company is already in the directory.' },
+            409,
+          );
+        const database = db(env),
+          existing = await database
+            .prepare('SELECT id FROM added_companies WHERE normalized_name = ?')
+            .bind(normalized)
+            .first();
+        if (existing)
+          return json(
+            { error: 'This company is already in the directory.' },
+            409,
+          );
+        const id = 'added:' + crypto.randomUUID();
+        if (!canManage(session)) {
+          const pending = await database
+            .prepare(
+              "SELECT id FROM change_requests WHERE kind = 'add' AND status = 'pending' AND lower(company_name) = ? LIMIT 1",
+            )
+            .bind(normalized)
+            .first();
+          if (pending)
+            return json(
+              {
+                error:
+                  'An add request for this company is already awaiting approval.',
+              },
+              409,
+            );
+          const requestId = crypto.randomUUID(),
+            proposed = {
+              name,
+              linkedin: input.linkedin,
+              careers: input.careers,
+              category: input.category,
+            };
+          await database
+            .prepare(
+              "INSERT INTO change_requests (id,actor_email,company_id,company_name,kind,before_payload,after_payload,base_version,status,created_at) VALUES (?,?,?,?,?,?,?,?,'pending',?)",
+            )
+            .bind(
+              requestId,
+              session.email,
+              id,
+              name,
+              'add',
+              '{}',
+              JSON.stringify(proposed),
+              0,
+              new Date().toISOString(),
+            )
+            .run();
+          return json({ pending: true, requestId, name }, 202);
+        }
+        const inserted = await database
+          .prepare(
+            'INSERT INTO added_companies (id,normalized_name,name,linkedin,careers,category) VALUES (?,?,?,?,?,?) ON CONFLICT(normalized_name) DO NOTHING RETURNING id',
+          )
+          .bind(
+            id,
+            normalized,
+            name,
+            input.linkedin,
+            input.careers,
+            input.category,
+          )
+          .first();
+        if (!inserted)
+          return json(
+            {
+              error:
+                'Another visitor just added this company. Refresh the page.',
+            },
+            409,
+          );
+        return json(
+          {
+            id,
+            name,
+            linkedin: input.linkedin,
+            careers: input.careers,
+            category: input.category,
+          },
+          201,
+        );
+      }
+      if (url.pathname === '/api/company' && request.method === 'PUT') {
+        if (
+          request.headers.get('Origin') &&
+          request.headers.get('Origin') !== url.origin
+        )
+          return json({ error: 'Use the directory to make changes.' }, 403);
+        if (!request.headers.get('Content-Type')?.includes('application/json'))
+          return json({ error: 'JSON required.' }, 415);
+        const body = await request.text();
+        if (body.length > 10000)
+          return json({ error: 'Request too large.' }, 413);
+        let input;
+        try {
+          input = JSON.parse(body);
+        } catch {
+          return json({ error: 'Invalid request.' }, 400);
+        }
+        const { id, version, change } = input;
+        if (
+          (!known.has(id) &&
+            !(await db(env)
+              .prepare('SELECT id FROM added_companies WHERE id = ?')
+              .bind(id)
+              .first())) ||
+          !Number.isInteger(version) ||
+          version < 0 ||
+          !change ||
+          typeof change !== 'object' ||
+          Array.isArray(change)
+        )
+          return json({ error: 'Invalid company or version.' }, 400);
+        const allowed = ['name', 'linkedin', 'careers', 'category'];
+        if (
+          Object.keys(change).some((k) => !allowed.includes(k)) ||
+          !Object.keys(change).length
+        )
+          return json({ error: 'Invalid fields.' }, 400);
+        if (
+          ('name' in change &&
+            (typeof change.name !== 'string' ||
+              !change.name.trim() ||
+              change.name.length > 250)) ||
+          ('linkedin' in change && !link(change.linkedin)) ||
+          ('careers' in change && !link(change.careers)) ||
+          ('category' in change &&
+            !['client', 'implementation', 'vendor'].includes(change.category))
+        )
+          return json({ error: 'Check the name, links and category.' }, 400);
+        const database = db(env),
+          old = await database
+            .prepare('SELECT payload,version FROM company_edits WHERE id = ?')
+            .bind(id)
+            .first();
+        if (old && JSON.parse(old.payload).deleted)
+          return json(
+            { error: 'This company has been deleted. Refresh the page.' },
+            409,
+          );
+        if ((old?.version || 0) !== version)
+          return json(
+            {
+              error:
+                'This company changed since you loaded it. Refresh and try again.',
+            },
+            409,
+          );
+        if (typeof change.name === 'string') change.name = change.name.trim();
+        if (!canManage(session)) {
+          const current = await currentCompany(database, id, old),
+            before = {};
+          for (const key of Object.keys(change)) before[key] = current[key];
+          if (Object.keys(change).every((key) => before[key] === change[key]))
+            return json({ error: 'No changes to submit.' }, 400);
+          const requestId = crypto.randomUUID(),
+            kind =
+              Object.keys(change).length === 1 && 'category' in change
+                ? 'move'
+                : 'edit';
+          await database
+            .prepare(
+              "INSERT INTO change_requests (id,actor_email,company_id,company_name,kind,before_payload,after_payload,base_version,status,created_at) VALUES (?,?,?,?,?,?,?,?,'pending',?)",
+            )
+            .bind(
+              requestId,
+              session.email,
+              id,
+              current.name,
+              kind,
+              JSON.stringify(before),
+              JSON.stringify(change),
+              version,
+              new Date().toISOString(),
+            )
+            .run();
+          return json({ pending: true, requestId }, 202);
+        }
+        const payload = { ...(old ? JSON.parse(old.payload) : {}), ...change };
+        if (payload.name) payload.name = payload.name.trim();
+        const result = old
+          ? await database
+              .prepare(
+                'UPDATE company_edits SET payload = ?, version = version + 1 WHERE id = ? AND version = ? RETURNING version',
+              )
+              .bind(JSON.stringify(payload), id, version)
+              .first()
+          : await database
+              .prepare(
+                'INSERT INTO company_edits (id,payload,version) VALUES (?,?,1) ON CONFLICT(id) DO NOTHING RETURNING version',
+              )
+              .bind(id, JSON.stringify(payload))
+              .first();
+        if (!result)
+          return json(
+            {
+              error:
+                'Another visitor just updated this company. Refresh and try again.',
+            },
+            409,
+          );
+        return json({ id, ...payload, version: result.version });
+      }
+      if (url.pathname === '/api/company' && request.method === 'DELETE') {
+        if (!canManage(session))
+          return json({ error: 'Open Admin mode to delete companies.' }, 403);
+        if (
+          request.headers.get('Origin') &&
+          request.headers.get('Origin') !== url.origin
+        )
+          return json({ error: 'Use the directory to delete companies.' }, 403);
+        if (!request.headers.get('Content-Type')?.includes('application/json'))
+          return json({ error: 'JSON required.' }, 415);
+        const body = await request.text();
+        if (body.length > 10000)
+          return json({ error: 'Request too large.' }, 413);
+        let input;
+        try {
+          input = JSON.parse(body);
+        } catch {
+          return json({ error: 'Invalid request.' }, 400);
+        }
+        const { id, version } = input || {};
+        if (
+          typeof id !== 'string' ||
+          !Number.isInteger(version) ||
+          version < 0 ||
+          (!known.has(id) &&
+            !(await db(env)
+              .prepare('SELECT id FROM added_companies WHERE id = ?')
+              .bind(id)
+              .first()))
+        )
+          return json({ error: 'Invalid company or version.' }, 400);
+        const database = db(env),
+          old = await database
+            .prepare('SELECT payload,version FROM company_edits WHERE id = ?')
+            .bind(id)
+            .first();
+        if (old && JSON.parse(old.payload).deleted)
+          return json({ error: 'This company has already been deleted.' }, 409);
+        if ((old?.version || 0) !== version)
+          return json(
+            {
+              error:
+                'This company changed since you loaded it. Refresh and try again.',
+            },
+            409,
+          );
+        const payload = {
+          ...(old ? JSON.parse(old.payload) : {}),
+          deleted: true,
+        };
+        const result = old
+          ? await database
+              .prepare(
+                'UPDATE company_edits SET payload = ?, version = version + 1 WHERE id = ? AND version = ? RETURNING version',
+              )
+              .bind(JSON.stringify(payload), id, version)
+              .first()
+          : await database
+              .prepare(
+                'INSERT INTO company_edits (id,payload,version) VALUES (?,?,1) ON CONFLICT(id) DO NOTHING RETURNING version',
+              )
+              .bind(id, JSON.stringify(payload))
+              .first();
+        if (!result)
+          return json(
+            {
+              error:
+                'Another visitor just updated this company. Refresh and try again.',
+            },
+            409,
+          );
+        return json({ id, deleted: true, version: result.version });
+      }
+      if (url.pathname === '/profile' || url.pathname === '/profile/')
+        return Response.redirect(
+          url.origin + '/ai-auto-apply#apply-profile',
+          302,
+        );
+      if (url.pathname.startsWith('/api/'))
+        return json({ error: 'Not found.' }, 404);
+      if (!['GET', 'HEAD'].includes(request.method))
+        return new Response('Method not allowed', { status: 405 });
+      if (
+        (url.pathname === '/admin' || url.pathname === '/admin/') &&
+        !canManage(await sessionFor(request, env))
+      )
+        return Response.redirect(url.origin + '/', 302);
+      const sections = [
+        'recruiter-directory',
+        'latest-posted-jobs',
+        'ai-auto-apply',
+        'study-materials',
+        'interview-support',
+      ];
+      const section = sections.find(
+        (name) => url.pathname === `/${name}` || url.pathname === `/${name}/`,
+      );
+      const requestedTab =
+        url.pathname === '/employer-directory' ||
+        url.pathname === '/employer-directory/' ||
+        url.pathname === '/index.html'
+          ? 'employer-directory'
+          : section;
+      const restricted =
+        requestedTab &&
+        session?.status === 'approved' &&
+        !canManage(session) &&
+        !(await tabAllowed(env, requestedTab));
+      const path = restricted
+        ? '/restricted.html'
+        : url.pathname === '/'
+          ? session?.status === 'approved'
+            ? '/careernaviq.html'
+            : '/index.html'
+          : url.pathname === '/careernaviq' || url.pathname === '/careernaviq/'
+            ? '/careernaviq.html'
+            : url.pathname === '/employer-directory' ||
+                url.pathname === '/employer-directory/' ||
+                url.pathname === '/admin' ||
+                url.pathname === '/admin/'
+              ? '/index.html'
+              : section
+                ? section === 'ai-auto-apply'
+                  ? '/ai-auto-apply.html'
+                  : '/recruiter-directory.html'
+                : url.pathname === '/profile' || url.pathname === '/profile/'
+                  ? '/profile.html'
+                  : url.pathname;
+      if (!Object.hasOwn(ASSETS, path))
+        return new Response('Not found', { status: 404 });
+      const type = path.endsWith('.html')
+        ? 'text/html'
+        : path.endsWith('.css')
+          ? 'text/css'
+          : path.endsWith('.js')
+            ? 'text/javascript'
+            : path.endsWith('.svg')
+              ? 'image/svg+xml'
+              : 'application/json';
+      return new Response(request.method === 'HEAD' ? null : ASSETS[path], {
+        headers: {
+          'Content-Type': type + '; charset=utf-8',
+          'Cache-Control': 'no-cache',
+          'X-Content-Type-Options': 'nosniff',
+        },
+      });
+    } catch (error) {
+      console.error('Directory request failed', error);
+      return json(
+        {
+          error:
+            'Shared storage is unavailable. Please try again. Your changes were not saved.',
+        },
+        503,
+      );
     }
-   }else {
-    const categoryClause=search?'':' AND category = ?';
-    const binds=search?[section,...searchValues,cutoff,cutoff]:[section,category,...searchValues,cutoff,cutoff];
-    ({results}=await db(env).prepare(`SELECT id,version,category,title,organization,url,details,email,phone,extension,file_name,posted_at,created_at FROM section_items WHERE section = ?${categoryClause} AND status = 'approved'${itemSearch} AND (? = '' OR posted_at >= ?) ${sectionItemOrder} LIMIT ${section==='recruiter-directory'?5000:500}`).bind(...binds).all());
-   }
-   return json({items:results});
-  }
-  if(url.pathname==='/api/section-favorites'&&request.method==='PUT'){
-   if(!sameOrigin(request,url))return json({error:'Use the directory to save recruiters.'},403);
-   let input;try{input=await jsonInput(request);}catch{return json({error:'Invalid favorite request.'},400);}
-   const id=String(input?.id||''),saved=Boolean(input?.saved);
-   if(!id)return json({error:'Choose a recruiter.'},400);
-   const database=db(env);await ensureSectionFavorites(database);
-   const item=await database.prepare("SELECT id FROM section_items WHERE id = ? AND section = 'recruiter-directory' AND status = 'approved'").bind(id).first();
-   if(!item)return json({error:'Recruiter not found.'},404);
-   if(saved)await database.prepare('INSERT OR IGNORE INTO section_favorites (user_email,item_id,created_at) VALUES (?,?,?)').bind(session.email,id,new Date().toISOString()).run();
-   else await database.prepare('DELETE FROM section_favorites WHERE user_email = ? AND item_id = ?').bind(session.email,id).run();
-   return json({ok:true,saved});
-  }
-  if(url.pathname.startsWith('/api/section-file/')&&request.method==='GET'){
-   const id=url.pathname.slice('/api/section-file/'.length);
-   const item=await db(env).prepare('SELECT section,file_key,file_name,file_type,status,actor_email FROM section_items WHERE id = ?').bind(id).first();
-   if(!item?.file_key)return json({error:'Document not found.'},404);
-   if(!canManage(session)&&!await tabAllowed(env,item.section))return json({error:restrictedMessage},403);
-   if(item.status!=='approved'&&!canManage(session)&&item.actor_email!==session.email)return json({error:'Document is awaiting approval.'},403);
-   const file=await bucket(env).get(item.file_key);if(!file)return json({error:'Document unavailable.'},404);
-   return new Response(file.body,{headers:{'Content-Type':item.file_type,'Content-Disposition':`attachment; filename*=UTF-8''${encodeURIComponent(item.file_name)}`,'Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'}});
-  }
-  if(url.pathname.startsWith('/api/section-change-file/')&&request.method==='GET'){
-   if(!canManage(session))return json({error:'Admin access required.'},403);
-   const id=url.pathname.slice('/api/section-change-file/'.length);
-   const item=await db(env).prepare("SELECT pending_file_key,after_payload FROM section_change_requests WHERE id = ? AND status = 'pending'").bind(id).first();
-   if(!item?.pending_file_key)return json({error:'Document not found.'},404);
-   const proposed=JSON.parse(item.after_payload),file=await bucket(env).get(item.pending_file_key);
-   if(!file)return json({error:'Document unavailable.'},404);
-   return new Response(file.body,{headers:{'Content-Type':proposed.file_type,'Content-Disposition':`attachment; filename*=UTF-8''${encodeURIComponent(proposed.file_name)}`,'Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'}});
-  }
-  if(url.pathname==='/api/section-changes'&&request.method==='POST'){
-   if(!sameOrigin(request,url))return json({error:'Use the directory to request changes.'},403);
-   let input,file=null;
-   try{if(request.headers.get('Content-Type')?.includes('multipart/form-data')){const data=await request.formData();input=Object.fromEntries([...data.entries()].filter(([key])=>key!=='file'));file=data.get('file');}else input=await jsonInput(request);}
-   catch{return json({error:'Invalid change request.'},400);}
-   const id=String(input?.id||''),version=Number(input?.version),kind=String(input?.kind||'');
-   if(!id||!Number.isSafeInteger(version)||version<1||!['edit','move','delete'].includes(kind))return json({error:'Invalid change request.'},400);
-   const database=db(env),current=await database.prepare("SELECT id,version,section,category,title,organization,url,details,email,phone,extension,posted_at,file_key,file_name,file_type FROM section_items WHERE id = ? AND status = 'approved'").bind(id).first();
-   if(!current)return json({error:'Entry not found.'},404);
-   if(!canManage(session)&&!await tabAllowed(env,current.section))return json({error:restrictedMessage},403);
-   if(current.version!==version)return json({error:'This entry changed. Refresh and try again.'},409);
-   if(!canManage(session)&&await database.prepare("SELECT id FROM section_change_requests WHERE item_id = ? AND status = 'pending' LIMIT 1").bind(id).first())return json({error:'A change for this entry is already awaiting approval.'},409);
-   const before={section:current.section,category:current.category,title:current.title,organization:current.organization,url:current.url,details:current.details,email:current.email,phone:current.phone,extension:current.extension,posted_at:current.posted_at,file_name:current.file_name};
-   let after={},pendingFileKey='',fileBytes=null;
-   if(kind==='move'){
-    const target=String(input?.category||'');if((!sectionCategories.has(target)&&!(current.section==='recruiter-directory'&&target==='all'))||target===current.category)return json({error:'Choose a different category.'},400);
-    after={category:target};
-   }else if(kind==='edit'){
-    const title=String(input?.title||'').trim(),organization=String(input?.organization||'').trim(),itemUrl=String(input?.url||'').trim(),details=String(input?.details||'').trim();
-    const email=String(input?.email||'').trim(),phone=String(input?.phone||'').trim(),extension=String(input?.extension||'').trim();
-    if(title.length>200||organization.length>200||details.length>2000||email.length>254||email&&!emailPattern.test(email)||phone.length>40||extension.length>20||!link(itemUrl))return json({error:'Check the edited fields and link.'},400);
-    const isDocument=current.section==='study-materials';
-    if(file&&!isDocument)return json({error:'Only materials and interview prep accept uploads.'},400);
-    let postedAt=current.posted_at;
-    if(current.section==='latest-posted-jobs'){postedAt='';if(input?.postedAt){const date=new Date(input.postedAt);if(!Number.isFinite(date.getTime()))return json({error:'Enter a valid posting date or leave it blank.'},400);postedAt=date.toISOString();}}
-    after={title,organization,url:itemUrl,details,email,phone,extension,posted_at:postedAt,file_key:current.file_key,file_name:current.file_name,file_type:current.file_type};
-    if(file){
-     if(typeof file.arrayBuffer!=='function'||file.size===0||file.size>10*1024*1024)return json({error:'Choose a PDF or Word file smaller than 10 MB.'},400);
-     const fileName=String(file.name||'').split(/[\\/]/).pop().slice(0,200),ext=fileName.toLowerCase().split('.').pop();
-     const fileType={pdf:'application/pdf',doc:'application/msword',docx:'application/vnd.openxmlformats-officedocument.wordprocessingml.document'}[ext];
-     if(!fileType)return json({error:'Only PDF, DOC, and DOCX files are allowed.'},400);
-     fileBytes=await file.arrayBuffer();const magic=new Uint8Array(fileBytes.slice(0,8));
-     const pdf=ext==='pdf'&&[37,80,68,70,45].every((n,i)=>magic[i]===n),doc=ext==='doc'&&[208,207,17,224,161,177,26,225].every((n,i)=>magic[i]===n),docx=ext==='docx'&&magic[0]===80&&magic[1]===75&&magic[2]===3&&magic[3]===4;
-     if(!pdf&&!doc&&!docx)return json({error:'The selected file does not match its PDF or Word extension.'},400);
-     after.file_name=fileName;after.file_type=fileType;
-    }
-    if(!file&&Object.entries(after).every(([key,value])=>value===current[key]))return json({error:'No changes to submit.'},400);
-   }else if(file)return json({error:'This action does not accept a file.'},400);
-   if(canManage(session)){
-    let newFileKey='';
-    if(fileBytes){newFileKey=`section-items/${id}/${crypto.randomUUID()}`;after.file_key=newFileKey;await bucket(env).put(newFileKey,fileBytes,{httpMetadata:{contentType:after.file_type}});}
-    let result;
-    try{
-     if(kind==='move')result=await database.prepare("UPDATE section_items SET category = ?,version = version + 1 WHERE id = ? AND version = ? AND status = 'approved' RETURNING id,version").bind(after.category,id,version).first();
-     else if(kind==='delete')result=await database.prepare("DELETE FROM section_items WHERE id = ? AND version = ? AND status = 'approved' RETURNING id").bind(id,version).first();
-     else result=await database.prepare("UPDATE section_items SET title = ?,organization = ?,url = ?,details = ?,email = ?,phone = ?,extension = ?,posted_at = ?,file_key = ?,file_name = ?,file_type = ?,version = version + 1 WHERE id = ? AND version = ? AND status = 'approved' RETURNING id,version").bind(after.title,after.organization,after.url,after.details,after.email,after.phone,after.extension,after.posted_at,after.file_key,after.file_name,after.file_type,id,version).first();
-    }catch(error){if(newFileKey)await bucket(env).delete(newFileKey);throw error;}
-    if(!result){if(newFileKey)await bucket(env).delete(newFileKey);return json({error:'This entry changed. Refresh and try again.'},409);}
-    if((kind==='delete'||newFileKey)&&current.file_key)try{await bucket(env).delete(current.file_key);}catch(error){console.error('Could not remove replaced document',error);}
-    return json({status:'approved',id,version:result.version||null,kind});
-   }
-   const requestId=crypto.randomUUID();
-   if(fileBytes){pendingFileKey=`section-changes/${requestId}`;after.file_key=pendingFileKey;await bucket(env).put(pendingFileKey,fileBytes,{httpMetadata:{contentType:after.file_type}});}
-   try{await database.prepare("INSERT INTO section_change_requests (id,item_id,actor_email,kind,before_payload,after_payload,base_version,pending_file_key,status,created_at) VALUES (?,?,?,?,?,?,?,?,'pending',?)").bind(requestId,id,session.email,kind,JSON.stringify(before),JSON.stringify(after),version,pendingFileKey,new Date().toISOString()).run();}
-   catch(error){if(pendingFileKey)await bucket(env).delete(pendingFileKey);throw error;}
-   return json({pending:true,id:requestId},202);
-  }
-  if(url.pathname==='/api/section-items'&&request.method==='POST'){
-   if(!sameOrigin(request,url))return json({error:'Use the directory to add items.'},403);
-   let input,file=null;
-   try{
-    if(request.headers.get('Content-Type')?.includes('multipart/form-data')){
-     const data=await request.formData();input=Object.fromEntries([...data.entries()].filter(([key])=>key!=='file'));file=data.get('file');
-    }else input=await jsonInput(request);
-   }catch{return json({error:'Invalid submission.'},400);}
-   const section=String(input?.section||''),category=String(input?.category||'');
-   const title=String(input?.title||'').trim(),organization=String(input?.organization||'').trim(),itemUrl=String(input?.url||'').trim(),details=String(input?.details||'').trim();
-   const email=String(input?.email||'').trim(),phone=String(input?.phone||'').trim(),extension=String(input?.extension||'').trim();
-   if(!sectionNames.has(section)||(!sectionCategories.has(category)&&!(section==='recruiter-directory'&&category==='all'))||title.length>200||organization.length>200||details.length>2000||email.length>254||email&&!emailPattern.test(email)||phone.length>40||extension.length>20||!link(itemUrl))return json({error:'Check the required fields and link.'},400);
-   if(!canManage(session)&&!await tabAllowed(env,section))return json({error:restrictedMessage},403);
-   if(![title,organization,itemUrl,details,email,phone,extension,input?.postedAt].some(Boolean)&&!file)return json({error:'Add at least one detail or a file to create an entry.'},400);
-   if(section==='recruiter-directory'&&email){
-    const duplicate=await db(env).prepare("SELECT id FROM section_items WHERE section = 'recruiter-directory' AND lower(email) = lower(?) AND status != 'denied' LIMIT 1").bind(email).first();
-    if(duplicate)return json({error:'A recruiter with this email already exists.'},409);
-   }
-   const documentSection=section==='study-materials';
-   if(file&&!documentSection)return json({error:'Uploads are available only for materials and interview prep.'},400);
-   let fileKey='',fileName='',fileType='',fileBytes=null;
-   if(file){
-    if(typeof file.arrayBuffer!=='function'||file.size===0||file.size>10*1024*1024)return json({error:'Choose a PDF or Word file smaller than 10 MB.'},400);
-    fileName=String(file.name||'').split(/[\\/]/).pop().slice(0,200);
-    const ext=fileName.toLowerCase().split('.').pop();
-    fileType={pdf:'application/pdf',doc:'application/msword',docx:'application/vnd.openxmlformats-officedocument.wordprocessingml.document'}[ext];
-    if(!fileType)return json({error:'Only PDF, DOC, and DOCX files are allowed.'},400);
-    fileBytes=await file.arrayBuffer();const magic=new Uint8Array(fileBytes.slice(0,8));
-    const pdf=ext==='pdf'&&[37,80,68,70,45].every((n,i)=>magic[i]===n);
-    const doc=ext==='doc'&&[208,207,17,224,161,177,26,225].every((n,i)=>magic[i]===n);
-    const docx=ext==='docx'&&magic[0]===80&&magic[1]===75&&magic[2]===3&&magic[3]===4;
-    if(!pdf&&!doc&&!docx)return json({error:'The selected file does not match its PDF or Word extension.'},400);
-   }
-   let postedAt='';
-   if(section==='latest-posted-jobs'&&input?.postedAt){
-    const date=new Date(input.postedAt);if(!Number.isFinite(date.getTime()))return json({error:'Enter the posting date and time.'},400);postedAt=date.toISOString();
-   }
-   const status=canManage(session)?'approved':'pending';
-   const item={id:crypto.randomUUID(),section,category,title,organization,url:itemUrl,details,email,phone,extension,postedAt,status,createdAt:new Date().toISOString()};
-   if(fileBytes){fileKey=`section-items/${item.id}`;await bucket(env).put(fileKey,fileBytes,{httpMetadata:{contentType:fileType}});}
-   try{await db(env).prepare('INSERT INTO section_items (id,section,category,title,organization,url,details,email,phone,extension,file_key,file_name,file_type,posted_at,actor_email,status,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)').bind(item.id,section,category,title,organization,itemUrl,details,email,phone,extension,fileKey,fileName,fileType,postedAt,session.email,status,item.createdAt).run();}
-   catch(error){if(fileKey)await bucket(env).delete(fileKey);throw error;}
-   return json({item,status},201);
-  }
-  if(url.pathname==='/api/changes'&&request.method==='GET'){
-   const after=url.searchParams.get('after')||'';
-   const {results}=await db(env).prepare('SELECT id,payload,version FROM company_edits WHERE id > ? ORDER BY id LIMIT 500').bind(after).all();
-   return json({items:results.map(r=>({id:r.id,...JSON.parse(r.payload),version:r.version})),next:results.length===500?results[results.length-1].id:null});
-  }
-  if(url.pathname==='/api/companies'&&request.method==='GET'){
-   const after=Number(url.searchParams.get('after')||0);
-   if(!Number.isSafeInteger(after)||after<0)return json({error:'Invalid cursor.'},400);
-   const {results}=await db(env).prepare('SELECT sequence,id,name,linkedin,careers,category FROM added_companies WHERE sequence > ? ORDER BY sequence LIMIT 500').bind(after).all();
-   return json({items:results.map(r=>({id:r.id,name:r.name,linkedin:r.linkedin,careers:r.careers,category:r.category})),next:results.length===500?results[results.length-1].sequence:null});
-  }
-  if(url.pathname==='/api/companies'&&request.method==='POST'){
-   if(request.headers.get('Origin')&&request.headers.get('Origin')!==url.origin)return json({error:'Use the directory to add companies.'},403);
-   if(!request.headers.get('Content-Type')?.includes('application/json'))return json({error:'JSON required.'},415);
-   const body=await request.text();if(body.length>10000)return json({error:'Request too large.'},413);
-   let input;try{input=JSON.parse(body);}catch{return json({error:'Invalid request.'},400);}
-   if(!input||typeof input!=='object'||Array.isArray(input)||Object.keys(input).some(k=>!['name','linkedin','careers','category'].includes(k))||typeof input.name!=='string'||!input.name.trim()||input.name.length>250||typeof input.linkedin!=='string'||!link(input.linkedin)||typeof input.careers!=='string'||!link(input.careers)||!['client','implementation','vendor'].includes(input.category))return json({error:'Check the name, links and category.'},400);
-   const name=input.name.trim().replace(/\s+/g,' '),normalized=normalizedName(name);
-   if(baseNames.has(normalized))return json({error:'This company is already in the directory.'},409);
-   const database=db(env),existing=await database.prepare('SELECT id FROM added_companies WHERE normalized_name = ?').bind(normalized).first();
-   if(existing)return json({error:'This company is already in the directory.'},409);
-   const id='added:'+crypto.randomUUID();
-   if(!canManage(session)){
-    const pending=await database.prepare("SELECT id FROM change_requests WHERE kind = 'add' AND status = 'pending' AND lower(company_name) = ? LIMIT 1").bind(normalized).first();
-    if(pending)return json({error:'An add request for this company is already awaiting approval.'},409);
-    const requestId=crypto.randomUUID(),proposed={name,linkedin:input.linkedin,careers:input.careers,category:input.category};
-    await database.prepare("INSERT INTO change_requests (id,actor_email,company_id,company_name,kind,before_payload,after_payload,base_version,status,created_at) VALUES (?,?,?,?,?,?,?,?,'pending',?)").bind(requestId,session.email,id,name,'add','{}',JSON.stringify(proposed),0,new Date().toISOString()).run();
-    return json({pending:true,requestId,name},202);
-   }
-   const inserted=await database.prepare('INSERT INTO added_companies (id,normalized_name,name,linkedin,careers,category) VALUES (?,?,?,?,?,?) ON CONFLICT(normalized_name) DO NOTHING RETURNING id').bind(id,normalized,name,input.linkedin,input.careers,input.category).first();
-   if(!inserted)return json({error:'Another visitor just added this company. Refresh the page.'},409);
-   return json({id,name,linkedin:input.linkedin,careers:input.careers,category:input.category},201);
-  }
-  if(url.pathname==='/api/company'&&request.method==='PUT'){
-   if(request.headers.get('Origin')&&request.headers.get('Origin')!==url.origin)return json({error:'Use the directory to make changes.'},403);
-   if(!request.headers.get('Content-Type')?.includes('application/json'))return json({error:'JSON required.'},415);
-   const body=await request.text();if(body.length>10000)return json({error:'Request too large.'},413);
-   let input;try{input=JSON.parse(body);}catch{return json({error:'Invalid request.'},400);}
-   const {id,version,change}=input;
-   if((!known.has(id)&&!await db(env).prepare('SELECT id FROM added_companies WHERE id = ?').bind(id).first())||!Number.isInteger(version)||version<0||!change||typeof change!=='object'||Array.isArray(change))return json({error:'Invalid company or version.'},400);
-   const allowed=['name','linkedin','careers','category'];if(Object.keys(change).some(k=>!allowed.includes(k))||!Object.keys(change).length)return json({error:'Invalid fields.'},400);
-   if(('name'in change&&(typeof change.name!=='string'||!change.name.trim()||change.name.length>250))||('linkedin'in change&&!link(change.linkedin))||('careers'in change&&!link(change.careers))||('category'in change&&!['client','implementation','vendor'].includes(change.category)))return json({error:'Check the name, links and category.'},400);
-   const database=db(env),old=await database.prepare('SELECT payload,version FROM company_edits WHERE id = ?').bind(id).first();
-   if(old&&JSON.parse(old.payload).deleted)return json({error:'This company has been deleted. Refresh the page.'},409);
-   if((old?.version||0)!==version)return json({error:'This company changed since you loaded it. Refresh and try again.'},409);
-   if(typeof change.name==='string')change.name=change.name.trim();
-   if(!canManage(session)){
-    const current=await currentCompany(database,id,old),before={};
-    for(const key of Object.keys(change))before[key]=current[key];
-    if(Object.keys(change).every(key=>before[key]===change[key]))return json({error:'No changes to submit.'},400);
-    const requestId=crypto.randomUUID(),kind=Object.keys(change).length===1&&'category'in change?'move':'edit';
-    await database.prepare("INSERT INTO change_requests (id,actor_email,company_id,company_name,kind,before_payload,after_payload,base_version,status,created_at) VALUES (?,?,?,?,?,?,?,?,'pending',?)").bind(requestId,session.email,id,current.name,kind,JSON.stringify(before),JSON.stringify(change),version,new Date().toISOString()).run();
-    return json({pending:true,requestId},202);
-   }
-   const payload={...(old?JSON.parse(old.payload):{}),...change};if(payload.name)payload.name=payload.name.trim();
-   const result=old?await database.prepare('UPDATE company_edits SET payload = ?, version = version + 1 WHERE id = ? AND version = ? RETURNING version').bind(JSON.stringify(payload),id,version).first():await database.prepare('INSERT INTO company_edits (id,payload,version) VALUES (?,?,1) ON CONFLICT(id) DO NOTHING RETURNING version').bind(id,JSON.stringify(payload)).first();
-   if(!result)return json({error:'Another visitor just updated this company. Refresh and try again.'},409);
-   return json({id,...payload,version:result.version});
-  }
-  if(url.pathname==='/api/company'&&request.method==='DELETE'){
-   if(!canManage(session))return json({error:'Open Admin mode to delete companies.'},403);
-   if(request.headers.get('Origin')&&request.headers.get('Origin')!==url.origin)return json({error:'Use the directory to delete companies.'},403);
-   if(!request.headers.get('Content-Type')?.includes('application/json'))return json({error:'JSON required.'},415);
-   const body=await request.text();if(body.length>10000)return json({error:'Request too large.'},413);
-   let input;try{input=JSON.parse(body);}catch{return json({error:'Invalid request.'},400);}
-   const {id,version}=input||{};
-   if(typeof id!=='string'||!Number.isInteger(version)||version<0||(!known.has(id)&&!await db(env).prepare('SELECT id FROM added_companies WHERE id = ?').bind(id).first()))return json({error:'Invalid company or version.'},400);
-   const database=db(env),old=await database.prepare('SELECT payload,version FROM company_edits WHERE id = ?').bind(id).first();
-   if(old&&JSON.parse(old.payload).deleted)return json({error:'This company has already been deleted.'},409);
-   if((old?.version||0)!==version)return json({error:'This company changed since you loaded it. Refresh and try again.'},409);
-   const payload={...(old?JSON.parse(old.payload):{}),deleted:true};
-   const result=old?await database.prepare('UPDATE company_edits SET payload = ?, version = version + 1 WHERE id = ? AND version = ? RETURNING version').bind(JSON.stringify(payload),id,version).first():await database.prepare('INSERT INTO company_edits (id,payload,version) VALUES (?,?,1) ON CONFLICT(id) DO NOTHING RETURNING version').bind(id,JSON.stringify(payload)).first();
-   if(!result)return json({error:'Another visitor just updated this company. Refresh and try again.'},409);
-   return json({id,deleted:true,version:result.version});
-  }
-  if(url.pathname==='/profile'||url.pathname==='/profile/')return Response.redirect(url.origin+'/ai-auto-apply#apply-profile',302);
-  if(url.pathname.startsWith('/api/'))return json({error:'Not found.'},404);
-  if(!['GET','HEAD'].includes(request.method))return new Response('Method not allowed',{status:405});
-  if((url.pathname==='/admin'||url.pathname==='/admin/')&&!canManage(await sessionFor(request,env)))return Response.redirect(url.origin+'/',302);
-  const sections=['recruiter-directory','latest-posted-jobs','ai-auto-apply','study-materials','interview-support'];
-  const section=sections.find(name=>url.pathname===`/${name}`||url.pathname===`/${name}/`);
-  const requestedTab=url.pathname==='/employer-directory'||url.pathname==='/employer-directory/'||url.pathname==='/index.html'?'employer-directory':section;
-  const restricted=requestedTab&&session?.status==='approved'&&!canManage(session)&&!await tabAllowed(env,requestedTab);
-  const path=restricted?'/restricted.html':url.pathname==='/'?(session?.status==='approved'?'/careernaviq.html':'/index.html'):url.pathname==='/careernaviq'||url.pathname==='/careernaviq/'?'/careernaviq.html':url.pathname==='/employer-directory'||url.pathname==='/employer-directory/'||url.pathname==='/admin'||url.pathname==='/admin/'?'/index.html':section?(section==='ai-auto-apply'?'/ai-auto-apply.html':'/recruiter-directory.html'):url.pathname==='/profile'||url.pathname==='/profile/'?'/profile.html':url.pathname;
-  if(!Object.hasOwn(ASSETS,path))return new Response('Not found',{status:404});
-  const type=path.endsWith('.html')?'text/html':path.endsWith('.css')?'text/css':path.endsWith('.js')?'text/javascript':path.endsWith('.svg')?'image/svg+xml':'application/json';
-  return new Response(request.method==='HEAD'?null:ASSETS[path],{headers:{'Content-Type':type+'; charset=utf-8','Cache-Control':'no-cache','X-Content-Type-Options':'nosniff'}});
- }catch(error){console.error('Directory request failed',error);return json({error:'Shared storage is unavailable. Please try again. Your changes were not saved.'},503);}
-}};
+  },
+};

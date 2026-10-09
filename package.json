@@ -1,1 +1,17 @@
-{"name":"employer-directory","private":true,"type":"module","scripts":{"build":"node scripts/build.mjs","db:generate":"drizzle-kit generate"},"devDependencies":{"drizzle-kit":"^0.31.4","drizzle-orm":"^0.44.5"}}
+{
+  "name": "carrernaviq",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "db:generate": "drizzle-kit generate",
+    "test": "npm run build && node tests/job-feeds.mjs && node tests/job-import.mjs && node tests/chat-attachments.mjs && node tests/credential-vault.mjs",
+    "format": "prettier --write dist/*.{html,css,js,svg} worker/*.js scripts/*.mjs tests/*.mjs db/*.ts README.md",
+    "format:check": "prettier --check dist/*.{html,css,js,svg} worker/*.js scripts/*.mjs tests/*.mjs db/*.ts README.md"
+  },
+  "devDependencies": {
+    "drizzle-kit": "^0.31.4",
+    "drizzle-orm": "^0.45.4",
+    "prettier": "^3.6.2"
+  }
+}
