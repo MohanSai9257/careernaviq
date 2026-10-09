@@ -299,7 +299,7 @@ function showAdminTab(id){
   const panel=accessEl(panelId);panel.hidden=panelId!==id;if(panel.tagName==='DETAILS')panel.open=panelId===id;
  }
 }
-for(const button of document.querySelectorAll('[data-admin-tab]'))button.addEventListener('click',()=>showAdminTab(button.dataset.adminTab));
+for(const button of document.querySelectorAll('[data-admin-tab]'))button.addEventListener('click',()=>{showAdminTab(button.dataset.adminTab);if(button.dataset.adminTab==='messages-dashboard')loadQuestionThreads();});
 accessEl('messages-search').addEventListener('input',renderQuestionThreads);
 accessEl('messages-list-toggle').addEventListener('click',()=>{const panel=accessEl('messages-dashboard'),button=accessEl('messages-list-toggle'),collapsed=panel.classList.toggle('is-list-collapsed');button.textContent=collapsed?'›':'‹';button.setAttribute('aria-expanded',String(!collapsed));button.setAttribute('aria-label',collapsed?'Expand conversation list':'Collapse conversation list');});
 for(const button of document.querySelectorAll('[data-message-filter]'))button.addEventListener('click',()=>{messageFilter=button.dataset.messageFilter;for(const filter of document.querySelectorAll('[data-message-filter]'))filter.setAttribute('aria-pressed',String(filter===button));renderQuestionThreads();});
