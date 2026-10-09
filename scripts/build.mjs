@@ -7,6 +7,8 @@ for (const f of [
   'profile.html',
   'restricted.html',
   'style.css',
+  'dark-theme.css',
+  'theme.js',
   'vault.js',
   'chat-files.js',
   'access.js',

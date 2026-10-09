@@ -1,0 +1,267 @@
+/* Theme colors are isolated from the established light-theme styles. */
+.theme-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 36px;
+  width: 36px;
+  height: 36px;
+  padding: 7px;
+  border: 1px solid #cddce3;
+  border-radius: 10px;
+  background: #f3f7f9;
+  color: #294957;
+  cursor: pointer;
+  order: 2;
+}
+.theme-toggle svg {
+  width: 22px;
+  height: 22px;
+}
+.has-access .masthead #profile-greeting {
+  order: 3;
+}
+.theme-toggle:focus-visible {
+  outline: 2px solid #00866b;
+  outline-offset: 3px;
+}
+html[data-theme='dark'] {
+  color-scheme: dark;
+  background: #0d1821;
+  color: #e2edf3;
+  --ink: #e2edf3;
+  --app-ink: #e2edf3;
+  --app-muted: #a6b9c6;
+  --app-border: #304452;
+  --app-shadow-soft: 0 8px 25px #00000025;
+}
+html[data-theme='dark'] body {
+  background: #0d1821 !important;
+  color: #e2edf3;
+}
+html[data-theme='dark']
+  :is(
+    .masthead,
+    .access-card,
+    .career-card,
+    .profile-card,
+    .auto-card,
+    .auto-status-card,
+    .analytics-card,
+    .management-panel,
+    .admin-tab,
+    .category-tabs,
+    .section-panel,
+    .directory-panel,
+    .table-wrap,
+    .toolbar,
+    .section-toolbar,
+    .admin-inbox,
+    .admin-chat-pane,
+    .admin-chat-header,
+    .career-chat-header,
+    .career-chat-shell,
+    .vault-account,
+    dialog,
+    .account-card,
+    .auto-row,
+    .career-list article,
+    .career-notifications article
+  ) {
+  background: #172631 !important;
+  background-image: none !important;
+  border-color: #304452 !important;
+  color: #e2edf3 !important;
+  box-shadow: none !important;
+}
+html[data-theme='dark']
+  :is(
+    h1,
+    h2,
+    h3,
+    h4,
+    label,
+    dt,
+    strong,
+    .management-panel summary,
+    .vault-account summary,
+    .admin-chat-header strong,
+    .admin-conversation-name,
+    .career-chat-header strong
+  ) {
+  color: #e2edf3 !important;
+}
+html[data-theme='dark']
+  :is(
+    p,
+    small,
+    dd,
+    .form-hint,
+    .section-status,
+    .management-empty,
+    .admin-conversation-preview,
+    .admin-chat-header small,
+    .vault-account summary small
+  ) {
+  color: #aebfcb;
+}
+html[data-theme='dark'] :is(input, textarea, select) {
+  background: #10202b !important;
+  color: #e2edf3 !important;
+  border-color: #405765 !important;
+  box-shadow: none !important;
+}
+html[data-theme='dark'] :is(input, textarea)::placeholder {
+  color: #93a8b6 !important;
+  opacity: 1;
+}
+html[data-theme='dark'] :is(input, textarea, select):focus {
+  outline-color: #568a94 !important;
+  border-color: #70ada9 !important;
+}
+html[data-theme='dark'] :is(table, tbody, td) {
+  background: #172631 !important;
+  color: #e2edf3 !important;
+  border-color: #304452 !important;
+}
+html[data-theme='dark'] :is(thead, th) {
+  background: #203440 !important;
+  color: #bcd1dd !important;
+  border-color: #304452 !important;
+}
+html[data-theme='dark'] tbody tr:hover td {
+  background: #203440 !important;
+}
+html[data-theme='dark']
+  :is(
+    .category-tabs button,
+    .auto-tabs button,
+    .admin-tabs button,
+    .career-tabs button,
+    .admin-message-filters button,
+    .badge,
+    .admin-chat-day,
+    .jobs-refresh-hint,
+    .chat-file-tray button,
+    .job-pagination button,
+    .theme-toggle
+  ) {
+  background: #203440 !important;
+  color: #d5e4ed !important;
+  border-color: #3b5361 !important;
+  box-shadow: none !important;
+}
+html[data-theme='dark']
+  :is(
+    .category-tabs button,
+    .auto-tabs button,
+    .admin-tabs button,
+    .career-tabs button
+  )[aria-selected='true'],
+html[data-theme='dark']
+  :is(
+    .admin-conversation.is-selected,
+    .admin-conversation.active,
+    .admin-message-filters button.is-active
+  ) {
+  background: #164b43 !important;
+  color: #a2f2d7 !important;
+  border-color: #418c7b !important;
+}
+html[data-theme='dark'] :is(.admin-chat-history, .career-chat-messages) {
+  background: #10202b !important;
+  border-color: #304452 !important;
+}
+html[data-theme='dark'] :is(.admin-chat-bubble, .career-chat-bubble) {
+  background: #213441 !important;
+  color: #e2edf3 !important;
+  border-color: #3b5361 !important;
+  box-shadow: none !important;
+}
+html[data-theme='dark']
+  :is(.admin-chat-row.is-admin, .career-chat-row.is-user)
+  :is(.admin-chat-bubble, .career-chat-bubble) {
+  background: #174b40 !important;
+  border-color: #326b5d !important;
+}
+html[data-theme='dark'] :is(.admin-chat-bubble p, .career-chat-bubble p) {
+  color: #e2edf3 !important;
+}
+html[data-theme='dark']
+  :is(
+    .admin-chat-compose,
+    .chat-compose,
+    .chat-file-tray,
+    .admin-inbox-tools,
+    .vault-form,
+    .connect-header,
+    .connect-note
+  ) {
+  background: #172631 !important;
+  border-color: #304452 !important;
+  color: #b8cbd7 !important;
+}
+html[data-theme='dark']
+  :is(.chat-attach, .profile-provider-icon, .connect-logo) {
+  background: #263c48 !important;
+  color: #bfd4df !important;
+  border-color: #405765 !important;
+}
+html[data-theme='dark'] :is(a, .chat-attachments a) {
+  color: #74d7c4;
+}
+html[data-theme='dark'] .side-nav a {
+  color: #edf8fa;
+}
+html[data-theme='dark'] .side-nav a[aria-current='page'] {
+  color: #0c2634;
+}
+html[data-theme='dark'] .primary {
+  background: #07896d !important;
+  color: #fff !important;
+  border-color: #11977a !important;
+}
+html[data-theme='dark'] :is(.career-delete-profile-form, .danger-zone) {
+  background: #351e24 !important;
+  border-color: #734148 !important;
+}
+html[data-theme='dark'] #profile-greeting {
+  background: #14394a !important;
+  color: #b9eafa !important;
+  border-color: #346477 !important;
+  box-shadow: none !important;
+}
+html[data-theme='dark'] dialog::backdrop {
+  background: #0009;
+}
+html[data-theme='dark']
+  :is(
+    section,
+    .search,
+    .notice,
+    .pagination,
+    .section-status,
+    .admin-conversation,
+    .company-menu,
+    .action-menu,
+    .app-notice
+  ) {
+  background: #172631 !important;
+  border-color: #304452 !important;
+  color: #d6e4ed !important;
+}
+html[data-theme='dark']
+  button:not(.side-toggle):not(.side-logout):not(.primary):not(.danger) {
+  background: #203440;
+  color: #d5e4ed;
+  border-color: #3b5361;
+}
+html[data-theme='dark'] .admin-conversation.is-selected {
+  background: #164b43 !important;
+}
+html[data-theme='dark']
+  :is(.career-tabs, .admin-tabs, .category-tabs)
+  button[aria-selected='true'] {
+  background: #164b43 !important;
+  color: #a2f2d7 !important;
+}

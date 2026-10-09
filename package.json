@@ -5,7 +5,7 @@
   "scripts": {
     "build": "node scripts/build.mjs",
     "db:generate": "drizzle-kit generate",
-    "test": "npm run build && node tests/job-feeds.mjs && node tests/job-import.mjs && node tests/chat-attachments.mjs && node tests/credential-vault.mjs",
+    "test": "npm run build && node tests/job-feeds.mjs && node tests/job-import.mjs && node tests/chat-attachments.mjs && node tests/credential-vault.mjs && node tests/theme.mjs",
     "format": "prettier --write dist/*.{html,css,js,svg} worker/*.js scripts/*.mjs tests/*.mjs db/*.ts README.md",
     "format:check": "prettier --check dist/*.{html,css,js,svg} worker/*.js scripts/*.mjs tests/*.mjs db/*.ts README.md"
   },
