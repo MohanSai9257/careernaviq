@@ -595,16 +595,16 @@ export default {async fetch(request,env){
    let results;
    if(section==='recruiter-directory'){
     const database=db(env);await ensureSectionFavorites(database);
-    if(category==='mylist')({results}=await database.prepare(`SELECT item.id,item.version,item.category,item.title,item.organization,item.url,item.details,item.email,item.phone,item.extension,item.file_name,item.posted_at,item.created_at,1 AS is_favorite FROM section_items item JOIN section_favorites favorite ON favorite.item_id = item.id AND favorite.user_email = ? WHERE item.section = ? AND item.status = 'approved'${joinSearch} AND (? = '' OR item.posted_at >= ?) ${recruiterJoinOrder} LIMIT 500`).bind(...[session.email,section,...searchValues,cutoff,cutoff]).all());
+    if(category==='mylist')({results}=await database.prepare(`SELECT item.id,item.version,item.category,item.title,item.organization,item.url,item.details,item.email,item.phone,item.extension,item.file_name,item.posted_at,item.created_at,1 AS is_favorite FROM section_items item JOIN section_favorites favorite ON favorite.item_id = item.id AND favorite.user_email = ? WHERE item.section = ? AND item.status = 'approved'${joinSearch} AND (? = '' OR item.posted_at >= ?) ${recruiterJoinOrder} LIMIT 5000`).bind(...[session.email,section,...searchValues,cutoff,cutoff]).all());
     else {
      const categoryClause=search?'':' AND category = ?';
      const binds=search?[session.email,section,...searchValues,cutoff,cutoff]:[session.email,section,category,...searchValues,cutoff,cutoff];
-     ({results}=await database.prepare(`SELECT id,version,category,title,organization,url,details,email,phone,extension,file_name,posted_at,created_at,EXISTS(SELECT 1 FROM section_favorites favorite WHERE favorite.user_email = ? AND favorite.item_id = section_items.id) AS is_favorite FROM section_items WHERE section = ?${categoryClause} AND status = 'approved'${itemSearch} AND (? = '' OR posted_at >= ?) ${sectionItemOrder} LIMIT 500`).bind(...binds).all());
+     ({results}=await database.prepare(`SELECT id,version,category,title,organization,url,details,email,phone,extension,file_name,posted_at,created_at,EXISTS(SELECT 1 FROM section_favorites favorite WHERE favorite.user_email = ? AND favorite.item_id = section_items.id) AS is_favorite FROM section_items WHERE section = ?${categoryClause} AND status = 'approved'${itemSearch} AND (? = '' OR posted_at >= ?) ${sectionItemOrder} LIMIT ${section==='recruiter-directory'?5000:500}`).bind(...binds).all());
     }
    }else {
     const categoryClause=search?'':' AND category = ?';
     const binds=search?[section,...searchValues,cutoff,cutoff]:[section,category,...searchValues,cutoff,cutoff];
-    ({results}=await db(env).prepare(`SELECT id,version,category,title,organization,url,details,email,phone,extension,file_name,posted_at,created_at FROM section_items WHERE section = ?${categoryClause} AND status = 'approved'${itemSearch} AND (? = '' OR posted_at >= ?) ${sectionItemOrder} LIMIT 500`).bind(...binds).all());
+    ({results}=await db(env).prepare(`SELECT id,version,category,title,organization,url,details,email,phone,extension,file_name,posted_at,created_at FROM section_items WHERE section = ?${categoryClause} AND status = 'approved'${itemSearch} AND (? = '' OR posted_at >= ?) ${sectionItemOrder} LIMIT ${section==='recruiter-directory'?5000:500}`).bind(...binds).all());
    }
    return json({items:results});
   }
