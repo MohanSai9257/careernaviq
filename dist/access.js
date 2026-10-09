@@ -120,7 +120,7 @@ accessEl('user-delete-form').addEventListener('submit',async event=>{
  catch(error){accessError('user-delete-error',error.message);}finally{button.disabled=false;}
 });
 async function loadAccessUsers(){
- try{const data=await accessJson('/api/access/users');accessUsers=data.items;accessError('admin-access-error','');renderAccessUsers();}
+ try{const data=await accessJson('/api/access/users');accessUsers=data.items;accessError('admin-access-error','');renderAccessUsers();renderQuestionThreads();}
  catch(error){accessError('admin-access-error',error.message);}
 }
 function renderAccessSettings(){
@@ -240,12 +240,13 @@ function renderSectionChanges(){
  }
 }
 async function loadSectionChanges(){try{const data=await accessJson('/api/review/section-changes');sectionChanges=data.items;accessError('section-change-error','');renderSectionChanges();}catch(error){accessError('section-change-error',error.message);}}
+function messageRecipients(){const query=accessEl('messages-search').value.trim();const threads=[...questionThreads],known=new Set(threads.map(thread=>thread.email));for(const user of accessUsers){if(user.status==='approved'&&!known.has(user.email)&&(query||selectedMessageEmail===user.email))threads.push({email:user.email,name:user.name||user.email,messages:[],unread:0,lastAt:'',isNew:true});}return threads;}
 function renderQuestionThreads(){
  const unread=questionThreads.reduce((sum,thread)=>sum+Number(thread.unread||0),0);
  const badge=accessEl('messages-tab-count');badge.textContent=unread;badge.hidden=!unread;
  const list=accessEl('questions-list');list.replaceChildren();
  const query=accessEl('messages-search').value.trim().toLowerCase();
- const visible=questionThreads.filter(thread=>{
+ const recipients=messageRecipients();const visible=recipients.filter(thread=>{
   const last=thread.messages.at(-1);
   if(messageFilter==='unread'&&!thread.unread)return false;
   if(messageFilter==='replied'&&last?.sender!=='admin')return false;
@@ -261,7 +262,7 @@ function renderQuestionThreads(){
   const wrapper=document.createElement('div');wrapper.className='admin-conversation-wrap';const menu=document.createElement('details');menu.className='admin-chat-menu';const summary=document.createElement('summary');summary.textContent='⋮';summary.setAttribute('aria-label',`Chat options for ${thread.name||thread.email}`);menu.append(summary);const actions=document.createElement('div');actions.className='admin-chat-menu-actions';
   for(const [action,label] of [['clear','Clear chat'],['delete','Delete chat']]){const control=document.createElement('button');control.type='button';control.textContent=label;control.addEventListener('click',async()=>{menu.open=false;const explanation=action==='clear'?'Clear all messages for both sides? The conversation will remain.':'Delete this conversation and all messages for both sides? The user can start a new chat.';if(!confirm(explanation))return;control.disabled=true;try{await accessJson('/api/admin/questions/manage',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:thread.email,action})});await loadQuestionThreads();window.showAppNotice?.(action==='clear'?'Chat cleared.':'Chat deleted.');}catch(error){accessError('questions-error',error.message);}finally{control.disabled=false;}});actions.append(control);}menu.append(actions);wrapper.append(button,menu);list.append(wrapper);
  }
- if(selectedMessageEmail){const selected=questionThreads.find(thread=>thread.email===selectedMessageEmail);if(selected)renderSelectedMessage(selected);else{selectedMessageEmail='';renderSelectedMessage(null);}}
+ if(selectedMessageEmail){const selected=recipients.find(thread=>thread.email===selectedMessageEmail);if(selected)renderSelectedMessage(selected);else{selectedMessageEmail='';renderSelectedMessage(null);}}
 }
 function renderSelectedMessage(thread){
  const header=accessEl('messages-chat-header'),history=accessEl('messages-chat');history.replaceChildren();accessEl('messages-reply-form').hidden=!thread;

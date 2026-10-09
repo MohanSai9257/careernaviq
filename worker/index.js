@@ -529,11 +529,13 @@ export default {async fetch(request,env){
    if(!emailPattern.test(userEmail)||!body||body.length>1200)return json({error:'Enter a valid user and reply.'},400);
    const database=db(env);await ensureAskMessages(database);
    const existing=await database.prepare('SELECT user_email FROM ask_messages WHERE user_email = ? LIMIT 1').bind(userEmail).first();
-   if(!existing)return json({error:'Question thread not found.'},404);
+   const recipient=await database.prepare('SELECT name,status FROM access_users WHERE email = ?').bind(userEmail).first();
+   const thread=await database.prepare('SELECT user_email FROM ask_threads WHERE user_email = ?').bind(userEmail).first();
+   if(!existing&&!thread&&recipient?.status!=='approved')return json({error:'Select an existing approved user.'},404);
    const now=new Date().toISOString();
    await database.batch([
     database.prepare("UPDATE ask_messages SET read_by_admin_at = COALESCE(read_by_admin_at, ?) WHERE user_email = ? AND sender = 'user'").bind(now,userEmail),
-    database.prepare("INSERT INTO ask_messages (id,user_email,user_name,body,sender,admin_email,created_at) VALUES (?,?,?,?,?,?,?)").bind(crypto.randomUUID(),userEmail,'',body,'admin',session.email,now)
+    database.prepare("INSERT INTO ask_messages (id,user_email,user_name,body,sender,admin_email,created_at) VALUES (?,?,?,?,?,?,?)").bind(crypto.randomUUID(),userEmail,recipient?.name||'',body,'admin',session.email,now)
    ]);
    return json({sent:true});
   }
