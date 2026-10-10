@@ -165,6 +165,15 @@ fetch('/api/session', { cache: 'no-store' })
   .catch(() => {});
 const navFooter = document.createElement('div');
 navFooter.className = 'side-footer';
+const mobileMoreButton = document.createElement('button');
+mobileMoreButton.type = 'button';
+mobileMoreButton.className = 'mobile-more-toggle';
+mobileMoreButton.setAttribute('aria-label', 'Open more navigation options');
+mobileMoreButton.setAttribute('aria-expanded', 'false');
+mobileMoreButton.innerHTML =
+  '<span class="side-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg></span><span class="side-label">More</span>';
+const mobileMoreMenu = document.createElement('div');
+mobileMoreMenu.className = 'mobile-more-menu';
 const logoutButton = document.createElement('button');
 logoutButton.type = 'button';
 logoutButton.className = 'side-logout';
@@ -186,9 +195,26 @@ logoutButton.addEventListener('click', async () => {
     location.replace('/');
   }
 });
-navFooter.append(adminLink, logoutButton);
+mobileMoreMenu.append(adminLink, logoutButton);
+navFooter.append(mobileMoreButton, mobileMoreMenu);
 sidebar.append(navFooter);
 document.body.prepend(sidebar);
+function closeMobileMoreMenu() {
+  navFooter.classList.remove('mobile-more-open');
+  mobileMoreButton.setAttribute('aria-expanded', 'false');
+}
+mobileMoreButton.addEventListener('click', (event) => {
+  event.stopPropagation();
+  const open = navFooter.classList.toggle('mobile-more-open');
+  mobileMoreButton.setAttribute('aria-expanded', String(open));
+});
+mobileMoreMenu.addEventListener('click', closeMobileMoreMenu);
+document.addEventListener('click', (event) => {
+  if (!navFooter.contains(event.target)) closeMobileMoreMenu();
+});
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape') closeMobileMoreMenu();
+});
 function setSidebarCollapsed(collapsed) {
   document.body.classList.toggle('sidebar-collapsed', collapsed);
   toggle.textContent = collapsed ? '›' : '‹';

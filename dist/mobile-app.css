@@ -17,6 +17,14 @@ summary {
   -webkit-tap-highlight-color: transparent;
 }
 
+.mobile-more-toggle {
+  display: none;
+}
+
+.mobile-more-menu {
+  display: contents;
+}
+
 @media (max-width: 760px) {
   :root {
     --mobile-gutter: 16px;
@@ -121,9 +129,25 @@ summary {
     border: 0;
   }
 
+  .side-nav nav {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .side-nav nav::-webkit-scrollbar {
+    display: none;
+  }
+
+  .side-footer {
+    flex: 0 0 68px;
+  }
+
   .side-nav a,
   .side-footer .side-admin,
-  .side-footer .side-logout {
+  .side-footer .side-logout,
+  .side-footer .mobile-more-toggle {
     display: flex;
     flex: 0 0 68px;
     flex-direction: column;
@@ -136,6 +160,59 @@ summary {
     border-radius: 13px;
     font-size: 0.64rem;
     line-height: 1.05;
+  }
+
+  .side-footer .mobile-more-toggle {
+    display: flex;
+    color: #eaf7fb;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .mobile-more-menu {
+    position: fixed;
+    right: 12px;
+    bottom: calc(var(--mobile-nav-height) + env(safe-area-inset-bottom) + 8px);
+    z-index: 55;
+    display: none;
+    width: min(240px, calc(100vw - 24px));
+    padding: 8px;
+    gap: 4px;
+    border: 1px solid #d7e4e9;
+    border-radius: 16px;
+    background: #fff;
+    box-shadow: 0 18px 46px #071f2c35;
+  }
+
+  .side-footer.mobile-more-open .mobile-more-menu {
+    display: grid;
+  }
+
+  .side-footer .mobile-more-menu .side-admin,
+  .side-footer .mobile-more-menu .side-logout {
+    width: 100%;
+    min-height: 48px;
+    flex-direction: row;
+    justify-content: flex-start;
+    padding: 10px 12px;
+    gap: 10px;
+    color: #173746;
+    border-radius: 11px;
+    background: transparent;
+  }
+
+  .side-footer .mobile-more-menu .side-label {
+    width: auto;
+    text-align: left;
+  }
+
+  .side-footer .mobile-more-menu .side-admin[aria-current='page'] {
+    background: #d9fbf1;
+  }
+
+  .side-footer .mobile-more-menu .side-admin[hidden] {
+    display: none !important;
   }
 
   .side-nav .side-label,
@@ -470,6 +547,16 @@ summary {
     background: #172631;
     border-color: #304452;
     box-shadow: none;
+  }
+
+  html[data-theme='dark'] .mobile-more-menu {
+    background: #172631;
+    border-color: #304452;
+  }
+
+  html[data-theme='dark'] .side-footer .mobile-more-menu .side-admin,
+  html[data-theme='dark'] .side-footer .mobile-more-menu .side-logout {
+    color: #eef7fa;
   }
 }
 
