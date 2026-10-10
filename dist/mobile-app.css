@@ -99,6 +99,8 @@ summary {
     z-index: 50;
     inset: auto 0 0;
     display: flex;
+    flex-direction: row;
+    align-items: center;
     width: 100% !important;
     height: calc(var(--mobile-nav-height) + env(safe-area-inset-bottom));
     padding: 6px 8px env(safe-area-inset-bottom);
@@ -142,6 +144,8 @@ summary {
 
   .side-footer {
     flex: 0 0 68px;
+    width: 68px;
+    height: 58px;
   }
 
   .side-nav a,
