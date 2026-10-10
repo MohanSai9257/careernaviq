@@ -9,6 +9,29 @@ assert.equal(jobCategory('Mechanical Validation Engineer'), '');
 assert.equal(usLocation('Remote, US'), true);
 assert.equal(usLocation('Bangalore, IN, India'), false);
 assert.equal(usLocation('Remote'), false);
+assert.equal(usLocation('Remote, India'), false);
+assert.equal(usLocation('Remote, United States'), true);
+assert.equal(
+  cleanVendorJob(
+    {
+      title: 'Java Developer',
+      url: 'https://example.com/job',
+      location: 'Berlin, Germany',
+    },
+    { name: 'Example' },
+  ),
+  null,
+);
+assert.ok(
+  cleanVendorJob(
+    {
+      title: 'Java Developer',
+      url: 'https://example.com/job',
+      location: 'Austin, TX, US',
+    },
+    { name: 'Example' },
+  ),
+);
 const original = globalThis.fetch;
 const date = new Date().toISOString();
 globalThis.fetch = async (input) => {

@@ -1,5 +1,5 @@
 const usStates =
-  /\b(?:AL|AK|AZ|AR|CA|CO|CT|DE|FL|GA|HI|ID|IL|IN|IA|KS|KY|LA|ME|MD|MA|MI|MN|MS|MO|MT|NE|NV|NH|NJ|NM|NY|NC|ND|OH|OK|OR|PA|RI|SC|SD|TN|TX|UT|VT|VA|WA|WV|WI|WY|DC)\b/;
+  /,\s*(?:AL|AK|AZ|AR|CA|CO|CT|DE|FL|GA|HI|ID|IL|IN|IA|KS|KY|LA|ME|MD|MA|MI|MN|MS|MO|MT|NE|NV|NH|NJ|NM|NY|NC|ND|OH|OK|OR|PA|RI|SC|SD|TN|TX|UT|VT|VA|WA|WV|WI|WY|DC)\b/;
 function safeJobUrl(value) {
   try {
     const url = new URL(value);
@@ -151,23 +151,29 @@ function jobCategory(title, description = '') {
     return 'java';
   return '';
 }
-function usLocation(value, sourceUrl = '') {
-  const location = plain(value),
-    source = String(sourceUrl);
+function usLocation(value) {
+  const location = plain(value);
+  if (!location) return false;
   if (/^US$/i.test(location)) return true;
   if (/^(?:IN|MX|GB|UK|AU|DE|FR|PL|RO|SG|CA)$/i.test(location)) return false;
-  if (/\b(United States|USA|US)\b|U\.S\./i.test(location)) return true;
   if (
     /\b(Canada|India|United Kingdom|Australia|Germany|Poland|Romania|France|Singapore|Mexico)\b/i.test(
       location,
-    )
+    ) &&
+    !/\b(United States|USA|US)\b|U\.S\./i.test(location)
   )
     return false;
+  if (/\b(United States|USA|US)\b|U\.S\./i.test(location)) return true;
+  // Georgia alone may refer to the country; require an explicit US marker.
+  if (/\bGeorgia\b/i.test(location)) return false;
   if (usStates.test(location)) return true;
-  return (
-    /\/us-en\/|\/us\/|united.states|\/usa\//i.test(source) &&
-    (!location || /^remote$/i.test(location))
-  );
+  if (
+    /\b(?:Alabama|Alaska|Arizona|Arkansas|California|Colorado|Connecticut|Delaware|Florida|Georgia|Hawaii|Idaho|Illinois|Indiana|Iowa|Kansas|Kentucky|Louisiana|Maine|Maryland|Massachusetts|Michigan|Minnesota|Mississippi|Missouri|Montana|Nebraska|Nevada|New Hampshire|New Jersey|New Mexico|New York|North Carolina|North Dakota|Ohio|Oklahoma|Oregon|Pennsylvania|Rhode Island|South Carolina|South Dakota|Tennessee|Texas|Utah|Vermont|Virginia|Washington|West Virginia|Wisconsin|Wyoming|District of Columbia)\b/i.test(
+      location,
+    )
+  )
+    return true;
+  return false;
 }
 function yearsFromDescription(description) {
   const text = plain(description).slice(0, 12000);
@@ -1004,7 +1010,7 @@ const jobSourceIds = [
   'source:weworkremotely',
   'source:jobicy',
   'source:himalayas',
-];
+].map((id) => `us:${id}`);
 function vendorCategory(title, description = '') {
   const category = jobCategory(title, description);
   if (category) return category;
@@ -1044,7 +1050,7 @@ function cleanVendorJob(raw, source) {
   const title = plain(raw.title).slice(0, 200),
     category = vendorCategory(title, raw.description);
   const apply = safeJobUrl(raw.url);
-  if (!title || !category || !apply) return null;
+  if (!title || !category || !apply || !usLocation(raw.location)) return null;
   const years = yearsFromDescription(raw.description || '');
   return {
     sourceId: String(raw.id || apply.toString()).slice(0, 500),
@@ -1127,6 +1133,7 @@ async function readEliteFeed() {
             const detail = await sourceText(row.applyUrl);
             const data = jsonLdJobs(detail.text, row.applyUrl);
             description = data[0]?.description || description;
+            row.location = data[0]?.location || '';
           } catch {}
           return {
             id: row.sourceId,
@@ -1134,6 +1141,7 @@ async function readEliteFeed() {
             url: row.applyUrl,
             postedAt: row.postedAt,
             description,
+            location: row.location || '',
           };
         }),
       )),
@@ -1164,6 +1172,7 @@ function tableRows(html, baseUrl, source, options = {}) {
       url: new URL(decodeLink(link[1]), baseUrl).toString(),
       postedAt: posted,
       description: cells.join(' '),
+      location: cells.find((cell) => usLocation(cell)) || '',
     });
   }
   return uniqueJobs(rows, source);
@@ -1215,7 +1224,14 @@ function linkJobs(html, baseUrl, source, pattern) {
     if (!pattern.test(new URL(url).pathname)) continue;
     const title = plain(match[2]);
     if (!title || title.length < 4) continue;
-    raw.push({ id: url, title, url, postedAt: '', description: title });
+    raw.push({
+      id: url,
+      title,
+      url,
+      postedAt: '',
+      description: title,
+      location: '',
+    });
   }
   return uniqueJobs(raw, source);
 }
@@ -1280,6 +1296,7 @@ async function readRemotiveFeed() {
     ]
       .filter(Boolean)
       .join(' '),
+    location: job.candidate_required_location || '',
   }));
   const jobs = uniqueJobs(raw, source);
   return {
@@ -1304,6 +1321,7 @@ async function readRemoteOkFeed() {
       description: [job.description, (job.tags || []).join(' '), job.location]
         .filter(Boolean)
         .join(' '),
+      location: job.location || '',
     }));
   const jobs = uniqueJobs(raw, source);
   return {
@@ -1341,6 +1359,7 @@ async function readMuseFeed() {
           ]
             .filter(Boolean)
             .join(' '),
+          location: (job.locations || []).map((x) => x.name).join(', '),
         })),
       );
       if (page >= Number(data.page_count || page)) break;
@@ -1374,6 +1393,7 @@ async function readArbeitnowFeed() {
     ]
       .filter(Boolean)
       .join(' '),
+    location: job.location || '',
   }));
   const jobs = uniqueJobs(raw, source);
   return {
@@ -1403,6 +1423,7 @@ async function readWeWorkRemotelyFeed() {
           title: parts.join(': ') || job.title,
           url: job.url,
           description: [job.description, 'remote', companyName].join(' '),
+          location: job.location || '',
         };
       }),
     );
@@ -1444,6 +1465,7 @@ async function readJobicyFeed() {
         ]
           .filter(Boolean)
           .join(' '),
+        location: job.jobGeo || '',
       })),
     );
   }
@@ -1475,6 +1497,7 @@ async function readHimalayasFeed() {
     ]
       .filter(Boolean)
       .join(' '),
+    location: (job.locationRestrictions || []).join(', '),
   }));
   const jobs = uniqueJobs(raw, source);
   return {
@@ -1488,34 +1511,108 @@ async function readHimalayasFeed() {
 
 async function readVendorFeeds() {
   const readers = [
-      readEliteFeed,
-      readVacoFeed,
-      readApexFeed,
-      readMotionFeed,
-      readInspyrFeed,
-      readRemotiveFeed,
-      readRemoteOkFeed,
-      readMuseFeed,
-      readArbeitnowFeed,
-      readWeWorkRemotelyFeed,
-      readJobicyFeed,
-      readHimalayasFeed,
-    ],
-    results = [];
-  for (const reader of readers) {
-    try {
-      results.push(await reader());
-    } catch (error) {
-      results.push({
-        id: 'source:error-' + results.length,
-        name: 'Job source',
-        status: 'error',
-        message: String(error.message).slice(0, 160),
-        jobs: [],
-      });
-    }
-  }
-  return results;
+    readEliteFeed,
+    readVacoFeed,
+    readApexFeed,
+    readMotionFeed,
+    readInspyrFeed,
+    readRemotiveFeed,
+    readRemoteOkFeed,
+    readMuseFeed,
+    readArbeitnowFeed,
+    readWeWorkRemotelyFeed,
+    readJobicyFeed,
+    readHimalayasFeed,
+  ];
+  return inBatches(
+    readers.map((reader, index) => ({ reader, index })),
+    async ({ reader, index }) => {
+      try {
+        return await reader();
+      } catch (error) {
+        return {
+          id: 'source:error-' + index,
+          name: 'Job source',
+          status: 'error',
+          message: String(error.message).slice(0, 160),
+          jobs: [],
+        };
+      }
+    },
+    3,
+  );
+}
+function employerSourceId(id) {
+  return `employer:${id}`;
+}
+async function readDirectoryFeeds(env) {
+  const added = (
+    await db(env)
+      .prepare(
+        "SELECT id,name,careers FROM added_companies WHERE careers <> ''",
+      )
+      .all()
+  ).results;
+  const candidates = new Map();
+  for (const [id, , careers] of baseRows)
+    if (safeJobUrl(officialJobBoards[id] || careers))
+      candidates.set(id, { id, name: id, careers });
+  for (const company of added)
+    if (safeJobUrl(officialJobBoards[company.id] || company.careers))
+      candidates.set(company.id, company);
+  const checks = new Map(
+    (
+      await db(env)
+        .prepare(
+          "SELECT company_id,checked_at FROM job_source_checks WHERE company_id LIKE 'employer:%'",
+        )
+        .all()
+    ).results.map((row) => [row.company_id, row.checked_at]),
+  );
+  const cutoff = new Date(Date.now() - 24 * 3600000).toISOString();
+  const boardPriority = (company) => {
+    const url = officialJobBoards[company.id] || company.careers;
+    if (/greenhouse\.io|lever\.co|ashbyhq\.com|smartrecruiters\.com/i.test(url))
+      return 2;
+    if (/\.myworkdayjobs\.com|\.oraclecloud\.com/i.test(url)) return 1;
+    return 0;
+  };
+  const due = [...candidates.values()]
+    .filter(
+      (company) => (checks.get(employerSourceId(company.id)) || '') < cutoff,
+    )
+    .sort(
+      (a, b) =>
+        (checks.get(employerSourceId(a.id)) || '').localeCompare(
+          checks.get(employerSourceId(b.id)) || '',
+        ) || boardPriority(b) - boardPriority(a),
+    )
+    .slice(0, 6);
+  return Promise.all(
+    due.map(async (company) => {
+      const id = employerSourceId(company.id);
+      let result;
+      try {
+        result = await readCompanyFeed(company);
+      } catch (error) {
+        result = {
+          status: 'error',
+          message: String(error.message).slice(0, 160),
+          jobs: [],
+          complete: false,
+        };
+      }
+      return {
+        ...result,
+        id,
+        name: company.name || company.id,
+        jobs: result.jobs.map((job) => ({
+          ...job,
+          companyName: company.name || company.id,
+        })),
+      };
+    }),
+  );
 }
 async function refreshElite(env) {
   const database = db(env),
@@ -1529,7 +1626,17 @@ async function refreshElite(env) {
     .first();
   if (!lock) return { status: 'cached', message: 'Refreshing…' };
   try {
-    const sources = await readVendorFeeds(),
+    const [vendorSources, employerSources] = await Promise.all([
+        readVendorFeeds(),
+        readDirectoryFeeds(env),
+      ]),
+      sources = [
+        ...vendorSources.map((source) => ({
+          ...source,
+          id: `us:${source.id}`,
+        })),
+        ...employerSources,
+      ],
       successful = sources.filter((source) => source.status === 'checked'),
       jobs = successful.flatMap((source) =>
         source.jobs.map((job) => ({
@@ -1572,12 +1679,19 @@ async function refreshElite(env) {
         .bind(...values)
         .run();
     }
-    for (const source of successful)
+    for (const source of successful.filter((source) => source.complete))
       await database
         .prepare(
           'UPDATE imported_jobs SET is_open=0 WHERE company_id=? AND last_seen_at < ?',
         )
         .bind(source.id, now)
+        .run();
+    for (const source of employerSources)
+      await database
+        .prepare(
+          'INSERT INTO job_source_checks (company_id,checked_at,status,message,jobs_found) VALUES (?,?,?,?,?) ON CONFLICT(company_id) DO UPDATE SET checked_at=excluded.checked_at,status=excluded.status,message=excluded.message,jobs_found=excluded.jobs_found',
+        )
+        .bind(source.id, now, source.status, source.message, source.jobs.length)
         .run();
     const message = `Loaded ${jobs.length} jobs from ${successful.length} sources.`;
     await database

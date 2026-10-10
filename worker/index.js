@@ -2081,7 +2081,7 @@ export default {
           (
             await database
               .prepare(
-                "SELECT id,company_name,title,apply_url,posted_at FROM imported_jobs WHERE is_open=1 AND category=? ORDER BY CASE WHEN posted_at='' THEN 1 ELSE 0 END, posted_at DESC, discovered_at DESC LIMIT 200",
+                "SELECT id,company_name,title,apply_url,posted_at FROM imported_jobs WHERE is_open=1 AND category=? AND (company_id LIKE 'us:source:%' OR company_id LIKE 'employer:%') ORDER BY CASE WHEN posted_at='' THEN 1 ELSE 0 END, posted_at DESC, discovered_at DESC LIMIT 200",
               )
               .bind(category)
               .all()
@@ -2461,7 +2461,7 @@ export default {
             .trim()
             .slice(0, 100),
           searchLike = `%${search.replace(/[\\%_]/g, '\\$&')}%`;
-        let sql = `SELECT id,company_id,company_name,category,title,apply_url,posted_at,min_years,max_years FROM imported_jobs WHERE is_open = 1 AND last_seen_at >= ? AND category = ? AND company_id IN (SELECT value FROM json_each(?))`;
+        let sql = `SELECT id,company_id,company_name,category,title,apply_url,posted_at,min_years,max_years FROM imported_jobs WHERE is_open = 1 AND last_seen_at >= ? AND category = ? AND (company_id IN (SELECT value FROM json_each(?)) OR company_id LIKE 'employer:%')`;
         const values = [
           new Date(Date.now() - 30 * 86400000).toISOString(),
           category,

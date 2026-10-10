@@ -58,6 +58,26 @@ const listing = (id, title, d) =>
   `<div class="jobbox"><h2><a href="/job/?id=${id}">${title}</a></h2><span>Date Posted: ${date(d)}</span></div><div class="jobbody">Software development</div>`;
 globalThis.fetch = async (input) => {
   if (fail) return new Response('Unavailable', { status: 503 });
+  if (String(input).includes('/companies/Endava/postings?'))
+    return Response.json({
+      totalFound: 2,
+      content: [
+        { id: 'us-1', name: 'Java Developer', location: { country: 'us' } },
+        { id: 'in-1', name: 'Java Developer', location: { country: 'in' } },
+      ],
+    });
+  if (String(input).endsWith('/companies/Endava/postings/us-1'))
+    return Response.json({
+      id: 'us-1',
+      name: 'Java Developer',
+      active: true,
+      visibility: 'PUBLIC',
+      postingUrl: 'https://jobs.smartrecruiters.com/Endava/us-1',
+      releasedDate: new Date().toISOString(),
+      jobAd: {
+        sections: { qualifications: { text: '5 years of experience' } },
+      },
+    });
   if (String(input).includes('jobtext='))
     return new Response(
       listing(101, 'Senior Java Software Engineer', day) +
@@ -66,7 +86,7 @@ globalThis.fetch = async (input) => {
         listing(101, 'Senior Java Software Engineer', day),
     );
   return new Response(
-    `<script type="application/ld+json">${JSON.stringify({ '@type': 'JobPosting', title: 'Developer', description: '5+ years of experience', url: String(input) })}</script>`,
+    `<script type="application/ld+json">${JSON.stringify({ '@type': 'JobPosting', title: 'Developer', description: '5+ years of experience', url: String(input), jobLocation: { address: { addressCountry: 'US' } } })}</script>`,
   );
 };
 async function call(path, body) {
@@ -86,16 +106,42 @@ async function call(path, body) {
 }
 
 let r = await call('/api/jobs/generate', {});
-if (r.status !== 200 || r.body.jobsFound !== 2) throw Error(JSON.stringify(r));
+if (r.status !== 200 || r.body.jobsFound !== 3) throw Error(JSON.stringify(r));
 r = await call('/api/jobs/generate', {});
 if (
   r.body.status !== 'cached' ||
-  sqlite.prepare('SELECT count(*) n FROM imported_jobs').get().n !== 2
+  sqlite.prepare('SELECT count(*) n FROM imported_jobs').get().n !== 3
 )
   throw Error('dedup/cooldown failed');
+if (
+  sqlite
+    .prepare(
+      "SELECT count(*) n FROM imported_jobs WHERE apply_url LIKE '%/in-1'",
+    )
+    .get().n !== 0
+)
+  throw Error('Non-US employer job imported');
+sqlite
+  .prepare(
+    'INSERT INTO imported_jobs (id,company_id,company_name,category,title,apply_url,source_id,posted_at,discovered_at,last_seen_at,is_open,min_years,max_years) VALUES (?,?,?,?,?,?,?,?,?,?,1,?,?)',
+  )
+  .run(
+    'legacy-overseas',
+    'source:legacy',
+    'Legacy overseas source',
+    'java',
+    'Java Developer',
+    'https://example.com/legacy-overseas',
+    'legacy-overseas',
+    day,
+    new Date().toISOString(),
+    new Date().toISOString(),
+    null,
+    null,
+  );
 r = await call('/api/jobs/query', { category: 'java', window: 'day' });
-if (r.body.items.length !== 1 || r.body.items[0].posted_at !== day)
-  throw Error('date/category failed');
+if (r.body.items.length !== 2 || !r.body.items.some((x) => x.posted_at === day))
+  throw Error('US source/date/category filter failed');
 r = await call('/api/jobs/query', { category: 'data', window: 'day' });
 if (r.body.items.length) throw Error('old date included');
 r = await call('/api/jobs/query', {
@@ -115,7 +161,7 @@ fail = true;
 r = await call('/api/jobs/generate', {});
 if (r.status === 200) throw Error('failure hidden');
 r = await call('/api/jobs/query', { category: 'java', window: 'all' });
-if (r.body.items.length !== 1 || r.body.source.status !== 'error')
+if (r.body.items.length !== 2 || r.body.source.status !== 'error')
   throw Error('saved data lost on failure');
 const denied = await worker.fetch(
   new Request('https://directory.test/mcp', {
