@@ -3056,6 +3056,40 @@ textarea:focus {
   display: grid;
   gap: 18px;
 }
+#panel-dashboard .analytics-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+.auto-accordions {
+  display: grid;
+  gap: 12px;
+}
+.auto-accordions details {
+  padding: 0;
+}
+.auto-accordions summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 18px 22px;
+  cursor: pointer;
+  font-weight: 800;
+  color: #17384a;
+  list-style-position: inside;
+}
+.auto-accordions summary span {
+  margin-left: auto;
+  border-radius: 999px;
+  background: #e8f3f3;
+  padding: 4px 10px;
+}
+.auto-accordions details > :not(summary) {
+  margin: 0 22px 18px;
+}
+.auto-accordions details .auto-list {
+  display: grid;
+  gap: 10px;
+}
 .auto-card {
   background: #fff;
   border: 1px solid var(--app-border);
@@ -3170,6 +3204,9 @@ textarea:focus {
   margin-bottom: 12px;
 }
 @media (max-width: 1050px) {
+  #panel-dashboard .analytics-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
   .auto-form.inline,
   .account-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -3183,6 +3220,9 @@ textarea:focus {
   }
 }
 @media (max-width: 700px) {
+  #panel-dashboard .analytics-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
   .auto-form.inline,
   .account-grid,
   .profile-summary {

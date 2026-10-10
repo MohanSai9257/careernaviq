@@ -48,18 +48,13 @@
         >
           Dashboard
         </button>
+        <button type="button" role="tab" data-panel="settings">
+          Agent Settings
+        </button>
         <button type="button" role="tab" data-panel="apply-profile">
           AI Apply Profile
         </button>
         <button type="button" role="tab" data-panel="vault">Vault</button>
-        <button type="button" role="tab" data-panel="agent">AI Agent</button>
-        <button type="button" role="tab" data-panel="blockers">Blockers</button>
-        <button type="button" role="tab" data-panel="tracker">
-          Application Tracker
-        </button>
-        <button type="button" role="tab" data-panel="settings">
-          Agent Settings
-        </button>
       </nav>
       <section
         id="panel-apply-profile"
@@ -409,126 +404,7 @@
       ></p>
 
       <section id="panel-dashboard" class="auto-panel" role="tabpanel">
-        <div id="worker-status" class="auto-status-card">Checking worker…</div>
         <div id="dashboard-cards" class="analytics-grid"></div>
-        <div class="auto-controls">
-          <button id="start-agent" class="primary" type="button">
-            Start Agent</button
-          ><button id="pause-agent" type="button">Pause Agent</button
-          ><button id="resume-agent" type="button">Resume Agent</button
-          ><button id="stop-agent" class="danger" type="button">
-            Stop Agent</button
-          ><button id="refresh-auto" type="button">View Activity</button>
-        </div>
-        <div class="auto-card">
-          <h2>Recent activity</h2>
-          <div id="activity-list" class="auto-list"></div>
-        </div>
-      </section>
-
-      <section id="panel-resumes" class="auto-panel" role="tabpanel" hidden>
-        <div class="auto-card">
-          <h2>Upload resume</h2>
-          <form id="resume-form" class="auto-form">
-            <label
-              >Name<input
-                id="resume-name"
-                maxlength="120"
-                placeholder="Java backend resume" /></label
-            ><label
-              >Resume file<input
-                id="resume-file"
-                type="file"
-                accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                required /></label
-            ><label class="check-row"
-              ><input id="resume-default" type="checkbox" /> Make default
-              resume</label
-            ><button class="primary" type="submit">Upload resume</button>
-          </form>
-        </div>
-        <div class="auto-card">
-          <h2>Resume versions</h2>
-          <div id="resume-list" class="auto-list"></div>
-        </div>
-      </section>
-
-      <section id="panel-matching" class="auto-panel" role="tabpanel" hidden>
-        <div class="auto-card">
-          <h2>Job Matching</h2>
-          <form id="match-form" class="auto-form inline">
-            <label
-              >Category<select id="match-category">
-                <option value="java">Java</option>
-                <option value="data">Data</option>
-                <option value="devops">DevOps</option>
-                <option value="validation">Validation</option>
-              </select></label
-            ><label
-              >Minimum score<input
-                id="match-min"
-                type="number"
-                min="0"
-                max="100"
-                value="60" /></label
-            ><label>Resume<select id="match-resume"></select></label
-            ><button class="primary" type="submit">Find matches</button>
-          </form>
-          <div id="match-list" class="auto-list"></div>
-        </div>
-      </section>
-
-      <section id="panel-agent" class="auto-panel" role="tabpanel" hidden>
-        <div class="auto-card">
-          <h2>AI Agent</h2>
-          <p class="form-hint">
-            The agent prepares applications and pauses for final approval before
-            submission. Actual browser automation requires the Skyvern/Ollama
-            worker to be configured.
-          </p>
-          <form id="agent-form" class="auto-form">
-            <label
-              >Natural-language instructions<textarea
-                id="agent-instructions"
-                rows="4"
-                placeholder="Use my default resume. Stop before final submit. Do not answer sponsorship/legal questions unless saved in my answer library."
-              ></textarea></label
-            ><label
-              >Application ID<input
-                id="agent-application-id"
-                placeholder="Paste an application ID from the tracker" /></label
-            ><button class="primary" type="submit">
-              Start selected application
-            </button>
-          </form>
-        </div>
-      </section>
-
-      <section id="panel-blockers" class="auto-panel" role="tabpanel" hidden>
-        <div class="auto-card">
-          <h2>Blockers</h2>
-          <div id="blocker-list" class="auto-list"></div>
-        </div>
-      </section>
-
-      <section id="panel-tracker" class="auto-panel" role="tabpanel" hidden>
-        <div class="auto-card">
-          <h2>Application Tracker</h2>
-          <div class="auto-filter">
-            <select id="tracker-status">
-              <option value="">All statuses</option>
-              <option>MATCHED</option>
-              <option>QUEUED</option>
-              <option>IN_PROGRESS</option>
-              <option>BLOCKED</option>
-              <option>READY_FOR_REVIEW</option>
-              <option>SUBMITTED</option>
-              <option>FAILED</option>
-              <option>SKIPPED</option>
-            </select>
-          </div>
-          <div id="tracker-list" class="auto-list"></div>
-        </div>
       </section>
 
       <section id="panel-settings" class="auto-panel" role="tabpanel" hidden>
@@ -559,6 +435,55 @@
             model are configured as server-side environment values, not in the
             browser.
           </p>
+        </div>
+        <div class="auto-accordions">
+          <details class="auto-card">
+            <summary>Applied <span id="applied-count">0</span></summary>
+            <div id="applied-list" class="auto-list"></div>
+          </details>
+          <details class="auto-card">
+            <summary>Awaiting review <span id="review-count">0</span></summary>
+            <div id="review-list" class="auto-list"></div>
+          </details>
+          <details class="auto-card">
+            <summary>Blockers <span id="blocker-count">0</span></summary>
+            <div id="blocker-list" class="auto-list"></div>
+          </details>
+          <details class="auto-card">
+            <summary>Failures <span id="failure-count">0</span></summary>
+            <div id="failure-list" class="auto-list"></div>
+          </details>
+          <details class="auto-card">
+            <summary>Agent Control</summary>
+            <div id="worker-status" class="auto-status-card">
+              Checking worker…
+            </div>
+            <form id="agent-form" class="auto-form">
+              <label
+                >Application<select id="agent-application-id" required>
+                  <option value="">Select a matched job</option>
+                </select></label
+              >
+              <label
+                >Agent instructions<textarea
+                  id="agent-instructions"
+                  rows="3"
+                  placeholder="Use my verified profile and selected resume. Stop before final submission."
+                ></textarea>
+              </label>
+            </form>
+            <div class="auto-controls">
+              <button id="start-agent" class="primary" type="button">
+                Start Agent
+              </button>
+              <button id="stop-agent" class="danger" type="button">
+                Stop Agent
+              </button>
+              <button id="refresh-auto" type="button">Refresh activity</button>
+            </div>
+            <h3>Recent activity</h3>
+            <div id="activity-list" class="auto-list"></div>
+          </details>
         </div>
       </section>
     </main>

@@ -1699,7 +1699,16 @@ export default {
           readyForReview: countStatus.READY_FOR_REVIEW || 0,
           submitted: countStatus.SUBMITTED || 0,
           failed: countStatus.FAILED || 0,
-          blockers: blockers.length,
+          blockers: Number(
+            (
+              await database
+                .prepare(
+                  "SELECT count(*) AS count FROM auto_blockers WHERE user_email=? AND status IN ('OPEN','WAITING_FOR_USER','FAILED')",
+                )
+                .bind(session.email)
+                .first()
+            )?.count || 0,
+          ),
         };
         return json({
           email: session.email,

@@ -84,6 +84,7 @@ html[data-theme='dark']
     dt,
     strong,
     .management-panel summary,
+    .auto-accordions summary,
     .vault-account summary,
     .admin-chat-header strong,
     .admin-conversation-name,

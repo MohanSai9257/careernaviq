@@ -56,12 +56,9 @@ function renderDashboard() {
     ? `Worker configured · ${s.worker.model || 'model not reported'}`
     : 'External Skyvern/Ollama worker not configured';
   $('dashboard-cards').innerHTML = [
-    card('Matching jobs', s.counts?.matched || 0),
-    card('Queued', s.counts?.queued || 0),
-    card('In progress', s.counts?.inProgress || 0),
+    card('Applied', s.counts?.submitted || 0),
     card('Awaiting review', s.counts?.readyForReview || 0),
-    card('Submitted', s.counts?.submitted || 0),
-    card('Open blockers', s.counts?.blockers || 0),
+    card('Blocked', s.counts?.blockers || 0),
     card('Failures', s.counts?.failed || 0),
   ].join('');
   $('activity-list').innerHTML =
@@ -73,17 +70,55 @@ function renderDashboard() {
       .join('') || empty('No activity yet.');
 }
 function renderApplications() {
-  const filter = $('tracker-status').value;
-  const apps = state.applications.filter((a) => !filter || a.status === filter);
-  $('tracker-list').innerHTML =
-    apps
+  const applications = state.applications || [];
+  const groups = [
+    [
+      'SUBMITTED',
+      'applied-list',
+      'applied-count',
+      'submitted',
+      'No applications yet.',
+    ],
+    [
+      'READY_FOR_REVIEW',
+      'review-list',
+      'review-count',
+      'readyForReview',
+      'Nothing awaiting review.',
+    ],
+    ['FAILED', 'failure-list', 'failure-count', 'failed', 'No failures.'],
+  ];
+  for (const [status, listId, countId, countKey, emptyText] of groups) {
+    const items = applications.filter((a) => a.status === status);
+    $(countId).textContent = String(state.summary?.counts?.[countKey] || 0);
+    $(listId).innerHTML =
+      items
+        .map((a) => {
+          const activity = (state.summary?.activity || []).find(
+            (event) => event.application_id === a.id,
+          );
+          const date = a.last_activity_at || a.updated_at || a.created_at;
+          return `<article class="auto-row"><strong>${esc(a.company_name)} — ${esc(a.job_title)}</strong><a href="${esc(a.job_url)}" target="_blank" rel="noopener noreferrer">Job link ↗</a><small>${status === 'SUBMITTED' ? 'Applied' : 'Last activity'} ${date ? new Date(date).toLocaleString() : '—'}</small>${status === 'FAILED' && activity ? `<span>${esc(activity.message)}</span>` : ''}</article>`;
+        })
+        .join('') || empty(emptyText);
+  }
+  const choices = applications.filter((a) =>
+    ['MATCHED', 'QUEUED'].includes(a.status),
+  );
+  const select = $('agent-application-id');
+  const selected = select.value;
+  select.innerHTML =
+    '<option value="">Select a matched job</option>' +
+    choices
       .map(
         (a) =>
-          `<article class="auto-row"><strong>${esc(a.company_name)} — ${esc(a.job_title)}</strong><span>${esc(a.status)} · score ${a.match_score ?? '—'} · ${esc(a.blocker_status || 'No blocker')}</span><a href="${esc(a.job_url)}" target="_blank" rel="noopener noreferrer">Job link ↗</a><small>Last activity ${a.last_activity_at ? new Date(a.last_activity_at).toLocaleString() : '—'} · ID ${esc(a.id)}</small></article>`,
+          `<option value="${esc(a.id)}">${esc(a.company_name)} — ${esc(a.job_title)}</option>`,
       )
-      .join('') || empty('No applications found.');
+      .join('');
+  if (choices.some((a) => a.id === selected)) select.value = selected;
 }
 function renderBlockers() {
+  $('blocker-count').textContent = String(state.summary?.counts?.blockers || 0);
   $('blocker-list').innerHTML =
     state.blockers
       .map(
@@ -165,12 +200,7 @@ $('agent-form').addEventListener('submit', async (e) => {
     message(error.message);
   }
 });
-for (const [id, action] of [
-  ['start-agent', 'start'],
-  ['pause-agent', 'pause'],
-  ['resume-agent', 'resume'],
-  ['stop-agent', 'stop'],
-])
+for (const [id, action] of [['stop-agent', 'stop']])
   $(id).addEventListener('click', async () => {
     try {
       const result = await api('/api/auto-apply/agent/control', {
@@ -184,6 +214,9 @@ for (const [id, action] of [
       message(error.message);
     }
   });
+$('start-agent').addEventListener('click', () =>
+  $('agent-form').requestSubmit(),
+);
 $('blocker-list').addEventListener('submit', async (e) => {
   if (!e.target.dataset.blocker) return;
   e.preventDefault();
@@ -203,7 +236,6 @@ $('blocker-list').addEventListener('submit', async (e) => {
     message(error.message);
   }
 });
-$('tracker-status').addEventListener('change', renderApplications);
 $('settings-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   try {
